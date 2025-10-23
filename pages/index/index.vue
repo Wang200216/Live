@@ -1,5 +1,8 @@
 <template>
 	<view class="container">
+		<!-- 装饰性动画元素组件 -->
+		<PopDecoration />
+
 		<!-- 顶部装饰圆圈 -->
 		<view class="top-decoration">
 			<view class="circle circle-left"></view>
@@ -64,10 +67,15 @@
 </template>
 
 <script>
+	import PopDecoration from '@/components/PopDecoration.vue'
+
 	export default {
+		components: {
+			PopDecoration
+		},
 		data() {
 			return {
-				
+
 			}
 		},
 		onLoad() {

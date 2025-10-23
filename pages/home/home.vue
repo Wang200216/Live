@@ -1,5 +1,8 @@
 <template>
 	<view class="home-container">
+		<!-- 装饰性动画元素组件 -->
+		<PopDecoration />
+
 		<!-- 直播画面区域 - 优化：改用CSS隐藏而非v-if卸载，保证视频后台播放 -->
 		<view class="live-section" :class="{ 'collapsed-hide': isLiveCollapsed }">
 			<!-- 直播视频区域 -->
@@ -442,7 +445,12 @@
 </template>
 
 <script>
+	import PopDecoration from '@/components/PopDecoration.vue'
+
 	export default {
+		components: {
+			PopDecoration
+		},
 		data() {
 			return {
 				statusBarHeight: 0,
