@@ -1,5 +1,30 @@
 <template>
 	<view class="home-container">
+		<!-- 全屏 Lottie 背景动画 -->
+		<view class="fullscreen-lottie-bg">
+			<!-- #ifdef MP-WEIXIN -->
+			<!-- 微信小程序使用 canvas 渲染 -->
+			<canvas
+				type="2d"
+				id="home-bg-lottie-canvas"
+				class="bg-lottie-canvas"
+				canvas-id="home-bg-lottie-canvas"
+			></canvas>
+			<!-- #endif -->
+			<!-- #ifndef MP-WEIXIN -->
+			<DotLottieVue
+				:src="'/static/animations/lcBg-01.json'"
+				:autoplay="true"
+				:loop="true"
+				:background="'transparent'"
+				:speed="1"
+				:direction="1"
+				:playMode="'normal'"
+				style="width: 100%; height: 100%;"
+			/>
+			<!-- #endif -->
+		</view>
+		
 		<!-- 装饰性动画元素组件 -->
 		<PopDecoration />
 
@@ -9,7 +34,7 @@
 			<view class="live-video-container">
 				<!-- 收起按钮 - 浮动在右上角 -->
 				<view class="collapse-btn-floating" @click="toggleLiveCollapse">
-					<text class="collapse-icon">▲</text>
+					<image src="/static/iconfont/shouqi.png" class="collapse-icon-img" mode="aspectFit"></image>
 				</view>
 				
 				<!-- 票数进度条对比 - 浮动在直播画面上方（实时统计） -->
@@ -47,27 +72,44 @@
 				</view>
 				
 				<view class="live-video">
-					<!-- B站播放器iframe - 持续在后台播放 -->
-					<iframe
-						v-if="bilibiliUrl"
-						:src="bilibiliUrl"
-						class="bilibili-player"
-						scrolling="no"
-						border="0"
-						frameborder="no"
-						allowfullscreen="true"
-						sandbox="allow-top-navigation allow-same-origin allow-forms allow-popups allow-scripts allow-presentation">
-					</iframe>
+					<!-- #ifdef MP-WEIXIN -->
+					<!-- 微信小程序直播播放器 -->
+					<live-player
+						v-if="isLiveStarted"
+						:src="liveStreamUrl"
+						class="live-player"
+						mode="live"
+						autoplay
+						:muted="isMuted"
+						object-fit="contain"
+						@statechange="handleLiveStateChange"
+						@error="handleLiveError"
+						@netstatus="handleNetStatus">
+					</live-player>
+					<!-- #endif -->
+					
+					<!-- #ifndef MP-WEIXIN -->
+					<!-- H5环境使用video标签 -->
+					<video
+						v-if="isLiveStarted"
+						:src="liveStreamUrl"
+						class="live-player"
+						autoplay
+						:muted="isMuted"
+						controls
+						@error="handleLiveError">
+					</video>
+					<!-- #endif -->
 
 					<!-- 直播开始前显示占位内容 -->
 					<view v-if="!isLiveStarted" class="video-placeholder">
 						<text class="placeholder-icon">🎬</text>
-						<text class="placeholder-text">点击开始直播</text>
+						<text class="placeholder-text">直播未开始</text>
 					</view>
 
 					<!-- 播放按钮 - 左下角 -->
 					<view class="play-button" v-if="!isLiveStarted" @click="startLive">
-						<text class="play-icon">▶</text>
+						<image src="/static/iconfont/bofang.png" class="play-icon-img" mode="aspectFit"></image>
 					</view>
 
 					<!-- 直播状态指示器 -->
@@ -119,26 +161,16 @@
 
 		<!-- 展开按钮（当直播收起时显示） -->
 		<view class="expand-btn" v-if="isLiveCollapsed" @click="toggleLiveCollapse">
-			<text class="expand-icon">⬇️</text>
+			<image src="/static/iconfont/zhankai.png" class="expand-icon-img" mode="aspectFit"></image>
 			<text class="expand-text">展开画面</text>
 		</view>
 
 		<!-- 主要内容区域 -->
 		<view class="main-content" :class="{ 'expanded': isLiveCollapsed }">
 			<!-- AI对话区域 -->
-			<view class="ai-chat-container">
-				<view class="chat-header">
-					<view class="ai-icon">
-						<text class="ai-emoji"></text>
-					</view>
-					<text class="chat-title">AI智能识别</text>
-					<view class="status-indicator" :class="{'active': isListening && isLiveStarted}">
-						<text class="status-dot"></text>
-					</view>
-				</view>
-				
-				<scroll-view class="chat-messages" scroll-y="true" :scroll-top="scrollTop">
-					<view class="message-item" v-for="(message, index) in aiMessages" :key="message.id" 
+		<view class="ai-chat-container">
+			<scroll-view class="chat-messages" scroll-y="true" :scroll-top="scrollTop">
+					<view class="message-item" v-for="message in aiMessages" :key="message.id"
 						  :class="{'left': message.side === 'left', 'right': message.side === 'right'}"
 						  @click="handleMessageClick(message)">
 						<view class="message-bubble">
@@ -168,11 +200,18 @@
 
 			<!-- 对抗条和投票区域 -->
 			<view class="battle-section">
-				<!-- 预设观点滑块（直播前显示） -->
-				<view class="preset-section" v-if="showPresetSlider && !isLiveStarted">
+				<!-- 预设观点滑块（直播前显示，直播开始后可通过按钮控制显示） -->
+				<view class="preset-section" v-if="showPresetSlider && (!isLiveStarted || (isLiveStarted && showPresetPanel))">
 					<view class="preset-header">
 						<text class="preset-title">🎯 预设观点倾向</text>
-						<text class="preset-subtitle">在直播开始之前，您可以对本次辩题设置一个初始观点倾向，本次辩题是{{ currentDebateTopic }}</text>
+						<!-- 直播开始后的关闭按钮 -->
+						<view class="preset-close-btn" v-if="isLiveStarted" @click="togglePresetPanel">
+							<text class="close-icon">✕</text>
+						</view>
+					</view>
+					<!-- 辩题显示 -->
+					<view class="preset-debate-topic">
+						<text class="debate-topic-text">{{ debateTitle }}</text>
 					</view>
 					<view class="preset-slider-container">
 						<view class="slider-labels">
@@ -187,19 +226,33 @@
 								:min="0"
 								:max="100"
 								:step="1"
-								block-size="20"
+								block-size="14"
 								block-color="#FF1493"
 								active-color="#FF8C00"
 								background-color="#E0E0E0"
 								:show-value="true"
 							/>
 						</view>
-						<view class="preset-info">
-							<view class="preset-info-row">
-								<text class="preset-percentage">{{ presetOpinion }}%</text>
-								<text class="preset-desc">{{ getPresetDescription() }}</text>
+						<!-- 确定按钮（圆形，放在进度条下方） -->
+						<view class="preset-confirm-btn-wrapper" v-if="(!isLiveStarted && !initialVotesSubmitted) || (isLiveStarted && votesChanged)">
+							<view class="preset-confirm-btn-circle" @click="confirmPresetVotes">
+								<text class="confirm-btn-text">✓</text>
 							</view>
 						</view>
+					<view class="preset-info">
+						<view class="preset-info-row">
+							<text class="preset-percentage">{{ presetOpinion }}%</text>
+							<text class="preset-desc">{{ getPresetDescription() }}</text>
+						</view>
+					</view>
+				</view>
+				</view>
+				
+				<!-- 直播开始后的预设观点缩小按钮 -->
+				<view class="preset-mini-row" v-if="isLiveStarted && !showPresetPanel">
+					<text class="vote-message-text"> 选择你的心中所想</text>
+					<view class="preset-mini-button" @click="togglePresetPanel" :class="{'value-changing': isValueChanging}">
+						<text class="mini-button-value" :class="{'value-animate': isValueChanging}">{{ presetOpinion }}%</text>
 					</view>
 				</view>
 				
@@ -217,55 +270,26 @@
 						</view>
 					</view>
 					
-					<!-- 动态火焰分界线 - 大火焰团与跳动离子 -->
-					<view class="flame-divider" :class="{ 'divider-hit': dividerHit }" :style="{ left: currentLeftPercentage + '%' }">
-						<!-- 中心大火焰团 - 合并成一大团 -->
-						<view class="main-flame-container">
-							<view class="main-flame main-flame-1">🔥</view>
-							<view class="main-flame main-flame-2">🔥</view>
-							<view class="main-flame main-flame-3">🔥</view>
-							<view class="main-flame main-flame-4">🔥</view>
-							<view class="main-flame main-flame-5">🔥</view>
-							<view class="main-flame main-flame-6">🔥</view>
-						</view>
-						
-						<!-- 大火焰发光效果 -->
-						<view class="main-flame-glow main-glow-1"></view>
-						<view class="main-flame-glow main-glow-2"></view>
-						<view class="main-flame-glow main-glow-3"></view>
-						
-						<!-- 周围跳动的小火焰离子 - 20个粒子环绕 -->
-						<view class="flame-ions">
-							<view class="ion ion-1">🔥</view>
-							<view class="ion ion-2">🔥</view>
-							<view class="ion ion-3">🔥</view>
-							<view class="ion ion-4">🔥</view>
-							<view class="ion ion-5">🔥</view>
-							<view class="ion ion-6">🔥</view>
-							<view class="ion ion-7">🔥</view>
-							<view class="ion ion-8">🔥</view>
-							<view class="ion ion-9">🔥</view>
-							<view class="ion ion-10">🔥</view>
-							<view class="ion ion-11">🔥</view>
-							<view class="ion ion-12">🔥</view>
-							<view class="ion ion-13">✨</view>
-							<view class="ion ion-14">✨</view>
-							<view class="ion ion-15">✨</view>
-							<view class="ion ion-16">✨</view>
-							<view class="ion ion-17">✨</view>
-							<view class="ion ion-18">✨</view>
-							<view class="ion ion-19">✨</view>
-							<view class="ion ion-20">✨</view>
-						</view>
-						
-						<!-- 火焰火花效果 -->
-						<view class="flame-sparks">
-							<view class="spark spark-1">✨</view>
-							<view class="spark spark-2">✨</view>
-							<view class="spark spark-3">✨</view>
-							<view class="spark spark-4">✨</view>
-							<view class="spark spark-5">✨</view>
-							<view class="spark spark-6">✨</view>
+				<!-- 动态火焰分界线 - 使用 Lottie 动画 -->
+				<view class="flame-divider" :class="{ 'divider-hit': dividerHit }" :style="{ left: currentLeftPercentage + '%' }">
+						<!-- Lottie 火焰动画 -->
+						<view class="lottie-fire-container">
+							<!-- #ifdef MP-WEIXIN -->
+							<canvas
+								type="2d"
+								id="lottie-fire"
+								canvas-id="lottie-fire"
+								class="lottie-fire-canvas"
+								:style="{ width: '200rpx', height: '200rpx' }"
+							></canvas>
+							<!-- #endif -->
+							<!-- #ifndef MP-WEIXIN -->
+							<div 
+								id="lottie-fire"
+								class="lottie-fire-wrapper" 
+								:style="{ width: '200rpx', height: '200rpx' }">
+							</div>
+							<!-- #endif -->
 						</view>
 					</view>
 					
@@ -279,23 +303,58 @@
 				
 				<!-- 投票按钮 -->
 				<view class="vote-buttons">
-					<view class="vote-btn left-btn" @click="voteLeft" 
+					<!-- 正方按钮 -->
+					<view class="lottie-button-container left-button" @click="voteLeft" 
 						  :class="{ 
 							  'voted': userVote === 'left',
-							  'click-effect': triggerEffect && triggerEffect.side === 'left',
 							  'disabled': !isLiveStarted
 						  }">
-						<text class="vote-btn-icon">⚔️</text>
-						<text class="vote-btn-text">{{ isLiveStarted ? '支持正方' : '等待直播开始' }}</text>
+						<!-- 动画外框 -->
+						<view class="animation-frame left-frame">
+							<!-- #ifdef MP-WEIXIN -->
+							<canvas
+								type="2d"
+								:id="'lottie-button-left'"
+								:canvas-id="'lottie-button-left'"
+								class="lottie-button-canvas"
+								:style="{ width: '200rpx', height: '120rpx' }"
+							></canvas>
+							<!-- #endif -->
+							<!-- #ifndef MP-WEIXIN -->
+							<div 
+								:id="'lottie-button-left'"
+								class="lottie-button-wrapper" 
+								:style="{ width: '200rpx', height: '120rpx' }">
+							</div>
+							<!-- #endif -->
+						</view>
 					</view>
-					<view class="vote-btn right-btn" @click="voteRight" 
+					
+					<!-- 反方按钮 -->
+					<view class="lottie-button-container right-button" @click="voteRight" 
 						  :class="{ 
 							  'voted': userVote === 'right',
-							  'click-effect': triggerEffect && triggerEffect.side === 'right',
 							  'disabled': !isLiveStarted
 						  }">
-						<text class="vote-btn-icon">🛡️</text>
-						<text class="vote-btn-text">{{ isLiveStarted ? '支持反方' : '等待直播开始' }}</text>
+						<!-- 动画外框 -->
+						<view class="animation-frame right-frame">
+							<!-- #ifdef MP-WEIXIN -->
+							<canvas
+								type="2d"
+								:id="'lottie-button-right'"
+								:canvas-id="'lottie-button-right'"
+								class="lottie-button-canvas"
+								:style="{ width: '200rpx', height: '120rpx' }"
+							></canvas>
+							<!-- #endif -->
+							<!-- #ifndef MP-WEIXIN -->
+							<div 
+								:id="'lottie-button-right'"
+								class="lottie-button-wrapper" 
+								:style="{ width: '200rpx', height: '120rpx' }">
+							</div>
+							<!-- #endif -->
+						</view>
 					</view>
 				</view>
 			</view>
@@ -305,28 +364,16 @@
 		<view class="bottom-nav">
 			<view class="nav-item" :class="{ 'active': currentTab === 'home' }" @click="switchTab('home')">
 				<view class="nav-icon">
-					<text class="icon">🏠</text>
+					<image v-if="currentTab === 'home'" src="/static/iconfont/dibu_zhuye_yixuanzhongzhuangtai.png" class="nav-icon-img" mode="aspectFit"></image>
+					<image v-else src="/static/iconfont/dibu_zhuye_weixuanzhongzhuangtai.png" class="nav-icon-img" mode="aspectFit"></image>
 				</view>
 				<text class="nav-text">首页</text>
 			</view>
-			
-			<view class="nav-item" :class="{ 'active': currentTab === 'activity' }" @click="switchTab('activity')">
-				<view class="nav-icon">
-					<text class="icon">🎯</text>
-				</view>
-				<text class="nav-text">活动</text>
-			</view>
-			
-			<view class="nav-item" :class="{ 'active': currentTab === 'message' }" @click="switchTab('message')">
-				<view class="nav-icon">
-					<text class="icon">💬</text>
-				</view>
-				<text class="nav-text">消息</text>
-			</view>
-			
+
 			<view class="nav-item" :class="{ 'active': currentTab === 'profile' }" @click="switchTab('profile')">
 				<view class="nav-icon">
-					<text class="icon">👤</text>
+					<image v-if="currentTab === 'profile'" src="/static/iconfont/wodexuanzhong.png" class="nav-icon-img" mode="aspectFit"></image>
+					<image v-else src="/static/iconfont/wode.png" class="nav-icon-img" mode="aspectFit"></image>
 				</view>
 				<text class="nav-text">我的</text>
 			</view>
@@ -334,12 +381,29 @@
 		
 		<!-- 投票特效容器 -->
 		<view class="vote-effects-container">
-			<view class="effect-symbol" 
-				  v-for="(effect, index) in voteEffects" 
+			<!-- Lottie 爱心动画特效 -->
+			<view class="lottie-effect"
+				  v-for="effect in voteEffects"
 				  :key="effect.id"
 				  :class="effect.class"
 				  :style="effect.style">
-				<text class="symbol-text">{{ effect.symbol }}</text>
+				<!-- #ifdef MP-WEIXIN -->
+				<canvas
+					type="2d"
+					:id="'lottie-heart-' + effect.id"
+					:canvas-id="'lottie-heart-' + effect.id"
+					class="lottie-heart-canvas"
+					:style="{ width: '150rpx', height: '320rpx' }"
+				></canvas>
+				<!-- #endif -->
+				<!-- #ifndef MP-WEIXIN -->
+				<div 
+					:id="'lottie-heart-' + effect.id"
+					class="lottie-heart-wrapper" 
+					:style="{ width: '150rpx', height: '320rpx' }">
+					<!-- H5/浏览器环境下的 Lottie 容器 -->
+				</div>
+				<!-- #endif -->
 			</view>
 		</view>
 		
@@ -371,18 +435,23 @@
 							<text class="title-text">用户评论 ({{ selectedMessage ? selectedMessage.comments.length : 0 }}条)</text>
 						</view>
 						
-						<view class="comments-list" v-if="selectedMessage && selectedMessage.comments.length > 0">
-							<view class="comment-item" v-for="(comment, index) in selectedMessage.comments" :key="index">
-								<view class="comment-header">
-									<view class="user-info">
-										<text class="user-avatar">{{ comment.avatar }}</text>
-										<text class="user-name">{{ comment.user }}</text>
-									</view>
-									<text class="comment-time">{{ comment.time }}</text>
+					<view class="comments-list" v-if="selectedMessage && selectedMessage.comments.length > 0">
+						<view class="comment-item" v-for="(comment, index) in selectedMessage.comments" :key="comment.id || index">
+							<view class="comment-header">
+								<view class="user-info">
+									<text class="user-avatar">{{ comment.avatar }}</text>
+									<text class="user-name">{{ comment.user }}</text>
 								</view>
-								<text class="comment-text">{{ comment.text }}</text>
+								<view class="comment-header-right">
+									<text class="comment-time">{{ comment.time }}</text>
+									<view class="comment-delete-btn" v-if="comment.user === '我'" @click.stop="deleteComment(selectedMessage, index)">
+										<text class="delete-icon">🗑️</text>
+									</view>
+								</view>
 							</view>
+							<text class="comment-text">{{ comment.text }}</text>
 						</view>
+					</view>
 						
 						<view class="empty-comments" v-else>
 							<text class="empty-text">暂无评论，快来发表第一条评论吧！</text>
@@ -443,21 +512,43 @@
 		</view>
 	</view>
 </template>
-
 <script>
 	import PopDecoration from '@/components/PopDecoration.vue'
+	import apiService from '@/utils/api-service.js'
+	import { DotLottieVue } from '@lottiefiles/dotlottie-vue'
+	// #ifdef MP-WEIXIN
+	import lottie from 'lottie-miniprogram'
+	import bgAnimationData from '@/static/animations/lcBg-01.json'
+	import heartAnimationData from '@/static/animations/Hearts feedback.json'
+	import circleMorphingData from '@/static/animations/Circle Shape Morphing animation.json'
+	import buttonYesData from '@/static/animations/button YES.json'
+	import fireAnimationData from '@/static/animations/fire.json'
+	// #endif
+	// #ifndef MP-WEIXIN
+	import lottie from 'lottie-web'
+	import heartAnimationData from '@/static/animations/Hearts feedback.json'
+	import circleMorphingData from '@/static/animations/Circle Shape Morphing animation.json'
+	import buttonYesData from '@/static/animations/button YES.json'
+	import fireAnimationData from '@/static/animations/fire.json'
+	// #endif
+	
+	// 导入直播配置
+	import liveConfig from '@/config/live-config.js'
 
 	export default {
 		components: {
-			PopDecoration
+			PopDecoration,
+			DotLottieVue
 		},
 		data() {
 			return {
 				statusBarHeight: 0,
 				isLiveCollapsed: false,
 
-				// B站播放器URL - 点击播放按钮时才赋值
-				bilibiliUrl: '',
+				// 直播流地址 - 需要配置真实的直播推流地址
+				liveStreamUrl: '', // rtmp://xxx 或 https://xxx.m3u8
+				isMuted: false, // 是否静音
+				liveStatus: '', // 直播状态
 
 				// 顶部对抗条数据（实时统计，不受用户操作影响）
 				topLeftVotes: 0,
@@ -470,19 +561,34 @@
 				leftClickCount: 0, // 正方按钮点击次数
 				rightClickCount: 0, // 反方按钮点击次数
 				triggerEffect: null, // 触发特效状态
-				voteEffects: [], // 投票特效数组
+				voteEffects: [], // 投票特效数组（现在存储 Lottie 动画实例）
 				effectIdCounter: 0, // 特效ID计数器
 				dividerHit: false, // 分割线被击中状态
 				currentTab: 'home', // 当前选中的导航栏
+				heartAnimationData: heartAnimationData, // 爱心动画数据
+				circleMorphingData: circleMorphingData, // 圆形变形动画数据
+				buttonYesData: buttonYesData, // YES按钮动画数据
+				fireAnimationData: fireAnimationData, // 火焰动画数据
+				lottieHeartInstances: {}, // 存储 Lottie 动画实例
+				lottieButtonInstances: {}, // 存储按钮动画实例
+				lottieFireInstance: null, // 存储火焰动画实例
 				
 				// 直播状态和预设观点相关
 				isLiveStarted: false, // 直播是否已开始
-				presetOpinion: 50, // 预设观点倾向 (0-100, 50为中性)
+				presetOpinion: 100, // 预设观点倾向 (0-100, 初始100表示100票全投正方)
 				showPresetSlider: true, // 是否显示预设滑块
+				showPresetPanel: true, // 是否显示预设观点面板（直播开始后可通过按钮控制）
+				isValueChanging: false, // 数值变化动画状态
 				initialLeftVotes: 0, // 初始正方票数
 				initialRightVotes: 0, // 初始反方票数
-				currentDebateTopic: '如果有一个能一键消除痛苦的按钮，你会按吗', // 当前辩题
-				
+				initialVotesSubmitted: false, // 是否已提交初始100票
+				initialVotesTotal: 100, // 初始总票数（100票）
+				presetSliderChanged: false, // 预设滑块是否有变化（直播开始后拖动时使用）
+				votesChanged: false, // 票数是否有变化（无论是拖动进度条还是点击投票按钮）
+				debateTitle: '', // 辩题标题--始终为空，后端动态取
+				currentDebateTopic: '', // 当前辩题--始终为空，后端动态取
+				debateDescription: '', // 描述
+
 				// 预设观点对抗条数据（显示用户预设倾向）
 				presetLeftVotes: 0, // 预设正方票数
 				presetRightVotes: 0, // 预设反方票数
@@ -513,20 +619,36 @@
 				recognitionTimer: null,
 				
 				// 服务器配置
-				serverUrl: 'http://localhost:3001',
+				// API配置相关
+				serverUrl: '', // 当前使用的服务器地址（由API服务层管理）
+				apiServerInfo: null, // 当前API服务器信息
+				availableServers: [], // 可用的服务器列表
 				topBarUpdateTimer: null, // 顶部对抗条更新定时器
 				
 				// 性能优化相关
 				isVoting: false, // 是否正在处理投票（防抖）
 				voteQueue: [], // 投票队列
 				lastVoteTime: 0, // 上次投票时间
-				
+				lastLeftVoteTime: 0, // 上次左侧投票时间
+				lastRightVoteTime: 0, // 上次右侧投票时间
+				isDividerHitInProgress: false, // 分割线特效是否在进行中
+				isEffectCreating: false, // 特效是否在创建中
+				isToastShowing: false, // Toast是否显示中
+				updatePresetOpinionTimeout: null, // 预设观点更新定时器
+				effectTimeouts: [], // 特效超时ID列表
+				fetchVoteDataTimeout: null, // 获取票数数据的防抖定时器
+
 				// 性能监控
 				performanceStats: {
 					voteCount: 0,
 					avgResponseTime: 0,
 					lastResponseTime: 0
-				}
+				},
+				
+				// 特效性能优化
+				maxConcurrentEffects: 30, // 最大同时特效数量
+				effectCleanupInterval: null, // 特效清理定时器
+				lastEffectCleanup: 0 // 上次清理时间
 			}
 		},
 		computed: {
@@ -581,13 +703,27 @@
 			
 		},
 		onLoad() {
+			// 初始化API服务
+			this.initApiService();
+
 			// 获取系统信息，适配安全区域
 			this.getSystemInfo();
 			// 初始化预设观点
 			this.updateInitialVotes();
 			// 初始化预设观点对抗条
 			this.updatePresetBattleBar();
-	},
+			// 启动特效性能优化
+			this.startEffectCleanup();
+
+			// 页面一进入就获取辩题（关键修正）
+			this.fetchDebateTopic();
+		},
+		onShow() {
+			// 页面显示时，确保导航栏选中状态正确
+			this.currentTab = 'home';
+			// 再次确保切回可见时也是最新辩题
+			this.fetchDebateTopic();
+		},
 		onUnload() {
 			// 页面卸载时清理定时器
 			if (this.recognitionTimer) {
@@ -602,38 +738,183 @@
 				clearInterval(this.topBarUpdateTimer);
 				this.topBarUpdateTimer = null;
 			}
+			// 停止特效清理
+			this.stopEffectCleanup();
+			// 清理所有特效定时器
+			if (this.effectTimeouts) {
+				this.effectTimeouts.forEach(timeoutId => {
+					clearTimeout(timeoutId);
+				});
+				this.effectTimeouts = [];
+			}
+			// 清理防抖定时器
+			if (this.fetchVoteDataTimeout) {
+				clearTimeout(this.fetchVoteDataTimeout);
+				this.fetchVoteDataTimeout = null;
+			}
 		},
 		onReady() {
 			// 页面渲染完成后设置安全区域
 			this.setSafeArea();
+			
+			// 延迟初始化 Lottie 背景动画
+			setTimeout(() => {
+				this.initBackgroundLottie();
+			}, 500);
+			
+			// 延迟初始化按钮动画
+			setTimeout(() => {
+				this.initButtonAnimations();
+			}, 1000);
+			
+			// 延迟初始化火焰动画
+			setTimeout(() => {
+				this.initFireAnimation();
+			}, 1500);
 		},
 		methods: {
+			// 初始化API服务
+			async initApiService() {
+				try {
+					// 获取当前服务器信息
+					this.apiServerInfo = apiService.getCurrentServerInfo();
+					this.serverUrl = this.apiServerInfo.current;
+					this.availableServers = this.apiServerInfo.available;
+					
+					// 更新API服务配置
+					apiService.updateConfig(this.serverUrl);
+					
+					// API服务初始化完成
+					
+					// 测试API连接
+					const isConnected = await apiService.testConnection();
+				} catch (error) {
+					console.error('API服务初始化失败:', error);
+				}
+			},
+
+			// 切换API服务器
+			async switchApiServer(serverType) {
+				try {
+					const newUrl = apiService.switchApiServer(serverType);
+					if (newUrl) {
+						this.serverUrl = newUrl;
+						apiService.updateConfig(newUrl);
+						
+						// 重新获取服务器信息
+						this.apiServerInfo = apiService.getCurrentServerInfo();
+						
+						console.log(`API服务器已切换到: ${serverType} (${newUrl})`);
+						
+						// 测试新服务器连接
+						const isConnected = await apiService.testConnection();
+						if (isConnected) {
+							uni.showToast({
+								title: `已切换到${serverType}服务器`,
+								icon: 'success'
+							});
+						} else {
+							uni.showToast({
+								title: '服务器连接失败',
+								icon: 'error'
+							});
+						}
+					}
+				} catch (error) {
+					console.error('切换API服务器失败:', error);
+					uni.showToast({
+						title: '切换服务器失败',
+						icon: 'error'
+					});
+				}
+			},
+
+		// 获取服务器 URL（兼容旧代码）
+		getServerUrl() {
+			return this.serverUrl || 'http://192.168.31.249:8000';
+		},
+
+			// 处理直播状态变化
+			handleLiveStateChange(e) {
+				const code = e.detail.code;
+				// 2001: 已经连接服务器
+				// 2002: 已经连接服务器,开始拉流
+				// 2003: 网络接收到首个视频数据包(IDR)
+				// 2004: 视频播放开始
+				// 2007: 视频播放Loading
+				// 2008: 解码器启动
+				// -2301: 网络断连,且经多次重连抢救无效,更多重试请自行重启播放
+				// -2302: 获取加速拉流地址失败
+				
+				if (code === 2004) {
+					this.liveStatus = 'playing';
+				} else if (code === 2007) {
+					this.liveStatus = 'loading';
+				} else if (code === -2301 || code === -2302) {
+					this.liveStatus = 'error';
+					uni.showToast({
+						title: '直播连接失败',
+						icon: 'none'
+					});
+				}
+			},
+
+			// 处理直播错误
+			handleLiveError(e) {
+				uni.showToast({
+					title: '直播播放出错',
+					icon: 'none'
+				});
+			},
+
+			// 处理网络状态
+			handleNetStatus(e) {
+				// e.detail.info 包含网络状态信息
+				// videoBitrate: 当前视频编码器输出的比特率，单位 kbps
+				// audioBitrate: 当前音频编码器输出的比特率，单位 kbps
+				// videoFPS: 当前视频帧率
+				// videoGOP: 当前视频 GOP,也就是每两个关键帧(I帧)间隔时长
+			},
+
 			// API调用方法
+			async fetchDebateTopic() {
+				try {
+					const response = await apiService.getDebateTopic();
+					if (response.success) {
+						const data = response.data;
+						this.debateTitle = data.title;
+						this.debateDescription = data.description;
+						this.currentDebateTopic = data.title;
+					}
+				} catch (error) {
+					uni.showToast({
+						title: '获取辩题失败',
+						icon: 'error'
+					});
+				}
+			},
+
 			async fetchTopBarVotes() {
 				try {
-					const response = await uni.request({
-						url: `${this.serverUrl}/api/votes`,
-						method: 'GET'
-					});
-					
-					if (response.data.success) {
-						const data = response.data.data;
+					const response = await apiService.getVotes();
+					if (response.success) {
+						const data = response.data;
 						this.topLeftVotes = data.leftVotes;
 						this.topRightVotes = data.rightVotes;
 					}
 				} catch (error) {
-					console.error('获取票数失败:', error);
+					uni.showToast({
+						title: '获取票数失败',
+						icon: 'error'
+					});
 				}
 			},
-			
+
 			async fetchAIContent(isInitialLoad = false) {
 				try {
-					const response = await uni.request({
-						url: `${this.serverUrl}/api/ai-content`,
-						method: 'GET'
-					});
+					const response = await apiService.getAiContent();
 					
-					if (response.data.success) {
+					if (response.success) {
 						// 如果是初始加载，清空原有数据
 						if (isInitialLoad) {
 							this.aiMessages = [];
@@ -641,24 +922,23 @@
 						}
 						
 						// 检查是否有新内容
-						const serverMessages = response.data.data;
-						const currentMessageIds = this.aiMessages.map(msg => msg.serverId || msg.id);
-						
+						const serverMessages = response.data;
+
 						// 添加新的服务器数据
-						serverMessages.forEach((content, index) => {
+						serverMessages.forEach((content) => {
 							// 检查是否已存在（通过服务器ID或内容匹配）
-							const exists = this.aiMessages.some(msg => 
-								msg.serverId === content.id || 
+							const exists = this.aiMessages.some(msg =>
+								msg.serverId === content.id ||
 								(msg.text === content.text && msg.side === content.side)
 							);
-							
+
 							if (!exists) {
 								this.addAIMessage(content);
 							}
 						});
 					}
 				} catch (error) {
-					console.error('获取AI内容失败:', error);
+					// 获取AI内容失败
 				}
 			},
 			
@@ -666,26 +946,37 @@
 				const startTime = Date.now();
 				
 				try {
-					const response = await uni.request({
-						url: `${this.serverUrl}/api/user-vote`,
-						method: 'POST',
-						data: {
-							side: side,
-							votes: votes
-						}
-					});
+					const response = await apiService.userVote(side, votes);
 					
 					const responseTime = Date.now() - startTime;
 					
 					// 更新性能统计
 					this.updatePerformanceStats(responseTime);
 					
-					if (response.data.success) {
-						console.log('投票成功:', response.data.data);
+					if (response.success) {
+						// 延迟1秒后获取最新的票数统计（防抖处理）
+						this.debouncedFetchVoteData();
 					}
 				} catch (error) {
-					console.error('投票失败:', error);
+					uni.showToast({
+						title: '投票失败',
+						icon: 'error'
+					});
 				}
+			},
+			
+			// 防抖获取票数数据 - 延迟1秒后获取最新票数统计
+			debouncedFetchVoteData() {
+				// 清除之前的定时器
+				if (this.fetchVoteDataTimeout) {
+					clearTimeout(this.fetchVoteDataTimeout);
+				}
+				
+				// 设置新的定时器，1秒后获取数据
+				this.fetchVoteDataTimeout = setTimeout(() => {
+					this.fetchTopBarVotes();
+					this.fetchVoteDataTimeout = null;
+				}, 1000);
 			},
 			
 			// 更新性能统计
@@ -699,27 +990,21 @@
 				
 				// 在开发环境下输出性能信息
 				if (process.env.NODE_ENV === 'development') {
-					console.log(`投票性能统计 - 响应时间: ${responseTime}ms, 平均: ${this.performanceStats.avgResponseTime}ms, 总投票: ${this.performanceStats.voteCount}`);
+					// 投票性能统计
 				}
 			},
 			
 			// 异步投票方法，不阻塞UI
 			async sendUserVoteAsync(side, votes = 10) {
-				// 防抖：500ms内只允许一次投票
+				// 添加到投票队列（防抖已在checkVoteRateLimit中处理）
 				const now = Date.now();
-				if (now - this.lastVoteTime < 500) {
-					return;
-				}
-				this.lastVoteTime = now;
-				
-				// 添加到投票队列
 				this.voteQueue.push({ side, votes, timestamp: now });
-				
+
 				// 如果正在处理投票，直接返回
 				if (this.isVoting) {
 					return;
 				}
-				
+
 				// 处理投票队列
 				this.processVoteQueue();
 			},
@@ -753,7 +1038,7 @@
 					}
 					
 				} catch (error) {
-					console.error('处理投票队列失败:', error);
+					// 处理投票队列失败
 				} finally {
 					this.isVoting = false;
 					
@@ -768,41 +1053,29 @@
 			
 			async addCommentToServer(contentId, user, text, avatar) {
 				try {
-					const response = await uni.request({
-						url: `${this.serverUrl}/api/comment`,
-						method: 'POST',
-						data: {
-							contentId: contentId,
-							user: user,
-							text: text,
-							avatar: avatar
-						}
-					});
-					
-					if (response.data.success) {
-						return response.data.data;
+					const response = await apiService.addComment(contentId, text, user, avatar);
+					if (response.success) {
+						return response.data;
 					}
 				} catch (error) {
-					console.error('添加评论失败:', error);
+					uni.showToast({
+						title: '添加评论失败',
+						icon: 'error'
+					});
 				}
 			},
 			
 			async likeContent(contentId, commentId = null) {
 				try {
-					const response = await uni.request({
-						url: `${this.serverUrl}/api/like`,
-						method: 'POST',
-						data: {
-							contentId: contentId,
-							commentId: commentId
-						}
-					});
-					
-					if (response.data.success) {
-						return response.data.data;
+					const response = await apiService.like(contentId, commentId);
+					if (response.success) {
+						return response.data;
 					}
 				} catch (error) {
-					console.error('点赞失败:', error);
+					uni.showToast({
+						title: '点赞失败',
+						icon: 'error'
+					});
 				}
 			},
 			
@@ -844,281 +1117,821 @@
 				const safeAreaTop = statusBarHeight + 20; // 状态栏高度 + 额外间距
 				
 				// 动态设置页面顶部padding
-				const query = uni.createSelectorQuery().in(this);
-				query.select('.home-container').boundingClientRect((rect) => {
-					if (rect) {
-						// 设置CSS变量
+			const query = uni.createSelectorQuery().in(this);
+			query.select('.home-container').boundingClientRect((rect) => {
+				if (rect) {
+					// 微信小程序不支持 document API，使用 uni-app 的方式
+					// #ifndef MP-WEIXIN
+					if (typeof document !== 'undefined') {
 						document.documentElement.style.setProperty('--status-bar-height', safeAreaTop + 'px');
 					}
-				}).exec();
+					// #endif
+				}
+			}).exec();
 			},
 			toggleLiveCollapse() {
 				this.isLiveCollapsed = !this.isLiveCollapsed;
 			},
 			
 			voteLeft() {
-				// 如果直播未开始，直接返回
-				if (!this.isLiveStarted) {
-					uni.showToast({
-						title: '请等待直播开始',
-						icon: 'none',
-						duration: 1500
-					});
+				// 如果直播未开始或正在快速连击，直接返回
+				if (!this.isLiveStarted || !this.checkVoteRateLimit('left')) {
 					return;
 				}
-				
-				// 防抖处理：如果正在处理投票，直接返回
-				if (this.isVoting) {
-					return;
-				}
-				
-				// 增加点击次数
-				this.leftClickCount++;
-				
-				// 立即更新UI，提供即时反馈
-				this.leftVotes += 10;
-				this.userVote = 'left';
-				
-				// 触发飘动特效
-				this.triggerDividerHit();
-				this.createVoteEffects('left');
-				
-				// 显示实时百分数变化
-				this.showPercentageChange('left');
-				
-				// 根据点击情况显示不同提示
-				if (this.leftClickCount === 1) {
-					this.showVoteEffect('left', 'first');
-				} else if (this.leftClickCount <= 5) {
-					this.showVoteEffect('left', 'repeat');
-				} else {
-					this.showVoteEffect('left', 'repeat');
-				}
-				
-				// 异步发送到服务器，不阻塞UI
-				this.sendUserVoteAsync('left', 10);
+
+				this.handleVote('left');
 			},
 			voteRight() {
-				// 如果直播未开始，直接返回
-				if (!this.isLiveStarted) {
-					uni.showToast({
-						title: '请等待直播开始',
-						icon: 'none',
-						duration: 1500
-					});
+				// 如果直播未开始或正在快速连击，直接返回
+				if (!this.isLiveStarted || !this.checkVoteRateLimit('right')) {
 					return;
 				}
-				
-				// 防抖处理：如果正在处理投票，直接返回
-				if (this.isVoting) {
-					return;
+
+				this.handleVote('right');
+			},
+
+			// 检查投票速率限制（200ms最小间隔）
+			checkVoteRateLimit(side) {
+				const now = Date.now();
+				// 对每一方单独进行速率限制，最少间隔200ms
+				const lastTime = side === 'left' ? this.lastLeftVoteTime : this.lastRightVoteTime;
+
+				if (now - lastTime < 200) {
+					// 快速连击被限制，不进行任何操作
+					return false;
 				}
-				
-				// 增加点击次数
-				this.rightClickCount++;
-				
-				// 立即更新UI，提供即时反馈
-				this.rightVotes += 10;
-				this.userVote = 'right';
-				
-				// 触发飘动特效
-				this.triggerDividerHit();
-				this.createVoteEffects('right');
-				
-				// 显示实时百分数变化
-				this.showPercentageChange('right');
-				
-				// 根据点击情况显示不同提示
-				if (this.rightClickCount === 1) {
-					this.showVoteEffect('right', 'first');
-				} else if (this.rightClickCount <= 5) {
-					this.showVoteEffect('right', 'repeat');
+
+				if (side === 'left') {
+					this.lastLeftVoteTime = now;
 				} else {
-					this.showVoteEffect('right', 'repeat');
+					this.lastRightVoteTime = now;
 				}
+
+				return true;
+			},
+
+			// 统一的投票处理逻辑（增强版本 - 包含丰富的交互反馈）
+			handleVote(side) {
+				// 更新点击计数
+				if (side === 'left') {
+					this.leftClickCount++;
+				} else {
+					this.rightClickCount++;
+				}
+
+				// 立即更新UI，提供即时反馈（同步更新票数）
+				if (side === 'left') {
+					this.leftVotes += 10;
+				} else {
+					this.rightVotes += 10;
+				}
+				this.userVote = side;
+
+				// 触发按钮点击特效
+				this.triggerButtonEffect(side);
+
+				// 批量更新UI（减少DOM操作）：将所有动画效果合并
+				this.$nextTick(() => {
+					// 触发分割线特效（轻量级）
+					if (!this.isDividerHitInProgress) {
+						this.triggerDividerHit();
+					}
+
+					// 创建特效（增强版本 - 大量表情符号飘动）
+					// 移除了特效创建限制，允许快速连续创建
+					this.createVoteEffects(side);
+
+					// 更新百分数（异步防抖，避免频繁计算）
+					this.debouncedUpdatePresetOpinion();
+
+					// 直播开始后，只更新前端，不发送到服务器
+				// 只有通过拖动进度条并点击确定，才会发送到服务器
+				if (!this.isLiveStarted) {
+					// 直播开始前不执行投票操作
+					return;
+				}
+				// 直播开始后，点击投票按钮只更新前端显示，不发送数据库
+				// 标记票数已改变，需要点击确认按钮提交
+				if (this.isLiveStarted) {
+					this.votesChanged = true;
+				}
+				});
+
+				// 显示投票提示（优化版本）
+				this.showVoteToastOptimized(side);
 				
-				// 异步发送到服务器，不阻塞UI
-				this.sendUserVoteAsync('right', 10);
+				// 触觉反馈和音效
+				this.triggerVibrationFeedback(side);
 			},
 			
-			// 显示投票特效
-			showVoteEffect(side, type) {
+			// 触发按钮点击特效
+			triggerButtonEffect(side) {
+				// 设置按钮特效状态
+				this.triggerEffect = { side: side, timestamp: Date.now() };
+				
+				// 1.2秒后清除特效状态
+				setTimeout(() => {
+					this.triggerEffect = null;
+				}, 1200);
+			},
+			
+			// 触觉反馈 - 根据点击次数产生不同强度的振动（超级增强版）
+			triggerVibrationFeedback(side) {
+				const clickCount = side === 'left' ? this.leftClickCount : this.rightClickCount;
+				
+				// 根据点击次数产生不同强度的振动模式
+				let vibrationPattern = [];
+				
+				if (clickCount <= 3) {
+					// 轻微振动
+					vibrationPattern = [50];
+				} else if (clickCount <= 10) {
+					// 中等振动
+					vibrationPattern = [100, 50, 100];
+				} else if (clickCount <= 20) {
+					// 强烈振动
+					vibrationPattern = [150, 100, 150, 100, 150];
+				} else if (clickCount <= 50) {
+					// 超强振动
+					vibrationPattern = [200, 150, 200, 150, 200, 150, 200];
+				} else {
+					// 终极振动
+					vibrationPattern = [300, 200, 300, 200, 300, 200, 300, 200, 300];
+				}
+				
+				// 执行振动
+				// #ifdef APP-PLUS
+				uni.vibrate({
+					duration: vibrationPattern[0] || 100
+				});
+				// #endif
+				
+				// #ifdef H5
+				// H5环境下的振动反馈
+				if (navigator.vibrate) {
+					navigator.vibrate(vibrationPattern);
+				}
+				// #endif
+				
+				// 添加音效反馈（如果支持）
+				this.playVoteSound(clickCount);
+			},
+			
+			// 播放投票音效
+			playVoteSound(clickCount) {
+				// 根据点击次数播放不同的音效
+				let soundType = 'normal';
+				
+				if (clickCount <= 3) {
+					soundType = 'light';
+				} else if (clickCount <= 10) {
+					soundType = 'medium';
+				} else if (clickCount <= 20) {
+					soundType = 'strong';
+				} else if (clickCount <= 50) {
+					soundType = 'epic';
+				} else {
+					soundType = 'legendary';
+				}
+				
+				// 这里可以集成音效库，目前使用系统提示音
+				// #ifdef APP-PLUS
+				uni.showToast({
+					title: `🎵 ${soundType}音效`,
+					icon: 'none',
+					duration: 100
+				});
+				// #endif
+			},
+
+			// 防抖的预设观点更新
+			debouncedUpdatePresetOpinion() {
+				clearTimeout(this.updatePresetOpinionTimeout);
+				this.updatePresetOpinionTimeout = setTimeout(() => {
+					this.updatePresetOpinionFromVotes();
+				}, 100);
+			},
+
+			// 优化版本的投票提示（防止Toast堆积）
+			showVoteToastOptimized(side) {
+				// 如果已经有Toast显示，不再显示新的
+				if (this.isToastShowing) {
+					return;
+				}
+
 				const clickCount = side === 'left' ? this.leftClickCount : this.rightClickCount;
 				const sideName = side === 'left' ? '正方' : '反方';
-				
-				// 触发视觉特效
-				this.triggerVisualEffect(side);
-				
-				// 根据点击类型和次数显示不同的特效
+
 				let title = '';
-				let icon = 'none';
-				let duration = 1500;
-				
-				if (type === 'first') {
-					title = `🎉 支持${sideName}！+1票`;
-					icon = 'success';
-				} else if (type === 'repeat') {
-					// 根据点击次数显示不同的重复点击特效
-					if (clickCount <= 3) {
-						title = `💪 ${sideName}加油！+1票`;
-						icon = 'none';
-					} else if (clickCount <= 5) {
-						title = `🔥 ${sideName}必胜！+1票`;
-						icon = 'none';
-					} else if (clickCount <= 10) {
-						title = `⚡ ${sideName}无敌！+1票`;
-						icon = 'none';
-					} else if (clickCount <= 20) {
-						title = `🚀 ${sideName}超神！+1票`;
-						icon = 'none';
-					} else if (clickCount <= 50) {
-						title = `💎 ${sideName}传奇！+1票`;
-						icon = 'none';
-					} else {
-						title = `👑 ${sideName}王者！+1票 (${clickCount}次)`;
-						icon = 'none';
-					}
+
+				// 根据点击次数显示不同的提示（简化逻辑）
+				if (clickCount === 1) {
+					title = `🎉 支持${sideName}！`;
+				} else if (clickCount <= 3) {
+					title = `💪 ${sideName}加油！`;
+				} else if (clickCount <= 5) {
+					title = `🔥 ${sideName}必胜！`;
+				} else if (clickCount <= 10) {
+					title = `⚡ ${sideName}无敌！`;
+				} else if (clickCount <= 20) {
+					title = `🚀 ${sideName}超神！`;
+				} else if (clickCount <= 50) {
+					title = `💎 ${sideName}传奇！`;
+				} else {
+					title = `👑 ${sideName}王者！`;
 				}
-				
-				// 显示提示
+
+				this.isToastShowing = true;
 				uni.showToast({
 					title: title,
-					icon: icon,
-					duration: duration
+					icon: 'none',
+					duration: 800
 				});
-				
-				// 添加震动反馈（如果支持）
-				if (uni.vibrateShort) {
-					uni.vibrateShort({
-						type: 'light'
-					});
-				}
-				
-				// 添加音效反馈（模拟）
-				this.playVoteSound(type, clickCount);
-			},
-			
-			// 触发视觉特效
-			triggerVisualEffect(side) {
-				// 使用Vue的$nextTick确保DOM更新
-				this.$nextTick(() => {
-					const buttonClass = side === 'left' ? '.left-btn' : '.right-btn';
-					// 这里可以通过添加/移除CSS类来触发特效
-					// 由于uni-app的限制，我们使用数据绑定来控制特效
-					this.triggerEffect = {
-						side: side,
-						timestamp: Date.now()
-					};
-					
-					// 清除特效状态
-					setTimeout(() => {
-						this.triggerEffect = null;
-					}, 1000);
-				});
-			},
-			
-			// 播放投票音效（模拟）
-			playVoteSound(type, clickCount) {
-				// 这里可以添加真实的音效播放逻辑
-				// 目前只是模拟不同的音效类型
-				console.log(`播放音效: ${type}, 点击次数: ${clickCount}`);
-			},
 
-			// 触发分割线被击中效果
+				// 800ms后允许显示下一个Toast
+				setTimeout(() => {
+					this.isToastShowing = false;
+				}, 800);
+			},
+			
+
+			// 触发分割线被击中效果（优化：避免频繁触发）
 			triggerDividerHit() {
+				if (this.isDividerHitInProgress) {
+					return; // 如果已经在处理中，跳过
+				}
+
+				this.isDividerHitInProgress = true;
 				this.dividerHit = true;
-				// 0.6秒后重置状态，以便下一次触发
+
+				// 300ms后重置状态，允许下一次触发（减少频率）
 				setTimeout(() => {
 					this.dividerHit = false;
-				}, 600);
+					this.isDividerHitInProgress = false;
+				}, 300);
 			},
 
-			// 创建投票特效（优化版本）
-			createVoteEffects(side) {
-				// 限制同时存在的特效数量，避免性能问题
-				if (this.voteEffects.length >= 8) {
-					return;
-				}
-				
-				// 定义不同侧的特效符号（减少符号数量）
-				const leftSymbols = ['⚔️', '💪', '🔥', '⭐'];
-				const rightSymbols = ['🛡️', '💙', '❄️', '✨'];
-				
-				const symbols = side === 'left' ? leftSymbols : rightSymbols;
-				
-				// 减少特效数量：1-2个
-				const effectCount = Math.floor(Math.random() * 2) + 1;
-				
+		// 创建投票特效（Lottie 爱心动画版本 - 从按钮两端飘出爱心）
+		createVoteEffects(side) {
+			// 移除了特效数量限制，允许无限制创建动画
+
+			// 每次点击创建 2-3 个爱心动画
+			const effectCount = Math.floor(Math.random() * 2) + 2;
+
 				for (let i = 0; i < effectCount; i++) {
+					// 计算起始位置（按钮的两端）
+					let startX, startY;
+					if (side === 'left') {
+						// 正方按钮：从左端飘出
+						startX = '10%'; // 按钮左端
+						startY = '78%'; // 按钮中心高度
+					} else {
+						// 反方按钮：从右端飘出
+						startX = '82%'; // 按钮右端
+						startY = '78%'; // 按钮中心高度
+					}
+
+					// 添加随机偏移，让动画更自然
+					const randomOffsetX = (Math.random() - 0.5) * 100; // -50 到 50 rpx
+					const randomOffsetY = (Math.random() - 0.5) * 50; // -25 到 25 rpx
+
+					// 动画参数
+					const duration = 3 + Math.random() * 1; // 3-4秒
+					const delay = (i * 100) / 1000; // 100ms 间隔
+
 					this.effectIdCounter++;
-					
-					// 随机选择符号
-					const symbol = symbols[Math.floor(Math.random() * symbols.length)];
-					
-					// 计算起始位置（按钮两边边缘）
-					const startX = side === 'left' ? '12%' : '88%';
-					const startY = '85%';
-					
-					// 简化偏移计算
-					const offsetX = side === 'left' ? -20 : 20;
-					const offsetY = (Math.random() - 0.5) * 20;
-					
-					// 固定动画参数，减少计算
-					const delay = i * 0.1;
-					const duration = 2.5;
-					
+					const effectId = this.effectIdCounter;
+
 					const effect = {
-						id: this.effectIdCounter,
-						symbol: symbol,
-						class: `effect-${side}`,
+						id: effectId,
+						side: side,
+						class: `lottie-effect-${side}`,
+						createTime: Date.now(),
+						isLottie: true, // 标记为 Lottie 动画
 						style: {
-							left: `calc(${startX} + ${offsetX}rpx)`,
-							top: `calc(${startY} + ${offsetY}rpx)`,
+							left: `calc(${startX} + ${randomOffsetX}rpx)`,
+							top: `calc(${startY} + ${randomOffsetY}rpx)`,
+							animationDuration: `${duration}s`,
 							animationDelay: `${delay}s`,
-							animationDuration: `${duration}s`
+							opacity: 1
 						}
 					};
-					
-					this.voteEffects.push(effect);
-					
+
+			this.voteEffects.push(effect);
+
+		// 延迟初始化 Lottie 动画，等待 DOM 渲染
+		this.$nextTick(() => {
+			setTimeout(() => {
+				this.initLottieHeartAnimation(effectId, delay * 1000);
+			}, 10); // 减少延迟时间到 10ms
+		});
+
 					// 动画结束后移除特效
-					setTimeout(() => {
-						this.removeVoteEffect(effect.id);
-					}, (delay + duration) * 1000);
+					const totalTime = (delay + duration) * 1000;
+					const timeoutId = setTimeout(() => {
+						this.removeVoteEffect(effectId);
+					}, totalTime + 500);
+
+					// 防止内存泄漏
+					if (!this.effectTimeouts) {
+						this.effectTimeouts = [];
+					}
+					this.effectTimeouts.push(timeoutId);
+
+					// 清理过期的timeout ID
+					if (this.effectTimeouts.length > 50) {
+						this.effectTimeouts.shift();
+					}
 				}
+
+				// 特效创建完成（移除了延迟标志，允许立即创建下一批特效）
+		},
+		
+		// 初始化按钮动画
+		initButtonAnimations() {
+				
+				// #ifdef MP-WEIXIN
+				// 微信小程序环境
+				this.initWeixinButtonAnimations();
+				// #endif
+				
+				// #ifndef MP-WEIXIN
+				// H5/浏览器环境
+				this.initWebButtonAnimations();
+				// #endif
+			},
+			
+			// 微信小程序环境下的按钮动画初始化
+			initWeixinButtonAnimations() {
+				try {
+					// 初始化正方按钮
+					this.initWeixinButton('lottie-button-left', this.circleMorphingData);
+					// 初始化反方按钮
+					this.initWeixinButton('lottie-button-right', this.buttonYesData);
+				} catch (error) {
+					console.error('❌ 微信小程序按钮动画初始化失败:', error);
+				}
+			},
+			
+			// H5/浏览器环境下的按钮动画初始化
+			initWebButtonAnimations() {
+				try {
+					// 初始化正方按钮
+					this.initWebButton('lottie-button-left', this.circleMorphingData);
+					// 初始化反方按钮
+					this.initWebButton('lottie-button-right', this.buttonYesData);
+				} catch (error) {
+					console.error('❌ H5按钮动画初始化失败:', error);
+				}
+			},
+			
+			// 微信小程序按钮动画初始化
+			initWeixinButton(canvasId, animationData) {
+				uni.createSelectorQuery()
+					.in(this)
+					.select(`#${canvasId}`)
+					.node((res) => {
+						if (res && res.node) {
+							const canvas = res.node;
+							const context = canvas.getContext('2d');
+							
+							// 设置画布尺寸
+							const dpr = uni.getSystemInfoSync().pixelRatio || 1;
+							canvas.width = 200 * dpr;
+							canvas.height = 120 * dpr;
+							context.scale(dpr, dpr);
+							
+						// 初始化 Lottie 动画
+						lottie.setup(canvas);
+						const lottieInstance = lottie.loadAnimation({
+							loop: true,
+							autoplay: true,
+							animationData: animationData,
+							rendererSettings: {
+								context: context,
+								clearCanvas: true
+							}
+						});
+							
+							// 保存实例
+							this.lottieButtonInstances[canvasId] = lottieInstance;
+						}
+					})
+					.exec();
+			},
+			
+			// H5/浏览器按钮动画初始化
+			initWebButton(containerId, animationData) {
+				const container = document.getElementById(containerId);
+				if (container && typeof lottie !== 'undefined' && lottie.loadAnimation) {
+					const lottieInstance = lottie.loadAnimation({
+						container: container,
+						renderer: 'svg',
+						loop: true,
+						autoplay: true,
+						animationData: animationData
+					});
+					
+						// 保存实例
+						this.lottieButtonInstances[containerId] = lottieInstance;
+				} else {
+					console.error('❌ H5按钮容器未找到或lottie未加载:', containerId);
+				}
+			},
+			
+		// 初始化火焰动画
+		initFireAnimation() {
+				
+				// #ifdef MP-WEIXIN
+				// 微信小程序环境
+				this.initWeixinFireAnimation();
+				// #endif
+				
+				// #ifndef MP-WEIXIN
+				// H5/浏览器环境
+				this.initWebFireAnimation();
+				// #endif
+			},
+			
+			// 微信小程序环境下的火焰动画初始化
+			initWeixinFireAnimation() {
+				try {
+					uni.createSelectorQuery()
+						.in(this)
+						.select('#lottie-fire')
+						.node((res) => {
+							if (res && res.node) {
+								const canvas = res.node;
+								const context = canvas.getContext('2d');
+								
+								// 设置画布尺寸
+								const dpr = uni.getSystemInfoSync().pixelRatio || 1;
+								canvas.width = 200 * dpr;
+								canvas.height = 200 * dpr;
+								context.scale(dpr, dpr);
+								
+							// 初始化 Lottie 动画
+							lottie.setup(canvas);
+							const lottieInstance = lottie.loadAnimation({
+								loop: true,
+								autoplay: true,
+								animationData: this.fireAnimationData,
+								rendererSettings: {
+									context: context,
+									clearCanvas: true
+								}
+							});
+								
+							// 保存实例
+							this.lottieFireInstance = lottieInstance;
+							}
+						})
+						.exec();
+				} catch (error) {
+					console.error('❌ 微信小程序火焰动画初始化失败:', error);
+				}
+			},
+			
+			// H5/浏览器环境下的火焰动画初始化
+			initWebFireAnimation() {
+				try {
+					const container = document.getElementById('lottie-fire');
+					if (container && typeof lottie !== 'undefined' && lottie.loadAnimation) {
+						const lottieInstance = lottie.loadAnimation({
+							container: container,
+							renderer: 'svg',
+							loop: true,
+							autoplay: true,
+							animationData: this.fireAnimationData
+						});
+						
+					// 保存实例
+					this.lottieFireInstance = lottieInstance;
+					} else {
+						console.error('❌ H5火焰容器未找到或lottie未加载');
+					}
+				} catch (error) {
+					console.error('❌ H5火焰动画初始化失败:', error);
+				}
+			},
+		// 初始化 Lottie 爱心动画
+		initLottieHeartAnimation(effectId, delay = 0) {
+			// #ifdef MP-WEIXIN
+			try {
+				const canvasId = `lottie-heart-${effectId}`;
+				
+				// 增加延迟确保 DOM 已渲染
+				setTimeout(() => {
+					const query = uni.createSelectorQuery().in(this);
+					
+					// 使用与背景动画相同的方式查询
+					query.select(`#${canvasId}`)
+						.fields({ node: true, size: true })
+						.exec((res) => {
+							if (res[0] && res[0].node) {
+								const canvas = res[0].node;
+								const systemInfo = uni.getSystemInfoSync();
+								const dpr = systemInfo.pixelRatio || 1;
+								
+								try {
+									// 爱心动画原始尺寸是 390x844，按比例缩小到容器大小
+									// 放大容器尺寸，让动画更清晰
+									const logicalWidth = 200;  // 从 150 增加到 200
+									const logicalHeight = 400; // 从 320 增加到 400
+									canvas.width = logicalWidth * dpr;
+									canvas.height = logicalHeight * dpr;
+									
+									const context = canvas.getContext('2d');
+									context.scale(dpr, dpr);
+									
+									// 直接 loadAnimation，不再调用 setup（避免卡顿）
+									// lottie-miniprogram 会自动处理 canvas 绑定
+									const animation = lottie.loadAnimation({
+										loop: false,
+										autoplay: true,
+										animationData: this.heartAnimationData,
+										rendererSettings: {
+											context,
+											preserveAspectRatio: 'xMidYMid meet',
+											clearCanvas: true
+										}
+									});
+									
+									this.lottieHeartInstances[effectId] = animation;
+									
+									// 监听动画事件
+									animation.addEventListener('complete', () => {
+										if (this.lottieHeartInstances[effectId]) {
+											this.lottieHeartInstances[effectId].destroy();
+											delete this.lottieHeartInstances[effectId];
+										}
+									});
+									
+									// 立即播放
+									animation.play();
+									
+								} catch (error) {
+									// Canvas 初始化错误
+								}
+							}
+						});
+				}, delay + 50); // 减少延迟时间到 50ms
+			} catch (error) {
+				// 初始化失败
+			}
+			// #endif
+				
+			// #ifndef MP-WEIXIN
+			// 非微信小程序环境：使用 lottie-web 库在浏览器中渲染
+			setTimeout(() => {
+				try {
+					const containerId = `lottie-heart-${effectId}`;
+					const container = document.getElementById(containerId);
+					
+					if (container) {
+						// 使用 lottie-web 渲染（如果已安装）
+						if (typeof lottie !== 'undefined' && lottie.loadAnimation) {
+							const lottieInstance = lottie.loadAnimation({
+								container: container,
+								renderer: 'svg',
+								loop: false,
+								autoplay: true,
+								animationData: this.heartAnimationData
+							});
+							
+							this.lottieHeartInstances[effectId] = lottieInstance;
+							
+							lottieInstance.addEventListener('complete', () => {
+								if (this.lottieHeartInstances[effectId]) {
+									this.lottieHeartInstances[effectId].destroy();
+									delete this.lottieHeartInstances[effectId];
+								}
+							});
+						} else {
+							// 备用方案：使用简单的 emoji 动画
+							this.createBackupEmojiEffect(effectId, container);
+						}
+					}
+				} catch (error) {
+					console.error('初始化 Web Lottie 失败:', error);
+				}
+			}, delay + 50);
+			// #endif
+			},
+			
+		// 备用方案：创建简单的 emoji 爱心动画
+		createBackupEmojiEffect(effectId, container) {
+			if (!container) return;
+				
+				// 创建多个爱心 emoji
+				const hearts = ['💖', '❤️', '💕', '💗', '💓'];
+				const heartCount = Math.floor(Math.random() * 3) + 3; // 3-5个爱心
+				
+				for (let i = 0; i < heartCount; i++) {
+					const heart = document.createElement('div');
+					heart.className = 'emoji-heart';
+					heart.textContent = hearts[Math.floor(Math.random() * hearts.length)];
+					heart.style.cssText = `
+						position: absolute;
+						font-size: ${30 + Math.random() * 20}px;
+						left: ${Math.random() * 100}%;
+						top: ${Math.random() * 100}%;
+						animation: floatUpHeart ${2 + Math.random()}s ease-out forwards;
+						animation-delay: ${i * 0.1}s;
+						pointer-events: none;
+					`;
+					container.appendChild(heart);
+				}
+				
+				// 3秒后清理
+				setTimeout(() => {
+					if (container && container.parentNode) {
+						while (container.firstChild) {
+							container.removeChild(container.firstChild);
+						}
+					}
+				}, 3000);
 			},
 			
 			// 移除投票特效
 			removeVoteEffect(effectId) {
 				const index = this.voteEffects.findIndex(effect => effect.id === effectId);
 				if (index > -1) {
+					// 清理 Lottie 实例
+					if (this.lottieHeartInstances[effectId]) {
+						try {
+							this.lottieHeartInstances[effectId].destroy();
+						} catch (error) {
+							console.error('清理 Lottie 实例失败:', error);
+						}
+						delete this.lottieHeartInstances[effectId];
+					}
 					this.voteEffects.splice(index, 1);
+				}
+			},
+			
+			// 特效性能优化 - 定期清理过期特效
+			startEffectCleanup() {
+				if (this.effectCleanupInterval) {
+					return; // 已经启动
+				}
+				
+				this.effectCleanupInterval = setInterval(() => {
+					const now = Date.now();
+					
+					// 每5秒清理一次，避免频繁清理影响性能
+					if (now - this.lastEffectCleanup < 5000) {
+						return;
+					}
+					
+					this.lastEffectCleanup = now;
+					
+					// 清理过期的特效
+					const initialCount = this.voteEffects.length;
+					this.voteEffects = this.voteEffects.filter(effect => {
+						// 保留最近创建的特效，清理超过10秒的特效
+						return (now - effect.createTime) < 10000;
+					});
+					
+					// 清理过期的timeout
+					if (this.effectTimeouts.length > 50) {
+						// 清理前一半的timeout
+						const toRemove = this.effectTimeouts.splice(0, 25);
+						toRemove.forEach(timeoutId => {
+							clearTimeout(timeoutId);
+						});
+					}
+					
+					// 在开发环境下输出清理信息
+					if (process.env.NODE_ENV === 'development' && initialCount !== this.voteEffects.length) {
+						// 特效清理完成
+					}
+				}, 2000); // 每2秒检查一次
+			},
+			
+			// 停止特效清理
+			stopEffectCleanup() {
+				if (this.effectCleanupInterval) {
+					clearInterval(this.effectCleanupInterval);
+					this.effectCleanupInterval = null;
 				}
 			},
 			
 			// 预设观点滑块变化处理
 			onPresetChange(e) {
+				this.presetOpinion = e.detail.value;
+				
 				if (!this.isLiveStarted) {
-					this.presetOpinion = e.detail.value;
-					// 根据预设观点调整初始票数
-					this.updateInitialVotes();
+					// 直播开始前：只更新显示，不发送到数据库
 					// 更新预设观点对抗条显示
 					this.updatePresetBattleBar();
+				} else {
+					// 直播开始后：根据预设观点倾向重新计算前端的投票数据显示
+					// 保持总票数不变，只调整比例
+					const currentTotal = this.leftVotes + this.rightVotes;
+					if (currentTotal > 0) {
+						this.leftVotes = Math.round((this.presetOpinion / 100) * currentTotal);
+						this.rightVotes = currentTotal - this.leftVotes;
+					} else {
+						// 如果当前没有票数，使用基础票数
+						const baseVotes = 100;
+						this.leftVotes = Math.round((this.presetOpinion / 100) * baseVotes);
+						this.rightVotes = baseVotes - this.leftVotes;
+					}
+					// 标记票数已改变，需要点击确定按钮才能提交到数据库
+					this.presetSliderChanged = true;
+					this.votesChanged = true;
 				}
 			},
 			
-			// 根据预设观点更新初始票数
-			updateInitialVotes() {
-				// 直播开始前，票数始终为0
-				this.initialLeftVotes = 0;
-				this.initialRightVotes = 0;
-				
-				// 如果直播还没开始，更新显示票数
+				// 提交预设观点投票（初始100票或直播后拖动后的票数）
+			async confirmPresetVotes() {
 				if (!this.isLiveStarted) {
-					this.leftVotes = 0;
-					this.rightVotes = 0;
-					this.topLeftVotes = 0;
-					this.topRightVotes = 0;
+					// 直播开始前：提交初始100票
+					const leftVotes = Math.round((this.presetOpinion / 100) * this.initialVotesTotal);
+					const rightVotes = this.initialVotesTotal - leftVotes;
+					
+					// 发送到数据库
+					try {
+						// 先发送正方票
+						if (leftVotes > 0) {
+							await this.sendUserVote('left', leftVotes);
+						}
+						// 再发送反方票
+						if (rightVotes > 0) {
+							await this.sendUserVote('right', rightVotes);
+						}
+						
+						// 标记已提交
+						this.initialVotesSubmitted = true;
+						// 清除票数变化标记
+						this.votesChanged = false;
+						// 如果直播还没开始，隐藏预设观点面板，且不可再打开
+						// 如果直播已开始，面板可以继续显示（因为可能还需要拖动调整）
+						if (!this.isLiveStarted) {
+							this.showPresetSlider = false;
+							this.showPresetPanel = false;
+						}
+						
+						// 更新本地显示的票数
+						this.leftVotes = leftVotes;
+						this.rightVotes = rightVotes;
+						
+						uni.showToast({
+							title: '✅ 初始投票已提交',
+							icon: 'success',
+							duration: 2000
+						});
+					} catch (error) {
+						console.error('提交初始投票失败:', error);
+						uni.showToast({
+							title: '提交失败，请重试',
+							icon: 'error'
+						});
+					}
+				} else {
+					// 直播开始后：提交拖动进度条后的票数变化
+					const currentTotal = this.leftVotes + this.rightVotes;
+					if (currentTotal === 0) {
+						uni.showToast({
+							title: '没有可提交的票数',
+							icon: 'none'
+						});
+						return;
+					}
+					
+					// 计算需要发送的票数变化
+					const leftVotes = this.leftVotes;
+					const rightVotes = this.rightVotes;
+					
+					// 这里需要发送增量的票数变化到数据库
+					// 简化处理：发送总票数（实际应该发送增量）
+					try {
+						// 先发送正方票
+						if (leftVotes > 0) {
+							await this.sendUserVote('left', leftVotes);
+						}
+						// 再发送反方票  
+						if (rightVotes > 0) {
+							await this.sendUserVote('right', rightVotes);
+						}
+						
+						// 清除变化标记
+						this.presetSliderChanged = false;
+						this.votesChanged = false;
+						
+						uni.showToast({
+							title: '✅ 投票已更新',
+							icon: 'success',
+							duration: 2000
+						});
+					} catch (error) {
+						console.error('提交投票失败:', error);
+						uni.showToast({
+							title: '提交失败，请重试',
+							icon: 'error'
+						});
+					}
 				}
 			},
 			
@@ -1145,228 +1958,315 @@
 				}
 			},
 			
-			// 手动开始直播
-			startLive() {
-				// 启动B站视频播放
-				this.bilibiliUrl = 'https://player.bilibili.com/player.html?bvid=BV1sP4qz8Eyv&autoplay=1';
-
-				this.isLiveStarted = true;
-				this.showPresetSlider = false;
-
-				// 根据预设观点设置初始票数
-				const baseVotes = 1000;
-				this.leftVotes = Math.round((this.presetOpinion / 100) * baseVotes);
-				this.rightVotes = baseVotes - this.leftVotes;
-
-				// 重置顶部实时对抗条（这个不受用户操作影响）
-				this.topLeftVotes = 0;
-				this.topRightVotes = 0;
-
-				// 获取服务器AI内容（初始加载）
-				this.fetchAIContent(true);
-
-				// 启动AI内容实时更新
-				this.startAIContentRealTimeUpdate();
-
-				// 启动顶部对抗条实时更新
-				this.startTopBarRealTimeUpdate();
-
-				uni.showToast({
-					title: '🎬 直播已开始',
-					icon: 'success',
-					duration: 2000
-				});
-
-				console.log('直播开始，初始票数:', this.leftVotes, this.rightVotes);
-			},
-
-
-
-
-			// 显示百分数变化
-			showPercentageChange(side) {
-				// 使用底部对抗条的百分比数据
-				const currentLeftPercent = this.leftPercentage;
-				const currentRightPercent = this.rightPercentage;
-				
-				// 在控制台显示变化（用于调试）
-				console.log(`投票后 - 正方: ${currentLeftPercent}%, 反方: ${currentRightPercent}%`);
-				
-				// 显示百分数变化提示
-				const sideName = side === 'left' ? '正方' : '反方';
-				const sidePercent = side === 'left' ? currentLeftPercent : currentRightPercent;
-				
-				this.percentageTipText = `${sideName} ${sidePercent}%`;
-				this.percentageTipClass = side === 'left' ? 'tip-left' : 'tip-right';
-				this.showPercentageTip = true;
-				
-				// 2秒后隐藏提示
-				setTimeout(() => {
-					this.showPercentageTip = false;
-				}, 2000);
-			},
-			
-			// AI语音识别相关方法（现在从服务器获取数据）
-			
-			// 添加AI消息到对话列表
-			addAIMessage(dialogueData) {
-				this.messageIdCounter++;
-				const newMessage = {
-					id: this.messageIdCounter,
-					serverId: dialogueData.id, // 保存服务器ID用于去重
-					text: dialogueData.text,
-					side: dialogueData.side,
-					comments: [...dialogueData.comments],
-					likes: dialogueData.likes,
-					isLiked: false,
-					timestamp: new Date().getTime()
-				};
-				
-				this.aiMessages.push(newMessage);
-				
-				// 滚动到底部
-				this.$nextTick(() => {
-					this.scrollToBottom();
-				});
-			},
-			
-			// 滚动到底部
-			scrollToBottom() {
-				this.$nextTick(() => {
-					this.scrollTop = this.aiMessages.length * 120;
-				});
-			},
-			
-			// 停止AI识别（实际项目中用于停止语音识别服务）
-			stopRecognition() {
-				if (this.recognitionTimer) {
-					clearInterval(this.recognitionTimer);
-					this.recognitionTimer = null;
-					this.isListening = false;
+			// 切换预设观点面板显示/隐藏
+			togglePresetPanel() {
+				// 如果初始投票已提交且直播未开始，不允许打开
+				if (this.initialVotesSubmitted && !this.isLiveStarted) {
+					return;
 				}
-			},
-			
-			// 处理消息点击事件
-			handleMessageClick(message) {
-				// 显示该条消息的评论详情
-				this.showMessageComments(message);
-			},
-			
-			// 显示消息的评论详情
-			showMessageComments(message) {
-				// 设置当前选中的消息
-				this.selectedMessage = message;
-				// 显示弹窗
-				this.showModal = true;
-			},
-			
-			// 关闭弹窗
-			closeModal() {
-				this.showModal = false;
-				this.selectedMessage = null;
-			},
-			
-			// 为消息添加评论
-			addCommentToMessage(message) {
-				this.currentCommentMessage = message;
-				this.commentText = '';
-				this.showCommentModal = true;
-			},
-			
-			// 关闭评论弹窗
-			closeCommentModal() {
-				this.showCommentModal = false;
-				this.commentText = '';
-				this.currentCommentMessage = null;
-			},
-			
-			// 提交评论
-			async submitComment() {
-				if (!this.commentText.trim()) {
+				
+				// 展开面板时，确保 showPresetSlider 也为 true
+				if (!this.showPresetPanel) {
+					this.showPresetSlider = true;
+					this.showPresetPanel = true;
+					
+					// 显示提示信息
 					uni.showToast({
-						title: '请输入评论内容',
+						title: '🎯 观点倾向面板已展开',
+						icon: 'success',
+						duration: 1500
+					});
+				} else {
+					this.showPresetPanel = false;
+					
+					// 显示提示信息
+					uni.showToast({
+						title: '🎯 观点倾向面板已收起',
 						icon: 'none',
 						duration: 1500
 					});
-					return;
 				}
-				
-				if (!this.currentCommentMessage) {
-					uni.showToast({
-						title: '评论失败，请重试',
-						icon: 'error',
-						duration: 2000
-					});
-					return;
-				}
-				
-				try {
-					// 发送到服务器
-					const serverComment = await this.addCommentToServer(
-						this.currentCommentMessage.id, 
-						'我', 
-						this.commentText.trim(), 
-						'👤'
-					);
-					
-					if (serverComment) {
-						// 添加新评论到本地
-						const newComment = {
-							user: '我',
-							text: this.commentText.trim(),
-							time: '刚刚',
-							avatar: '👤',
-							likes: 0
-						};
-						this.currentCommentMessage.comments.unshift(newComment);
-						
-						// 关闭弹窗
-						this.closeCommentModal();
-						
-						uni.showToast({
-							title: '评论发表成功！',
-							icon: 'success',
-							duration: 2000
-						});
-					} else {
-						uni.showToast({
-							title: '评论发表失败，请重试',
-							icon: 'error',
-							duration: 2000
-						});
+			},
+			
+			// 根据当前投票比例更新预设观点倾向
+			updatePresetOpinionFromVotes() {
+				if (this.totalVotes > 0) {
+					const newValue = Math.round(this.leftPercentage);
+					if (newValue !== this.presetOpinion) {
+						// 触发数值变化动画
+						this.triggerValueChangeAnimation();
+						// 根据当前投票比例计算预设观点倾向
+						this.presetOpinion = newValue;
 					}
-				} catch (error) {
-					console.error('提交评论失败:', error);
+				}
+			},
+			
+			// 触发数值变化动画
+			triggerValueChangeAnimation() {
+				this.isValueChanging = true;
+				// 动画持续0.6秒
+				setTimeout(() => {
+					this.isValueChanging = false;
+				}, 600);
+			},
+			
+			// 手动开始直播
+			startLive() {
+				uni.showToast({ title: '请等待管理员开始直播', icon: 'none' });
+			},
+
+
+
+
+			
+			// AI语音识别相关方法（现在从服务器获取数据）
+			
+		// 添加AI消息到对话列表
+		addAIMessage(dialogueData) {
+			this.messageIdCounter++;
+			// 确保评论都有 id
+			const comments = (dialogueData.comments || []).map((comment, index) => ({
+				...comment,
+				id: comment.id || Date.now() + index // 如果服务器没有提供 id，生成一个
+			}));
+			
+			const newMessage = {
+				id: this.messageIdCounter,
+				serverId: dialogueData.id, // 保存服务器ID用于去重
+				debate_id: dialogueData.debate_id || null, // 保存辩题ID，标识该观点属于哪个辩题
+				text: dialogueData.text,
+				side: dialogueData.side,
+				comments: comments,
+				likes: dialogueData.likes,
+				isLiked: false,
+				timestamp: new Date().getTime()
+			};
+			
+			this.aiMessages.push(newMessage);
+			
+			// 滚动到底部
+			this.$nextTick(() => {
+				this.scrollToBottom();
+			});
+		},
+		
+		// 滚动到底部
+		scrollToBottom() {
+			this.$nextTick(() => {
+				this.scrollTop = this.aiMessages.length * 120;
+			});
+		},
+		
+		// 停止AI识别（实际项目中用于停止语音识别服务）
+		stopRecognition() {
+			if (this.recognitionTimer) {
+				clearInterval(this.recognitionTimer);
+				this.recognitionTimer = null;
+				this.isListening = false;
+			}
+		},
+		
+		// 处理消息点击事件
+		handleMessageClick(message) {
+			// 显示该条消息的评论详情
+			this.showMessageComments(message);
+		},
+		
+		// 显示消息的评论详情
+		showMessageComments(message) {
+			// 设置当前选中的消息
+			this.selectedMessage = message;
+			// 显示弹窗
+			this.showModal = true;
+		},
+		
+		// 关闭弹窗
+		closeModal() {
+			this.showModal = false;
+			this.selectedMessage = null;
+		},
+		
+		// 为消息添加评论
+		addCommentToMessage(message) {
+			// 关闭评论详情弹窗（如果打开的话），确保评论发表弹窗显示在最上层
+			this.showModal = false;
+			this.currentCommentMessage = message;
+			this.commentText = '';
+			this.showCommentModal = true;
+		},
+		
+		// 关闭评论弹窗
+		closeCommentModal() {
+			this.showCommentModal = false;
+			this.commentText = '';
+			this.currentCommentMessage = null;
+		},
+		
+		// 提交评论
+		async submitComment() {
+			if (!this.commentText.trim()) {
+				uni.showToast({
+					title: '请输入评论内容',
+					icon: 'none',
+					duration: 1500
+				});
+				return;
+			}
+			
+			if (!this.currentCommentMessage) {
+				uni.showToast({
+					title: '评论失败，请重试',
+					icon: 'error',
+					duration: 2000
+				});
+				return;
+			}
+			
+			try {
+				// 发送到服务器
+				const serverComment = await this.addCommentToServer(
+					this.currentCommentMessage.id, 
+					'我', 
+					this.commentText.trim(), 
+					'👤'
+				);
+				
+				if (serverComment) {
+					// 添加新评论到本地
+					const newComment = {
+						id: serverComment.id || Date.now(), // 使用服务器返回的 id 或生成临时 id
+						user: '我',
+						text: this.commentText.trim(),
+						time: '刚刚',
+						avatar: '👤',
+						likes: 0
+					};
+					this.currentCommentMessage.comments.unshift(newComment);
+					
+					// 关闭评论发表弹窗
+					this.closeCommentModal();
+					
+					// 重新打开评论详情弹窗，让用户看到刚刚发表的评论
+					if (this.currentCommentMessage) {
+						this.showMessageComments(this.currentCommentMessage);
+					}
+					
 					uni.showToast({
-						title: '网络错误，请重试',
+						title: '评论发表成功！',
+						icon: 'success',
+						duration: 2000
+					});
+				} else {
+					uni.showToast({
+						title: '评论发表失败，请重试',
 						icon: 'error',
 						duration: 2000
 					});
 				}
-			},
+			} catch (error) {
+				// 提交评论失败
+				uni.showToast({
+					title: '网络错误，请重试',
+					icon: 'error',
+					duration: 2000
+				});
+			}
+		},
+		
+		// 评论输入事件
+		onCommentInput(e) {
+			this.commentText = e.detail.value;
+		},
+		
+		// 评论输入框获得焦点
+		onCommentFocus() {
+			// 可以添加一些焦点效果
+		},
+		
+		// 评论输入框失去焦点
+		onCommentBlur() {
+			// 可以添加一些失焦效果
+		},
+		
+		// 处理消息评论点击
+		handleMessageComment(message) {
+			this.addCommentToMessage(message);
+		},
+		
+		// 删除评论
+		async deleteComment(message, commentIndex) {
+			const comment = message.comments[commentIndex];
 			
-			// 评论输入事件
-			onCommentInput(e) {
-				this.commentText = e.detail.value;
-			},
+			if (!comment) {
+				return;
+			}
 			
-			// 评论输入框获得焦点
-			onCommentFocus() {
-				// 可以添加一些焦点效果
-			},
+			// 临时关闭自定义弹窗，确保确认对话框显示在最上层
+			const wasModalOpen = this.showModal;
+			if (wasModalOpen) {
+				this.showModal = false;
+			}
 			
-			// 评论输入框失去焦点
-			onCommentBlur() {
-				// 可以添加一些失焦效果
-			},
+			// 等待一小段时间，确保弹窗关闭动画完成
+			await new Promise(resolve => setTimeout(resolve, 100));
 			
-			// 处理消息评论点击
-			handleMessageComment(message) {
-				this.addCommentToMessage(message);
-			},
+			// 显示确认对话框
+			const res = await uni.showModal({
+				title: '确认删除',
+				content: '确定要删除这条评论吗？',
+				confirmText: '删除',
+				cancelText: '取消',
+				confirmColor: '#ff4757'
+			});
 			
-			// 处理消息点赞点击
-			async handleMessageLike(message) {
+			// 如果用户取消了删除，重新打开弹窗
+			if (!res.confirm) {
+				if (wasModalOpen) {
+					this.showModal = true;
+				}
+				return;
+			}
+			
+			try {
+				// 如果评论有 id，发送到服务器
+				if (comment.id) {
+					const response = await apiService.deleteComment(message.id, comment.id);
+					
+					if (!response || !response.success) {
+						throw new Error('删除失败');
+					}
+				}
+				
+				// 从本地删除评论
+				message.comments.splice(commentIndex, 1);
+				
+				// 重新打开弹窗（如果之前是打开的）
+				if (wasModalOpen) {
+					this.showModal = true;
+				}
+				
+				// 显示成功提示
+				uni.showToast({
+					title: '评论已删除',
+					icon: 'success',
+					duration: 1500
+				});
+			} catch (error) {
+				// 删除失败，重新打开弹窗
+				if (wasModalOpen) {
+					this.showModal = true;
+				}
+				
+				// 删除失败提示
+				uni.showToast({
+					title: '删除失败，请重试',
+					icon: 'error',
+					duration: 2000
+				});
+			}
+		},
+		// 处理消息点赞点击
+		async handleMessageLike(message) {
 				if (message.isLiked) {
 					message.likes--;
 					message.isLiked = false;
@@ -1390,31 +2290,92 @@
 			
 			// 导航栏切换方法
 			switchTab(tab) {
-				this.currentTab = tab;
-				
 				switch(tab) {
 					case 'home':
-						// 首页 - 当前页面，无需跳转
-						break;
-					case 'activity':
-						// 活动页面
-						uni.redirectTo({
-							url: '/pages/activity/activity'
-						});
-						break;
-					case 'message':
-						// 消息页面
-						uni.redirectTo({
-							url: '/pages/message/message'
-						});
+						// 首页 - 当前页面，确保选中状态正确
+						this.currentTab = 'home';
 						break;
 					case 'profile':
-						// 我的页面
-						uni.redirectTo({
+						// 我的页面 - 使用 navigateTo 保留首页在页面栈中
+						// currentTab 会在 profile 页面的 onShow 中设置为 'profile'
+						// 这里不改变 currentTab，避免首页导航栏显示错误
+						uni.navigateTo({
 							url: '/pages/profile/profile'
 						});
 						break;
 				}
+			},
+			
+			// 初始化背景 Lottie 动画
+			initBackgroundLottie() {
+				// #ifdef MP-WEIXIN
+				console.log('开始初始化 Home 页面背景 Lottie 动画...')
+
+				// 获取系统信息
+				const systemInfo = uni.getSystemInfoSync()
+				const dpr = systemInfo.pixelRatio || 1
+				const screenWidth = systemInfo.screenWidth
+				const screenHeight = systemInfo.screenHeight
+
+				// 获取 canvas 实例
+				const query = uni.createSelectorQuery().in(this)
+				query.select('#home-bg-lottie-canvas')
+					.fields({ node: true, size: true })
+					.exec(res => {
+						console.log('Home 背景 Canvas 查询结果:', res)
+
+						if (res[0] && res[0].node) {
+							const canvas = res[0].node
+							console.log('Home 背景 Canvas 实例:', canvas)
+
+							try {
+								// 设置 Canvas 为全屏尺寸
+								canvas.width = screenWidth * dpr
+								canvas.height = screenHeight * dpr
+
+								const context = canvas.getContext('2d')
+								context.scale(dpr, dpr)
+
+								console.log('Home 背景 Canvas 全屏尺寸:', canvas.width, canvas.height)
+
+								// 让 lottie 绑定 canvas
+								lottie.setup(canvas)
+								console.log('Home 背景 Lottie setup 完成')
+
+								// 直接使用本地导入的 JSON 对象
+								const animation = lottie.loadAnimation({
+									loop: true,
+									autoplay: true,
+									animationData: bgAnimationData,
+									rendererSettings: {
+										context,
+										preserveAspectRatio: 'xMidYMid slice'
+									}
+								})
+
+								console.log('Home 背景动画实例:', animation)
+
+								// 监听动画事件
+								animation.addEventListener('DOMLoaded', () => {
+									console.log('✅ Home 背景动画 DOM 加载完成')
+								})
+
+								animation.addEventListener('error', (error) => {
+									console.error('❌ Home 背景动画加载错误:', error)
+								})
+								
+								// 立即播放
+								animation.play()
+								console.log('✅ Home 背景动画已启动播放')
+
+							} catch (error) {
+								console.error('Home 背景 Canvas 初始化错误:', error)
+							}
+						} else {
+							console.error('Home 背景 Canvas 实例获取失败:', res)
+						}
+					})
+				// #endif
 			}
 		}
 	}
@@ -1423,12 +2384,8 @@
 <style>
 	.home-container {
 		min-height: 100vh;
-		/* 鲜艳活泼的彩虹渐变背景 + 高级光线效果 */
-		background:
-			radial-gradient(circle at 30% 15%, rgba(255, 100, 130, 0.5) 0%, transparent 40%),
-			radial-gradient(circle at 70% 35%, rgba(0, 180, 220, 0.4) 0%, transparent 45%),
-			radial-gradient(circle at 50% 85%, rgba(100, 220, 50, 0.45) 0%, transparent 50%),
-			linear-gradient(180deg, #FF1493 0%, #FF8C00 25%, #FFD700 50%, #32CD32 100%);
+		/* 波普风格渐变背景 */
+		background: linear-gradient(135deg, #FFE5F0 0%, #E5F3FF 50%, #FFF5E5 100%);
 		padding: 20rpx;
 		padding-top: 120rpx;
 		padding-bottom: 40rpx;
@@ -1437,32 +2394,31 @@
 		flex-direction: column;
 		position: relative;
 		overflow: hidden;
-		/* 微妙的动画背景 - 保持彩虹色彩活力 */
-		animation: vibrancyBackgroundShift 20s ease-in-out infinite;
+	}
+	
+	/* 全屏 Lottie 背景动画 */
+	.fullscreen-lottie-bg {
+		position: absolute;
+		top: 0;
+		left: 0;
+		width: 100%;
+		height: 100%;
+		z-index: 0;
+		pointer-events: none;
+		overflow: hidden;
+		opacity: 0.4;
+		mix-blend-mode: multiply;
 	}
 
-	@keyframes vibrancyBackgroundShift {
-		0% {
-			background:
-				radial-gradient(circle at 30% 15%, rgba(255, 100, 130, 0.5) 0%, transparent 40%),
-				radial-gradient(circle at 70% 35%, rgba(0, 180, 220, 0.4) 0%, transparent 45%),
-				radial-gradient(circle at 50% 85%, rgba(100, 220, 50, 0.45) 0%, transparent 50%),
-				linear-gradient(180deg, #FF1493 0%, #FF8C00 25%, #FFD700 50%, #32CD32 100%);
-		}
-		50% {
-			background:
-				radial-gradient(circle at 35% 20%, rgba(255, 120, 150, 0.45) 0%, transparent 42%),
-				radial-gradient(circle at 65% 30%, rgba(0, 200, 240, 0.35) 0%, transparent 48%),
-				radial-gradient(circle at 50% 80%, rgba(120, 240, 70, 0.4) 0%, transparent 52%),
-				linear-gradient(180deg, #FF1493 0%, #FF8C00 25%, #FFD700 50%, #32CD32 100%);
-		}
-		100% {
-			background:
-				radial-gradient(circle at 30% 15%, rgba(255, 100, 130, 0.5) 0%, transparent 40%),
-				radial-gradient(circle at 70% 35%, rgba(0, 180, 220, 0.4) 0%, transparent 45%),
-				radial-gradient(circle at 50% 85%, rgba(100, 220, 50, 0.45) 0%, transparent 50%),
-				linear-gradient(180deg, #FF1493 0%, #FF8C00 25%, #FFD700 50%, #32CD32 100%);
-		}
+	/* 背景 Canvas 样式 */
+	.bg-lottie-canvas {
+		position: absolute;
+		top: 0;
+		left: 0;
+		display: block;
+		width: 100% !important;
+		height: 100% !important;
+		pointer-events: none;
 	}
 	
 	.home-container::before {
@@ -1472,11 +2428,11 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		/* 高级光线层效果 */
+		/* 波普风格光线层效果 */
 		background:
-			radial-gradient(ellipse 600rpx 400rpx at 60% 15%, rgba(100, 220, 255, 0.15) 0%, transparent 35%),
-			radial-gradient(ellipse 500rpx 500rpx at 20% 70%, rgba(255, 100, 150, 0.08) 0%, transparent 45%),
-			linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 50%, rgba(0, 0, 0, 0.1) 100%);
+			radial-gradient(ellipse 600rpx 400rpx at 60% 15%, rgba(255, 217, 61, 0.1) 0%, transparent 35%),
+			radial-gradient(ellipse 500rpx 500rpx at 20% 70%, rgba(255, 107, 157, 0.08) 0%, transparent 45%),
+			linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 50%, rgba(78, 205, 196, 0.05) 100%);
 		pointer-events: none;
 		z-index: 0;
 		animation: lightShimmer 8s ease-in-out infinite;
@@ -1615,14 +2571,13 @@
 		overflow: hidden;
 	}
 
-	/* B站播放器iframe样式 */
-	.bilibili-player {
+	/* 直播播放器样式 */
+	.live-player {
 		width: 100%;
 		height: 100%;
 		position: absolute;
 		top: 0;
 		left: 0;
-		border: none;
 		background-color: #000;
 	}
 
@@ -1659,15 +2614,13 @@
 		            0 0 0 2rpx rgba(255, 255, 255, 0.3);
 	}
 	
-	.play-icon {
-		font-size: 32rpx;
-		color: #333;
-		text-shadow: 0 1rpx 2rpx rgba(255, 255, 255, 0.8);
+	.play-icon-img {
+		width: 60rpx;
+		height: 60rpx;
 		transition: transform 0.3s ease;
-		margin-left: 4rpx; /* 让播放图标稍微向右偏移，看起来更居中 */
 	}
 	
-	.play-button:active .play-icon {
+	.play-button:active .play-icon-img {
 		transform: scale(0.9);
 	}
 
@@ -1778,13 +2731,19 @@
 		align-items: center;
 		justify-content: center;
 		height: 100%;
-		color: #FFFFFF;
+		color: #333333;
 		background: 
-			radial-gradient(circle at 30% 30%, rgba(120, 119, 198, 0.8) 0%, transparent 50%),
-			radial-gradient(circle at 70% 70%, rgba(120, 219, 255, 0.6) 0%, transparent 50%),
-			linear-gradient(135deg, rgba(15, 12, 41, 0.9), rgba(48, 43, 99, 0.8));
+			linear-gradient(135deg, 
+				#FFD4E5 0%, 
+				#E5D4FF 35%, 
+				#D4E5FF 70%, 
+				#D4FFF5 100%);
 		position: relative;
 		overflow: hidden;
+		border: 3rpx solid #999999;
+		box-shadow: 
+			0 6rpx 16rpx rgba(0, 0, 0, 0.08),
+			inset 0 2rpx 0 rgba(255, 255, 255, 0.5);
 	}
 	
 	.video-placeholder::before {
@@ -1795,28 +2754,35 @@
 		right: 0;
 		bottom: 0;
 		background: 
-			radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.1) 0%, transparent 30%);
+			radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.15) 0%, transparent 40%),
+			radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
 		pointer-events: none;
+		animation: shimmer 3s ease-in-out infinite;
 	}
 	
 	.placeholder-icon {
 		font-size: 80rpx;
 		margin-bottom: 20rpx;
-		opacity: 0.9;
-		text-shadow: 0 0 20rpx rgba(255, 255, 255, 0.3);
+		opacity: 0.85;
+		text-shadow: 
+			2rpx 2rpx 4rpx rgba(0, 0, 0, 0.1),
+			0 0 20rpx rgba(255, 255, 255, 0.3);
 		position: relative;
 		z-index: 1;
+		animation: popBounce 2s ease-in-out infinite;
 	}
 	
 	.placeholder-text {
 		font-size: 32rpx;
 		font-weight: bold;
 		opacity: 0.9;
+		color: #666666;
 		text-shadow: 
-			0 0 20rpx rgba(255, 255, 255, 0.3),
-			0 2rpx 4rpx rgba(0, 0, 0, 0.3);
+			1rpx 1rpx 2rpx rgba(0, 0, 0, 0.1),
+			0 0 10rpx rgba(255, 255, 255, 0.5);
 		position: relative;
 		z-index: 1;
+		letter-spacing: 3rpx;
 	}
 
 	.live-indicator {
@@ -1926,14 +2892,13 @@
 		            0 0 0 2rpx rgba(255, 255, 255, 0.2);
 	}
 
-	.collapse-btn-floating .collapse-icon {
-		font-size: 24rpx;
-		color: #FFFFFF;
-		text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
+	.collapse-icon-img {
+		width: 40rpx;
+		height: 40rpx;
 		transition: transform 0.3s ease;
 	}
 
-	.collapse-btn-floating:active .collapse-icon {
+	.collapse-btn-floating:active .collapse-icon-img {
 		transform: scale(0.9);
 	}
 
@@ -2084,18 +3049,49 @@
 	}
 
 
-	/* 动态火焰分界线 - 单一大火焰团与跳动离子粒子 */
+	/* 动态火焰分界线 - Lottie 动画 */
 	.flame-divider {
 		position: absolute;
-		top: 30%;
-		transform: translateX(-50%) translateY(-50%);
-		width: 140rpx;
-		height: 180rpx;
+		top: 50%;
+		width: 200rpx;
+		height: 200rpx;
 		transition: left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 		z-index: 20;
 		pointer-events: none;
-		animation: dividerPulse 0.8s ease-in-out infinite;
 		overflow: visible;
+		will-change: left;
+		backface-visibility: hidden;
+		-webkit-backface-visibility: hidden;
+		transform: translate3d(-50%, -50%, 0);
+		-webkit-transform: translate3d(-50%, -50%, 0);
+		transform-origin: center center;
+	}
+	/* Lottie 火焰容器 */
+	.lottie-fire-container {
+		width: 100%;
+		height: 100%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		position: relative;
+		will-change: auto;
+		backface-visibility: hidden;
+		-webkit-backface-visibility: hidden;
+		-webkit-perspective: 1000;
+		perspective: 1000;
+	}
+	
+	.lottie-fire-canvas,
+	.lottie-fire-wrapper {
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
+		overflow: hidden;
+		position: relative;
+		z-index: 1;
+		transform: translateZ(0);
+		-webkit-transform: translateZ(0);
+		will-change: transform;
 	}
 
 	@keyframes dividerPulse {
@@ -2125,25 +3121,41 @@
 	.flame-divider.divider-hit {
 		animation: dividerExplosion 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 	}
+	
+	.flame-divider.divider-hit .lottie-fire-container {
+		animation: fireShake 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+	}
+	
+	@keyframes fireShake {
+		0%, 100% { 
+			transform: translateZ(0) scale(1);
+		}
+		10%, 30%, 50%, 70%, 90% { 
+			transform: translateZ(0) scale(1.15) rotate(-2deg);
+		}
+		20%, 40%, 60%, 80% { 
+			transform: translateZ(0) scale(1.15) rotate(2deg);
+		}
+	}
 
 	@keyframes dividerExplosion {
 		0% {
 			filter: drop-shadow(0 0 12rpx rgba(255, 0, 255, 0.6))
 			        drop-shadow(0 0 18rpx rgba(255, 69, 0, 0.3));
-			transform: translateX(-50%) scale(1);
+			transform: translate3d(-50%, -50%, 0) scale(1);
 		}
 		15% {
 			filter: drop-shadow(0 0 30rpx rgba(255, 0, 255, 0.95))
 			        drop-shadow(0 0 45rpx rgba(255, 69, 0, 0.85))
 			        drop-shadow(0 0 60rpx rgba(255, 100, 0, 0.6));
-			transform: translateX(-50%) scale(1.2);
+			transform: translate3d(-50%, -50%, 0) scale(1.2);
 		}
 		35% {
 			filter: drop-shadow(0 0 40rpx rgba(255, 0, 255, 1))
 			        drop-shadow(0 0 60rpx rgba(255, 69, 0, 0.95))
 			        drop-shadow(0 0 80rpx rgba(255, 100, 0, 0.8))
 			        drop-shadow(0 0 100rpx rgba(255, 200, 0, 0.5));
-			transform: translateX(-50%) scale(1.35);
+			transform: translate3d(-50%, -50%, 0) scale(1.35);
 		}
 		50% {
 			filter: drop-shadow(0 0 50rpx rgba(255, 0, 255, 1))
@@ -2151,18 +3163,18 @@
 			        drop-shadow(0 0 100rpx rgba(255, 100, 0, 0.9))
 			        drop-shadow(0 0 130rpx rgba(255, 200, 0, 0.6))
 			        drop-shadow(0 0 150rpx rgba(255, 150, 0, 0.3));
-			transform: translateX(-50%) scale(1.45);
+			transform: translate3d(-50%, -50%, 0) scale(1.45);
 		}
 		75% {
 			filter: drop-shadow(0 0 35rpx rgba(255, 0, 255, 0.9))
 			        drop-shadow(0 0 50rpx rgba(255, 69, 0, 0.8))
 			        drop-shadow(0 0 70rpx rgba(255, 100, 0, 0.6));
-			transform: translateX(-50%) scale(1.2);
+			transform: translate3d(-50%, -50%, 0) scale(1.2);
 		}
 		100% {
 			filter: drop-shadow(0 0 10rpx rgba(255, 0, 255, 0.6))
 			        drop-shadow(0 0 15rpx rgba(255, 69, 0, 0.3));
-			transform: translateX(-50%) scale(1);
+			transform: translate3d(-50%, -50%, 0) scale(1);
 		}
 	}
 
@@ -2628,10 +3640,10 @@
 		box-shadow: 0 1rpx 4rpx rgba(0, 255, 255, 0.5);
 	}
 
-	.expand-icon {
-		font-size: 18rpx;
-		color: #FFFFFF;
-		text-shadow: 1rpx 1rpx 2rpx rgba(0, 0, 0, 0.5);
+	.expand-icon-img {
+		width: 32rpx;
+		height: 32rpx;
+		margin-right: 8rpx;
 	}
 
 	.expand-text {
@@ -2656,13 +3668,15 @@
 
 	/* AI对话区域 */
 	.ai-chat-container {
-		background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-		border: 4rpx solid #e9ecef;
-		border-radius: 32rpx;
+		background: linear-gradient(135deg, #fff9f5 0%, #ffeef0 100%);
+		border: 3rpx solid #ffb3d1;
+		border-radius: 30rpx;
 		margin-bottom: 20rpx;
 		overflow: hidden;
-		box-shadow: 0 12rpx 32rpx rgba(0, 0, 0, 0.08), 0 4rpx 16rpx rgba(0, 0, 0, 0.04);
-		height: 500rpx;
+		box-shadow: 0 8rpx 24rpx rgba(255, 179, 209, 0.3), 
+		            0 4rpx 12rpx rgba(255, 107, 157, 0.2),
+		            inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
+		height: 600rpx;
 		display: flex;
 		flex-direction: column;
 		transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -2678,25 +3692,26 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		background: linear-gradient(135deg, rgba(102, 126, 234, 0.02) 0%, rgba(118, 75, 162, 0.02) 100%);
+		background: linear-gradient(135deg, rgba(255, 179, 209, 0.15) 0%, rgba(255, 107, 157, 0.1) 100%);
 		pointer-events: none;
 	}
 
 	/* AI对话区域展开状态 - 简单增加高度 */
 	.main-content.expanded .ai-chat-container {
-		height: 800rpx; /* 增加高度，提供更多空间 */
+		height: 900rpx; /* 增加高度，提供更多空间 */
 	}
 
 	.chat-header {
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
-		padding: 28rpx 32rpx;
+		background: linear-gradient(135deg, #FF6B9D 0%, #FF1493 50%, #FFB6C1 100%);
+		padding: 20rpx 24rpx;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		border-bottom: 3rpx solid rgba(255, 255, 255, 0.2);
+		border-bottom: 2rpx solid rgba(255, 255, 255, 0.3);
 		flex-shrink: 0;
 		position: relative;
 		overflow: hidden;
+		box-shadow: 0 4rpx 12rpx rgba(255, 107, 157, 0.3);
 	}
 	
 	.chat-header::before {
@@ -2721,11 +3736,17 @@
 	}
 
 	.ai-emoji {
-		font-size: 40rpx;
-		margin-right: 18rpx;
-		filter: drop-shadow(0 2rpx 4rpx rgba(0, 0, 0, 0.2));
+		font-size: 44rpx;
+		margin-right: 16rpx;
+		filter: drop-shadow(0 3rpx 6rpx rgba(255, 107, 157, 0.3));
 		position: relative;
 		z-index: 1;
+		animation: aiFloat 3s ease-in-out infinite;
+	}
+	
+	@keyframes aiFloat {
+		0%, 100% { transform: translateY(0); }
+		50% { transform: translateY(-4rpx); }
 	}
 
 	.chat-title {
@@ -2751,9 +3772,9 @@
 	}
 
 	.status-indicator.active {
-		background: linear-gradient(135deg, #4CAF50, #2E7D32);
+		background: linear-gradient(135deg, #FF1493, #FF6B9D);
 		animation: pulse 2s infinite;
-		box-shadow: 0 0 12rpx rgba(76, 175, 80, 0.4);
+		box-shadow: 0 0 12rpx rgba(255, 107, 157, 0.5);
 	}
 
 	.status-dot {
@@ -2771,11 +3792,12 @@
 
 	.chat-messages {
 		flex: 1;
-		padding: 24rpx;
+		padding: 28rpx 24rpx;
 		overflow-y: auto;
 		box-sizing: border-box;
 		width: 100%;
-		background: linear-gradient(135deg, #fafbfc 0%, #f8f9fa 100%);
+		height: 100%;
+		background: linear-gradient(135deg, #fff5f9 0%, #ffeef0 100%);
 		position: relative;
 		z-index: 1;
 	}
@@ -2821,27 +3843,28 @@
 	}
 
 	.message-item.left .message-bubble {
-		background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+		background: linear-gradient(135deg, #ffe5f0 0%, #ffb6d6 100%);
 		border-bottom-left-radius: 12rpx;
-		border-color: rgba(33, 150, 243, 0.2);
+		border-color: rgba(255, 107, 157, 0.25);
+		box-shadow: 0 4rpx 12rpx rgba(255, 107, 157, 0.15);
 	}
 
 	.message-item.right .message-bubble {
-		background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
+		background: linear-gradient(135deg, #e5f3ff 0%, #b3e0ff 100%);
 		border-bottom-right-radius: 12rpx;
-		border-color: rgba(156, 39, 176, 0.2);
+		border-color: rgba(0, 191, 255, 0.25);
+		box-shadow: 0 4rpx 12rpx rgba(0, 191, 255, 0.15);
 	}
 
 	.message-bubble:hover {
 		transform: translateY(-2rpx);
-		box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.1);
+		box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.12);
 	}
 
 	.message-bubble:active {
 		transform: scale(0.98) translateY(0);
-		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+		box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.1);
 	}
-
 	.message-text {
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Source Han Sans CN', sans-serif;
 		font-size: 30rpx;
@@ -2945,11 +3968,17 @@
 
 	/* 对抗条和投票区域 */
 	.battle-section {
-		background-color: #FFFFFF;
+		background-color: #FFFFFF !important;
+		background: #FFFFFF !important;
 		border: 6rpx solid #000;
 		border-radius: 30rpx;
 		padding: 30rpx;
 		margin-bottom: 20rpx;
+		display: flex;
+		flex-direction: column;
+		opacity: 1 !important;
+		position: relative;
+		z-index: 10;
 	}
 
 	/* 对抗条 */
@@ -3347,190 +4376,459 @@
 	.vote-buttons {
 		display: flex;
 		gap: 20rpx;
+		justify-content: center;
+		align-items: center;
 	}
 
-	.vote-btn {
-		flex: 1;
-		height: 100rpx;
-		border: 3rpx solid #000;
-		border-radius: 25rpx;
+	.lottie-button-container {
 		display: flex;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		gap: 15rpx;
-		transition: all 0.3s ease;
+		cursor: pointer;
+		transition: transform 0.3s ease;
+		position: relative;
+		width: 100%;
+	}
+
+	.lottie-button-container:hover {
+		transform: scale(1.05);
+	}
+
+	.lottie-button-container:active {
+		transform: scale(0.95);
+	}
+
+	.lottie-button-container.disabled {
+		opacity: 0.5;
+		pointer-events: none;
+		cursor: not-allowed;
+	}
+
+	.lottie-button-container.voted {
+		transform: scale(1.1);
+	}
+
+	/* 动画外框 - 直接包裹动画 */
+	.animation-frame {
+		display: inline-block;
+		border-radius: 20rpx;
+		padding: 8rpx;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	/* 正方按钮外框 */
+	.left-frame {
+		background: linear-gradient(135deg, 
+			rgba(255, 105, 180, 0.15) 0%, 
+			rgba(255, 20, 147, 0.25) 50%, 
+			rgba(255, 182, 193, 0.15) 100%);
+		border: 2rpx solid rgba(255, 20, 147, 0.4);
 		box-shadow: 
-			0 6rpx 16rpx rgba(0, 0, 0, 0.4),
+			0 4rpx 15rpx rgba(255, 20, 147, 0.25),
+			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+	}
+
+	/* 反方按钮外框 */
+	.right-frame {
+		background: linear-gradient(135deg, 
+			rgba(0, 191, 255, 0.15) 0%, 
+			rgba(135, 206, 235, 0.25) 50%, 
+			rgba(176, 224, 230, 0.15) 100%);
+		border: 2rpx solid rgba(0, 191, 255, 0.4);
+		box-shadow: 
+			0 4rpx 15rpx rgba(0, 191, 255, 0.25),
+			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+	}
+
+
+
+	/* 悬停效果 */
+	.lottie-button-container:hover .animation-frame {
+		transform: translateY(-2rpx) scale(1.05);
+	}
+
+	.lottie-button-container:hover .left-frame {
+		box-shadow: 
+			0 6rpx 20rpx rgba(255, 20, 147, 0.4),
+			inset 0 1rpx 0 rgba(255, 255, 255, 0.4);
+	}
+
+	.lottie-button-container:hover .right-frame {
+		box-shadow: 
+			0 6rpx 20rpx rgba(0, 191, 255, 0.4),
+			inset 0 1rpx 0 rgba(255, 255, 255, 0.4);
+	}
+
+	/* 已投票状态 */
+	.lottie-button-container.voted .animation-frame {
+		background: linear-gradient(135deg, 
+			rgba(255, 215, 0, 0.25) 0%, 
+			rgba(255, 165, 0, 0.35) 50%, 
+			rgba(255, 140, 0, 0.25) 100%);
+		border-color: rgba(255, 215, 0, 0.5);
+		box-shadow: 
+			0 4rpx 15rpx rgba(255, 215, 0, 0.4),
+			inset 0 1rpx 0 rgba(255, 255, 255, 0.4);
+		animation: votedGlow 2s ease-in-out infinite alternate;
+	}
+
+	@keyframes votedGlow {
+		0% {
+			box-shadow: 
+				0 4rpx 15rpx rgba(255, 215, 0, 0.4),
+				inset 0 1rpx 0 rgba(255, 255, 255, 0.4);
+		}
+		100% {
+			box-shadow: 
+				0 6rpx 20rpx rgba(255, 215, 0, 0.6),
+				inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
+		}
+	}
+
+	/* 禁用状态 */
+	.lottie-button-container.disabled .animation-frame {
+		background: linear-gradient(135deg, 
+			rgba(200, 200, 200, 0.15) 0%, 
+			rgba(150, 150, 150, 0.25) 50%, 
+			rgba(100, 100, 100, 0.15) 100%);
+		border-color: rgba(150, 150, 150, 0.4);
+		box-shadow: 
+			0 2rpx 10rpx rgba(0, 0, 0, 0.15),
+			inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	/* 正方按钮特殊特效（超级强化东倒西歪效果） */
+	.left-btn.click-effect {
+		background: linear-gradient(135deg, #FF1493, #FF69B4, #FFB6C1, #FF1493);
+		background-size: 300% 300%;
+		animation: superLeftVoteEffect 1.2s cubic-bezier(0.68, -0.55, 0.265, 1.55), 
+				   superGradientShift 2.5s ease infinite,
+				   buttonShake 0.8s ease-in-out;
+		box-shadow: 
+			0 0 20rpx rgba(255, 20, 147, 0.6),
+			0 0 40rpx rgba(255, 20, 147, 0.4),
+			0 0 60rpx rgba(255, 20, 147, 0.2),
 			inset 0 2rpx 0 rgba(255, 255, 255, 0.3);
-		transform: translateZ(0); /* GPU加速 */
-		will-change: transform, box-shadow; /* 提示浏览器优化 */
+		transform: translateZ(0);
 		position: relative;
 		overflow: hidden;
 	}
 
-	.left-btn {
-		background: #FF1493;
+	/* 反方按钮特殊特效（超级强化东倒西歪效果） */
+	.right-btn.click-effect {
+		background: linear-gradient(135deg, #00BFFF, #87CEEB, #B0E0E6, #00BFFF);
+		background-size: 300% 300%;
+		animation: superRightVoteEffect 1.2s cubic-bezier(0.68, -0.55, 0.265, 1.55), 
+				   superGradientShift 2.5s ease infinite,
+				   buttonShake 0.8s ease-in-out;
+		box-shadow: 
+			0 0 20rpx rgba(0, 191, 255, 0.6),
+			0 0 40rpx rgba(0, 191, 255, 0.4),
+			0 0 60rpx rgba(0, 191, 255, 0.2),
+			inset 0 2rpx 0 rgba(255, 255, 255, 0.3);
+		transform: translateZ(0);
+		position: relative;
+		overflow: hidden;
 	}
 
-	.right-btn {
-		background: #00FFFF;
+	/* 超级按钮摇晃动画 */
+	@keyframes buttonShake {
+		0%, 100% { transform: translateX(0) rotate(0deg); }
+		10% { transform: translateX(-2rpx) rotate(-1deg); }
+		20% { transform: translateX(2rpx) rotate(1deg); }
+		30% { transform: translateX(-3rpx) rotate(-1.5deg); }
+		40% { transform: translateX(3rpx) rotate(1.5deg); }
+		50% { transform: translateX(-2rpx) rotate(-1deg); }
+		60% { transform: translateX(2rpx) rotate(1deg); }
+		70% { transform: translateX(-1rpx) rotate(-0.5deg); }
+		80% { transform: translateX(1rpx) rotate(0.5deg); }
+		90% { transform: translateX(-0.5rpx) rotate(-0.25deg); }
 	}
 
-	.vote-btn.voted {
-		background: linear-gradient(135deg, #FFD700, #FFA500);
-		transform: scale(1.05);
-		box-shadow: 0 6rpx 16rpx rgba(255, 215, 0, 0.4);
+	/* 超级渐变移动动画 */
+	@keyframes superGradientShift {
+		0% { background-position: 0% 50%; }
+		25% { background-position: 100% 50%; }
+		50% { background-position: 100% 100%; }
+		75% { background-position: 0% 100%; }
+		100% { background-position: 0% 50%; }
 	}
 
-	.vote-btn:active {
-		transform: scale(0.95);
-		animation: voteClick 0.3s ease;
-	}
-
-	.vote-btn.disabled {
-		opacity: 0.5;
-		pointer-events: none;
-		background: linear-gradient(135deg, #ccc, #999);
-		cursor: not-allowed;
-	}
-
-	.vote-btn.disabled:active {
-		transform: none;
-		animation: none;
-	}
-
-	@keyframes voteClick {
-		0% { 
-			transform: scale(1) translateZ(0); /* GPU加速 */
+	/* 超级正方按钮特效动画 */
+	@keyframes superLeftVoteEffect {
+		0% {
+			transform: scale(1) rotate(0deg) skewY(0deg) translateZ(0);
+			filter: brightness(1) saturate(1) hue-rotate(0deg);
+			box-shadow: 
+				0 0 20rpx rgba(255, 20, 147, 0.6),
+				0 0 40rpx rgba(255, 20, 147, 0.4),
+				0 0 60rpx rgba(255, 20, 147, 0.2);
 		}
-		50% { 
-			transform: scale(0.9) translateZ(0); /* GPU加速 */
+		15% {
+			transform: scale(1.15) rotate(-8deg) skewY(-3deg) translateZ(0);
+			filter: brightness(1.3) saturate(1.5) hue-rotate(10deg);
+			box-shadow: 
+				0 0 30rpx rgba(255, 20, 147, 0.8),
+				0 0 60rpx rgba(255, 20, 147, 0.6),
+				0 0 90rpx rgba(255, 20, 147, 0.4);
 		}
-		100% { 
-			transform: scale(1) translateZ(0); /* GPU加速 */
+		30% {
+			transform: scale(1.2) rotate(10deg) skewY(4deg) translateZ(0);
+			filter: brightness(1.4) saturate(1.8) hue-rotate(-15deg);
+			box-shadow: 
+				0 0 40rpx rgba(255, 20, 147, 1),
+				0 0 80rpx rgba(255, 20, 147, 0.8),
+				0 0 120rpx rgba(255, 20, 147, 0.6);
 		}
-	}
-
-	/* 投票按钮特效 */
-	.vote-btn.click-effect {
-		animation: voteEffect 0.6s ease;
-	}
-
-	@keyframes voteEffect {
-		0% { 
-			transform: scale(1);
-			box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.2);
+		45% {
+			transform: scale(1.1) rotate(-6deg) skewY(-2deg) translateZ(0);
+			filter: brightness(1.2) saturate(1.3) hue-rotate(8deg);
+			box-shadow: 
+				0 0 25rpx rgba(255, 20, 147, 0.7),
+				0 0 50rpx rgba(255, 20, 147, 0.5),
+				0 0 75rpx rgba(255, 20, 147, 0.3);
 		}
-		25% { 
-			transform: scale(1.1);
-			box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.3);
+		60% {
+			transform: scale(1.05) rotate(4deg) skewY(1.5deg) translateZ(0);
+			filter: brightness(1.1) saturate(1.1) hue-rotate(-5deg);
+			box-shadow: 
+				0 0 20rpx rgba(255, 20, 147, 0.6),
+				0 0 40rpx rgba(255, 20, 147, 0.4),
+				0 0 60rpx rgba(255, 20, 147, 0.2);
 		}
-		50% { 
-			transform: scale(1.05);
-			box-shadow: 0 12rpx 30rpx rgba(0, 0, 0, 0.4);
+		75% {
+			transform: scale(1.02) rotate(-2deg) skewY(-0.5deg) translateZ(0);
+			filter: brightness(1.05) saturate(1.05) hue-rotate(2deg);
+			box-shadow: 
+				0 0 15rpx rgba(255, 20, 147, 0.5),
+				0 0 30rpx rgba(255, 20, 147, 0.3),
+				0 0 45rpx rgba(255, 20, 147, 0.1);
 		}
-		75% { 
-			transform: scale(1.08);
-			box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.3);
-		}
-		100% { 
-			transform: scale(1);
-			box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.2);
-		}
-	}
-
-	/* 正方按钮特殊特效 */
-	.left-btn.click-effect {
-		background: linear-gradient(135deg, #667eea, #764ba2, #a8a8ff);
-		background-size: 200% 200%;
-		animation: leftVoteEffect 0.8s ease, gradientShift 2s ease infinite;
-	}
-
-	@keyframes leftVoteEffect {
-		0% { 
-			transform: scale(1) rotate(0deg);
-			filter: brightness(1);
-		}
-		25% { 
-			transform: scale(1.05) rotate(-0.5deg);
-			filter: brightness(1.1);
-		}
-		50% { 
-			transform: scale(1.03) rotate(0.5deg);
-			filter: brightness(1.15);
-		}
-		75% { 
-			transform: scale(1.04) rotate(-0.3deg);
-			filter: brightness(1.1);
-		}
-		100% { 
-			transform: scale(1) rotate(0deg);
-			filter: brightness(1);
+		100% {
+			transform: scale(1) rotate(0deg) skewY(0deg) translateZ(0);
+			filter: brightness(1) saturate(1) hue-rotate(0deg);
+			box-shadow: 
+				0 0 20rpx rgba(255, 20, 147, 0.6),
+				0 0 40rpx rgba(255, 20, 147, 0.4),
+				0 0 60rpx rgba(255, 20, 147, 0.2);
 		}
 	}
+	/* 超级反方按钮特效动画 */
+	@keyframes superRightVoteEffect {
+		0% {
+			transform: scale(1) rotate(0deg) skewY(0deg) translateZ(0);
+			filter: brightness(1) saturate(1) hue-rotate(0deg);
+			box-shadow: 
+				0 0 20rpx rgba(0, 191, 255, 0.6),
+				0 0 40rpx rgba(0, 191, 255, 0.4),
+				0 0 60rpx rgba(0, 191, 255, 0.2);
+		}
+		15% {
+			transform: scale(1.15) rotate(8deg) skewY(3deg) translateZ(0);
+			filter: brightness(1.3) saturate(1.5) hue-rotate(-10deg);
+			box-shadow: 
+				0 0 30rpx rgba(0, 191, 255, 0.8),
+				0 0 60rpx rgba(0, 191, 255, 0.6),
+				0 0 90rpx rgba(0, 191, 255, 0.4);
+		}
+		30% {
+			transform: scale(1.2) rotate(-10deg) skewY(-4deg) translateZ(0);
+			filter: brightness(1.4) saturate(1.8) hue-rotate(15deg);
+			box-shadow: 
+				0 0 40rpx rgba(0, 191, 255, 1),
+				0 0 80rpx rgba(0, 191, 255, 0.8),
+				0 0 120rpx rgba(0, 191, 255, 0.6);
+		}
+		45% {
+			transform: scale(1.1) rotate(6deg) skewY(2deg) translateZ(0);
+			filter: brightness(1.2) saturate(1.3) hue-rotate(-8deg);
+			box-shadow: 
+				0 0 25rpx rgba(0, 191, 255, 0.7),
+				0 0 50rpx rgba(0, 191, 255, 0.5),
+				0 0 75rpx rgba(0, 191, 255, 0.3);
+		}
+		60% {
+			transform: scale(1.05) rotate(-4deg) skewY(-1.5deg) translateZ(0);
+			filter: brightness(1.1) saturate(1.1) hue-rotate(5deg);
+			box-shadow: 
+				0 0 20rpx rgba(0, 191, 255, 0.6),
+				0 0 40rpx rgba(0, 191, 255, 0.4),
+				0 0 60rpx rgba(0, 191, 255, 0.2);
+		}
+		75% {
+			transform: scale(1.02) rotate(2deg) skewY(0.5deg) translateZ(0);
+			filter: brightness(1.05) saturate(1.05) hue-rotate(-2deg);
+			box-shadow: 
+				0 0 15rpx rgba(0, 191, 255, 0.5),
+				0 0 30rpx rgba(0, 191, 255, 0.3),
+				0 0 45rpx rgba(0, 191, 255, 0.1);
+		}
+		100% {
+			transform: scale(1) rotate(0deg) skewY(0deg) translateZ(0);
+			filter: brightness(1) saturate(1) hue-rotate(0deg);
+			box-shadow: 
+				0 0 20rpx rgba(0, 191, 255, 0.6),
+				0 0 40rpx rgba(0, 191, 255, 0.4),
+				0 0 60rpx rgba(0, 191, 255, 0.2);
+		}
+	}
 
-	/* 反方按钮特殊特效 */
+	@keyframes leftVoteEffectPro {
+		0% {
+			transform: scale(1) rotate(0deg) skewY(0deg);
+			filter: brightness(1) saturate(1);
+			box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.4);
+		}
+		10% {
+			transform: scale(1.15) rotate(-8deg) skewY(-2deg);
+			filter: brightness(1.3) saturate(1.4);
+			box-shadow: 0 12rpx 30rpx rgba(102, 126, 234, 0.6);
+		}
+		25% {
+			transform: scale(1.2) rotate(6deg) skewY(3deg);
+			filter: brightness(1.4) saturate(1.5);
+			box-shadow: 0 16rpx 40rpx rgba(102, 126, 234, 0.8);
+		}
+		40% {
+			transform: scale(1.12) rotate(-5deg) skewY(-2deg);
+			filter: brightness(1.25) saturate(1.3);
+			box-shadow: 0 12rpx 30rpx rgba(102, 126, 234, 0.6);
+		}
+		55% {
+			transform: scale(1.08) rotate(4deg) skewY(1.5deg);
+			filter: brightness(1.15) saturate(1.2);
+			box-shadow: 0 10rpx 24rpx rgba(102, 126, 234, 0.5);
+		}
+		70% {
+			transform: scale(1.04) rotate(-2deg) skewY(-1deg);
+			filter: brightness(1.08) saturate(1.1);
+			box-shadow: 0 8rpx 20rpx rgba(102, 126, 234, 0.4);
+		}
+		85% {
+			transform: scale(1.02) rotate(1deg) skewY(0.5deg);
+			filter: brightness(1.02) saturate(1.05);
+			box-shadow: 0 6rpx 16rpx rgba(102, 126, 234, 0.3);
+		}
+		100% {
+			transform: scale(1) rotate(0deg) skewY(0deg);
+			filter: brightness(1) saturate(1);
+			box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.4);
+		}
+	}
+
+	/* 反方按钮特殊特效（强化东倒西歪效果） */
 	.right-btn.click-effect {
 		background: linear-gradient(135deg, #f093fb, #f5576c, #ffb3d1);
 		background-size: 200% 200%;
-		animation: rightVoteEffect 0.8s ease, gradientShift 2s ease infinite;
+		animation: rightVoteEffectPro 1s cubic-bezier(0.68, -0.55, 0.265, 1.55), gradientShift 2s ease infinite;
 	}
 
-	@keyframes rightVoteEffect {
-		0% { 
-			transform: scale(1) rotate(0deg);
-			filter: brightness(1);
+	@keyframes rightVoteEffectPro {
+		0% {
+			transform: scale(1) rotate(0deg) skewY(0deg);
+			filter: brightness(1) saturate(1);
+			box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.4);
 		}
-		25% { 
-			transform: scale(1.05) rotate(0.5deg);
-			filter: brightness(1.1);
+		10% {
+			transform: scale(1.15) rotate(8deg) skewY(2deg);
+			filter: brightness(1.3) saturate(1.4);
+			box-shadow: 0 12rpx 30rpx rgba(240, 147, 251, 0.6);
 		}
-		50% { 
-			transform: scale(1.03) rotate(-0.5deg);
-			filter: brightness(1.15);
+		25% {
+			transform: scale(1.2) rotate(-6deg) skewY(-3deg);
+			filter: brightness(1.4) saturate(1.5);
+			box-shadow: 0 16rpx 40rpx rgba(240, 147, 251, 0.8);
 		}
-		75% { 
-			transform: scale(1.04) rotate(0.3deg);
-			filter: brightness(1.1);
+		40% {
+			transform: scale(1.12) rotate(5deg) skewY(2deg);
+			filter: brightness(1.25) saturate(1.3);
+			box-shadow: 0 12rpx 30rpx rgba(240, 147, 251, 0.6);
 		}
-		100% { 
-			transform: scale(1) rotate(0deg);
-			filter: brightness(1);
+		55% {
+			transform: scale(1.08) rotate(-4deg) skewY(-1.5deg);
+			filter: brightness(1.15) saturate(1.2);
+			box-shadow: 0 10rpx 24rpx rgba(240, 147, 251, 0.5);
+		}
+		70% {
+			transform: scale(1.04) rotate(2deg) skewY(1deg);
+			filter: brightness(1.08) saturate(1.1);
+			box-shadow: 0 8rpx 20rpx rgba(240, 147, 251, 0.4);
+		}
+		85% {
+			transform: scale(1.02) rotate(-1deg) skewY(-0.5deg);
+			filter: brightness(1.02) saturate(1.05);
+			box-shadow: 0 6rpx 16rpx rgba(240, 147, 251, 0.3);
+		}
+		100% {
+			transform: scale(1) rotate(0deg) skewY(0deg);
+			filter: brightness(1) saturate(1);
+			box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.4);
 		}
 	}
 
-	/* 已投票按钮的特殊效果 */
+	/* 已投票按钮的特殊效果（强化版） */
 	.vote-btn.voted.click-effect {
 		background: linear-gradient(135deg, #FFD700, #FFA500, #FF8C00);
 		background-size: 200% 200%;
-		animation: votedEffect 1s ease, gradientShift 1.5s ease infinite;
+		animation: votedEffectPro 1.2s cubic-bezier(0.68, -0.55, 0.265, 1.55), gradientShift 1.5s ease infinite;
 		box-shadow: 0 8rpx 20rpx rgba(255, 215, 0, 0.4);
 	}
 
-	@keyframes votedEffect {
-		0% { 
-			transform: scale(1);
+	@keyframes votedEffectPro {
+		0% {
+			transform: scale(1) rotate(0deg) skewY(0deg);
 			box-shadow: 0 8rpx 20rpx rgba(255, 215, 0, 0.4);
+			filter: brightness(1) drop-shadow(0 0 0px rgba(255, 215, 0, 0));
 		}
-		20% { 
-			transform: scale(1.08) rotate(-1deg);
-			box-shadow: 0 10rpx 25rpx rgba(255, 215, 0, 0.5);
+		12% {
+			transform: scale(1.12) rotate(-6deg) skewY(-2deg);
+			box-shadow: 0 14rpx 28rpx rgba(255, 215, 0, 0.6);
+			filter: brightness(1.2) drop-shadow(0 0 15rpx rgba(255, 215, 0, 0.6));
 		}
-		40% { 
-			transform: scale(1.06) rotate(1deg);
-			box-shadow: 0 12rpx 30rpx rgba(255, 215, 0, 0.6);
+		25% {
+			transform: scale(1.15) rotate(7deg) skewY(3deg);
+			box-shadow: 0 18rpx 36rpx rgba(255, 215, 0, 0.7);
+			filter: brightness(1.3) drop-shadow(0 0 20rpx rgba(255, 215, 0, 0.8));
 		}
-		60% { 
-			transform: scale(1.07) rotate(-0.5deg);
-			box-shadow: 0 10rpx 25rpx rgba(255, 215, 0, 0.5);
+		40% {
+			transform: scale(1.1) rotate(-4deg) skewY(-2deg);
+			box-shadow: 0 14rpx 28rpx rgba(255, 215, 0, 0.6);
+			filter: brightness(1.2) drop-shadow(0 0 15rpx rgba(255, 215, 0, 0.6));
 		}
-		80% { 
-			transform: scale(1.04) rotate(0.3deg);
-			box-shadow: 0 9rpx 22rpx rgba(255, 215, 0, 0.45);
+		55% {
+			transform: scale(1.08) rotate(3deg) skewY(1.5deg);
+			box-shadow: 0 12rpx 24rpx rgba(255, 215, 0, 0.5);
+			filter: brightness(1.1) drop-shadow(0 0 10rpx rgba(255, 215, 0, 0.4));
 		}
-		100% { 
-			transform: scale(1);
+		70% {
+			transform: scale(1.04) rotate(-2deg) skewY(-1deg);
+			box-shadow: 0 10rpx 20rpx rgba(255, 215, 0, 0.45);
+			filter: brightness(1.05) drop-shadow(0 0 5rpx rgba(255, 215, 0, 0.3));
+		}
+		85% {
+			transform: scale(1.02) rotate(1deg) skewY(0.5deg);
+			box-shadow: 0 9rpx 22rpx rgba(255, 215, 0, 0.4);
+			filter: brightness(1.02) drop-shadow(0 0 3rpx rgba(255, 215, 0, 0.2));
+		}
+		100% {
+			transform: scale(1) rotate(0deg) skewY(0deg);
 			box-shadow: 0 8rpx 20rpx rgba(255, 215, 0, 0.4);
+			filter: brightness(1) drop-shadow(0 0 0px rgba(255, 215, 0, 0));
 		}
 	}
 
@@ -3584,28 +4882,28 @@
 	}
 
 	.nav-icon {
-		width: 50rpx;
-		height: 50rpx;
+		width: 56rpx;
+		height: 56rpx;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		margin-bottom: 8rpx;
-		border-radius: 50%;
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	}
+
+	.nav-icon-img {
+		width: 48rpx;
+		height: 48rpx;
 		transition: all 0.3s ease;
 	}
 
 	.nav-item.active .nav-icon {
-		background-color: #FF1493;
+		transform: scale(1.15);
+	}
+
+	.nav-item.active .nav-icon-img {
 		transform: scale(1.1);
-	}
-
-	.icon {
-		font-size: 32rpx;
-		transition: all 0.3s ease;
-	}
-
-	.nav-item.active .icon {
-		filter: brightness(1.2);
+		filter: drop-shadow(0 2rpx 6rpx rgba(255, 107, 157, 0.4));
 	}
 
 	.nav-text {
@@ -3633,7 +4931,7 @@
 		right: 0;
 		bottom: 0;
 		background-color: rgba(0, 0, 0, 0.6);
-		z-index: 9999;
+		z-index: 9998;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -3647,14 +4945,16 @@
 	}
 
 	.custom-modal {
-		background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-		border: 4rpx solid #e9ecef;
-		border-radius: 32rpx;
+		background: linear-gradient(135deg, #fff9f5 0%, #ffeef0 100%);
+		border: 3rpx solid #ffb3d1;
+		border-radius: 28rpx;
 		width: 100%;
 		max-width: 640rpx;
 		max-height: 85vh;
 		overflow: hidden;
-		box-shadow: 0 25rpx 50rpx rgba(0, 0, 0, 0.15), 0 0 0 1rpx rgba(255, 255, 255, 0.1);
+		box-shadow: 0 8rpx 24rpx rgba(255, 179, 209, 0.3), 
+		            0 4rpx 12rpx rgba(255, 107, 157, 0.2),
+		            inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
 		animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		backdrop-filter: blur(10rpx);
 	}
@@ -3671,16 +4971,17 @@
 	}
 
 	.modal-header {
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #FF1493 100%);
-		padding: 35rpx 30rpx;
+		background: linear-gradient(135deg, #FF6B9D 0%, #FF1493 50%, #FFB6C1 100%);
+		padding: 32rpx 30rpx;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		border-bottom: 3rpx solid rgba(255, 255, 255, 0.2);
+		border-bottom: 2rpx solid rgba(255, 255, 255, 0.3);
 		position: relative;
 		overflow: hidden;
+		box-shadow: 0 4rpx 12rpx rgba(255, 107, 157, 0.3);
 	}
-
+	
 	.modal-header::before {
 		content: '';
 		position: absolute;
@@ -3688,10 +4989,10 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+		background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.15) 50%, transparent 70%);
 		animation: shimmer 3s infinite;
 	}
-
+	
 	@keyframes shimmer {
 		0% { transform: translateX(-100%); }
 		100% { transform: translateX(100%); }
@@ -3710,98 +5011,84 @@
 
 	.modal-content {
 		max-height: 60vh;
-		padding: 40rpx 30rpx;
-		background-color: #fafbfc;
+		padding: 30rpx 24rpx;
+		background: #fafafa;
 		box-sizing: border-box;
 		width: 100%;
 	}
 
 	.summary-section {
-		margin-bottom: 40rpx;
-		background-color: #ffffff;
-		border-radius: 20rpx;
-		padding: 25rpx;
-		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+		margin-bottom: 28rpx;
+		background: #ffffff;
+		border: 2rpx solid #f0f0f0;
+		border-radius: 16rpx;
+		padding: 20rpx;
+		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
 		box-sizing: border-box;
 		width: 100%;
 	}
 
 	.comments-section {
-		margin-bottom: 30rpx;
-		background-color: #ffffff;
-		border-radius: 20rpx;
-		padding: 25rpx;
-		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+		margin-bottom: 0;
+		background: #ffffff;
+		border: 2rpx solid #f0f0f0;
+		border-radius: 16rpx;
+		padding: 20rpx;
+		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
 		box-sizing: border-box;
 	}
 
 	.section-title {
 		display: flex;
 		align-items: center;
-		margin-bottom: 20rpx;
-		padding-bottom: 15rpx;
-		border-bottom: 2rpx solid #f0f0f0;
+		margin-bottom: 16rpx;
+		padding-bottom: 12rpx;
+		border-bottom: 1rpx solid #e5e5e5;
 	}
 
 	.title-icon {
-		font-size: 36rpx;
-		margin-right: 12rpx;
-		filter: drop-shadow(0 2rpx 4rpx rgba(0, 0, 0, 0.1));
+		font-size: 32rpx;
+		margin-right: 10rpx;
 	}
 
 	.title-text {
-		font-size: 30rpx;
+		font-size: 28rpx;
 		font-weight: 600;
-		color: #2c3e50;
-		letter-spacing: 0.5rpx;
+		color: #333;
+		letter-spacing: 0.2rpx;
 	}
 
 	.summary-content {
-		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-		border: 2rpx solid #dee2e6;
-		border-radius: 18rpx;
-		padding: 25rpx;
+		background: #f8f9fa;
+		border: 1rpx solid #e0e0e0;
+		border-radius: 12rpx;
+		padding: 18rpx;
 		position: relative;
-		box-shadow: inset 0 2rpx 4rpx rgba(0, 0, 0, 0.06);
-	}
-
-	.summary-content::before {
-		content: '';
-		position: absolute;
-		top: -2rpx;
-		left: -2rpx;
-		right: -2rpx;
-		bottom: -2rpx;
-		background: linear-gradient(135deg, #667eea, #764ba2, #FF1493, #FF69B4);
-		border-radius: 18rpx;
-		z-index: -1;
-		opacity: 0.3;
 	}
 
 	.summary-text {
-		font-size: 30rpx;
-		line-height: 1.7;
-		color: #2c3e50;
+		font-size: 28rpx;
+		line-height: 1.6;
+		color: #333;
 		display: block;
-		font-weight: 500;
-		letter-spacing: 0.3rpx;
+		font-weight: 400;
+		letter-spacing: 0.2rpx;
 	}
 
 	.comments-list {
 		display: flex;
 		flex-direction: column;
-		gap: 20rpx;
+		gap: 16rpx;
 		width: 100%;
 		box-sizing: border-box;
 	}
 
 	.comment-item {
-		background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-		border: 2rpx solid #e9ecef;
-		border-radius: 18rpx;
-		padding: 25rpx;
-		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		background: #f9f9f9;
+		border: 1rpx solid #e5e5e5;
+		border-radius: 12rpx;
+		padding: 18rpx;
+		transition: all 0.2s ease;
 		position: relative;
 		overflow: hidden;
 		box-sizing: border-box;
@@ -3814,17 +5101,16 @@
 		position: absolute;
 		top: 0;
 		left: 0;
-		width: 4rpx;
+		width: 3rpx;
 		height: 100%;
-		background: linear-gradient(135deg, #667eea, #764ba2);
+		background: #667eea;
 		opacity: 0;
-		transition: opacity 0.3s ease;
+		transition: opacity 0.2s ease;
 	}
 
 	.comment-item:hover {
-		box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.12);
-		transform: translateY(-3rpx);
-		border-color: #667eea;
+		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.08);
+		border-color: #d0d0d0;
 	}
 
 	.comment-item:hover::before {
@@ -3835,9 +5121,9 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		margin-bottom: 15rpx;
-		padding-bottom: 10rpx;
-		border-bottom: 1rpx solid #f0f0f0;
+		margin-bottom: 12rpx;
+		padding-bottom: 8rpx;
+		border-bottom: 1rpx solid #e0e0e0;
 	}
 
 	.user-info {
@@ -3846,105 +5132,127 @@
 	}
 
 	.user-avatar {
-		font-size: 32rpx;
-		margin-right: 12rpx;
-		filter: drop-shadow(0 2rpx 4rpx rgba(0, 0, 0, 0.1));
+		font-size: 28rpx;
+		margin-right: 10rpx;
 	}
 
 	.user-name {
-		font-size: 28rpx;
+		font-size: 26rpx;
 		font-weight: 600;
-		color: #2c3e50;
-		letter-spacing: 0.3rpx;
+		color: #333;
+		letter-spacing: 0.2rpx;
 	}
 
 	.comment-time {
+		font-size: 22rpx;
+		color: #999;
+		font-weight: 400;
+	}
+
+	.comment-header-right {
+		display: flex;
+		align-items: center;
+		gap: 16rpx;
+	}
+
+	.comment-delete-btn {
+		padding: 6rpx 12rpx;
+		border-radius: 8rpx;
+		background: rgba(255, 71, 87, 0.1);
+		transition: all 0.3s ease;
+		cursor: pointer;
+	}
+
+	.comment-delete-btn:active {
+		background: rgba(255, 71, 87, 0.2);
+		transform: scale(0.95);
+	}
+
+	.delete-icon {
 		font-size: 24rpx;
-		color: #95a5a6;
-		font-weight: 500;
+		opacity: 0.8;
 	}
 
 	.comment-text {
-		font-size: 28rpx;
-		color: #34495e;
-		line-height: 1.6;
+		font-size: 26rpx;
+		color: #555;
+		line-height: 1.5;
 		display: block;
 		font-weight: 400;
-		letter-spacing: 0.2rpx;
+		letter-spacing: 0.1rpx;
 	}
 
 	.empty-comments {
 		text-align: center;
-		padding: 50rpx 40rpx;
-		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-		border: 2rpx dashed #bdc3c7;
-		border-radius: 18rpx;
+		padding: 40rpx 32rpx;
+		background: #f9f9f9;
+		border: 1rpx dashed #d0d0d0;
+		border-radius: 12rpx;
 		position: relative;
 	}
 
 	.empty-comments::before {
 		content: '💭';
 		display: block;
-		font-size: 48rpx;
-		margin-bottom: 15rpx;
-		opacity: 0.6;
+		font-size: 40rpx;
+		margin-bottom: 12rpx;
+		opacity: 0.5;
 	}
 
 	.empty-text {
-		font-size: 28rpx;
-		color: #7f8c8d;
-		font-weight: 500;
-		letter-spacing: 0.3rpx;
+		font-size: 26rpx;
+		color: #999;
+		font-weight: 400;
+		letter-spacing: 0.2rpx;
 	}
 
 	.modal-footer {
-		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-		padding: 30rpx;
-		border-top: 2rpx solid #dee2e6;
+		background: #fafafa;
+		padding: 20rpx 24rpx;
+		border-top: 1rpx solid #e0e0e0;
 		display: flex;
-		gap: 25rpx;
-		box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.05);
+		gap: 20rpx;
 	}
 
 	.footer-btn {
 		flex: 1;
-		height: 88rpx;
-		border: 3rpx solid transparent;
-		border-radius: 22rpx;
+		height: 80rpx;
+		border: 2rpx solid transparent;
+		border-radius: 12rpx;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		transition: all 0.2s ease;
 		position: relative;
 		overflow: hidden;
-		font-weight: 600;
-		letter-spacing: 0.5rpx;
+		font-weight: 500;
+		letter-spacing: 0.3rpx;
 	}
 
 	.footer-btn:active {
-		transform: scale(0.96);
+		transform: scale(0.98);
 	}
 
 	.cancel-btn {
-		background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-		border-color: #dee2e6;
-		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
+		background: #ffffff;
+		border-color: #d0d0d0;
+		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
 	}
 
 	.cancel-btn:hover {
-		background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-		border-color: #adb5bd;
-		box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.12);
+		background: #f5f5f5;
+		border-color: #bbb;
+		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.08);
 	}
 
 	.cancel-btn .btn-text {
-		color: #495057;
-		font-size: 30rpx;
+		color: #333;
+		font-size: 28rpx;
 	}
 
 	.confirm-btn {
-		background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #FF1493 100%);
-		box-shadow: 0 6rpx 16rpx rgba(102, 126, 234, 0.4);
+		background: linear-gradient(135deg, #FF6B9D 0%, #FF1493 100%);
+		box-shadow: 0 4rpx 12rpx rgba(255, 107, 157, 0.3);
 		position: relative;
 		overflow: hidden;
 	}
@@ -3956,8 +5264,8 @@
 		left: -100%;
 		width: 100%;
 		height: 100%;
-		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-		transition: left 0.6s ease;
+		background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+		transition: left 0.5s ease;
 	}
 
 	.confirm-btn:hover::before {
@@ -3965,14 +5273,14 @@
 	}
 
 	.confirm-btn:hover {
-		box-shadow: 0 8rpx 20rpx rgba(102, 126, 234, 0.5);
-		transform: translateY(-2rpx);
+		box-shadow: 0 6rpx 16rpx rgba(255, 107, 157, 0.4);
+		transform: translateY(-1rpx);
 	}
 
 	.confirm-btn .btn-text {
 		color: #ffffff;
-		font-size: 30rpx;
-		text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.2);
+		font-size: 28rpx;
+		text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.15);
 	}
 
 	.confirm-btn:active::before {
@@ -4000,118 +5308,301 @@
 		right: 0;
 		bottom: 0;
 		pointer-events: none;
-		z-index: 9998;
-		overflow: hidden;
+		z-index: 99999;  /* 提高到最高层级 */
+		overflow: visible;  /* 改为 visible，不裁剪子元素 */
 	}
 
-	/* 特效符号 */
-	.effect-symbol {
-		position: absolute;
-		font-size: 40rpx;
+	/* Lottie 特效容器 */
+	.lottie-effect {
+		position: fixed;
+		width: 200rpx;  /* 从 150rpx 增加到 200rpx */
+		height: 400rpx; /* 从 320rpx 增加到 400rpx */
 		pointer-events: none;
 		z-index: 9999;
-		animation: floatUp 4s ease-out forwards;
+		will-change: transform, opacity;
+		transform: translateZ(0);
 	}
 
-	.symbol-text {
+	/* Lottie Canvas 样式 */
+	.lottie-heart-canvas {
+		width: 100%;
+		height: 100%;
 		display: block;
-		text-shadow: 0 0 10rpx rgba(255, 255, 255, 0.8);
-		filter: drop-shadow(0 0 5rpx rgba(0, 0, 0, 0.3));
+		background: transparent;
+		visibility: visible;
+		opacity: 1;
 	}
 
-	/* 正方特效样式 */
-	.effect-left {
-		color: #FF1493;
-		animation-name: floatUpLeft;
+	/* Lottie Wrapper 样式（非微信环境） */
+	.lottie-heart-wrapper {
+		width: 100%;
+		height: 100%;
+		position: relative;
 	}
 
-	/* 反方特效样式 */
-	.effect-right {
-		color: #00BFFF;
-		animation-name: floatUpRight;
+	/* 左侧 Lottie 特效样式（正方） */
+	.lottie-effect-left {
+		animation: lottieFloatUpLeft var(--duration, 3s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+		animation-delay: var(--delay, 0s);
 	}
 
-	/* 向上飘动动画 - 正方（从左边飘出） */
-	@keyframes floatUpLeft {
+	/* 右侧 Lottie 特效样式（反方） */
+	.lottie-effect-right {
+		animation: lottieFloatUpRight var(--duration, 3s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+		animation-delay: var(--delay, 0s);
+	}
+
+	/* Lottie 爱心动画 - 左侧向上飘动 */
+	@keyframes lottieFloatUpLeft {
 		0% {
 			opacity: 1;
-			transform: translateY(0) translateX(0) scale(0.8) rotate(0deg);
+			transform: translate(0, 0) scale(1);
 		}
-		15% {
+		20% {
 			opacity: 1;
-			transform: translateY(-40rpx) translateX(-10rpx) scale(1) rotate(-5deg);
+			transform: translate(-20rpx, -150rpx) scale(1.05);
 		}
-		35% {
+		40% {
 			opacity: 0.9;
-			transform: translateY(-120rpx) translateX(-20rpx) scale(1.1) rotate(5deg);
+			transform: translate(-30rpx, -300rpx) scale(1.1);
 		}
 		60% {
 			opacity: 0.7;
-			transform: translateY(-220rpx) translateX(-30rpx) scale(1) rotate(-3deg);
+			transform: translate(-20rpx, -450rpx) scale(1.05);
 		}
 		80% {
 			opacity: 0.4;
-			transform: translateY(-350rpx) translateX(-40rpx) scale(0.8) rotate(2deg);
+			transform: translate(-10rpx, -600rpx) scale(1);
 		}
 		100% {
 			opacity: 0;
-			transform: translateY(-500rpx) translateX(-50rpx) scale(0.5) rotate(0deg);
+			transform: translate(0, -750rpx) scale(0.9);
 		}
 	}
 
-	/* 向上飘动动画 - 反方（从右边飘出） */
-	@keyframes floatUpRight {
+	/* Lottie 爱心动画 - 右侧向上飘动 */
+	@keyframes lottieFloatUpRight {
 		0% {
 			opacity: 1;
-			transform: translateY(0) translateX(0) scale(0.8) rotate(0deg);
+			transform: translate(0, 0) scale(1);
 		}
-		15% {
+		20% {
 			opacity: 1;
-			transform: translateY(-40rpx) translateX(10rpx) scale(1) rotate(5deg);
+			transform: translate(20rpx, -150rpx) scale(1.05);
 		}
-		35% {
+		40% {
 			opacity: 0.9;
-			transform: translateY(-120rpx) translateX(20rpx) scale(1.1) rotate(-5deg);
+			transform: translate(30rpx, -300rpx) scale(1.1);
 		}
 		60% {
 			opacity: 0.7;
-			transform: translateY(-220rpx) translateX(30rpx) scale(1) rotate(3deg);
+			transform: translate(20rpx, -450rpx) scale(1.05);
 		}
 		80% {
 			opacity: 0.4;
-			transform: translateY(-350rpx) translateX(40rpx) scale(0.8) rotate(-2deg);
+			transform: translate(10rpx, -600rpx) scale(1);
 		}
 		100% {
 			opacity: 0;
-			transform: translateY(-500rpx) translateX(50rpx) scale(0.5) rotate(0deg);
+			transform: translate(0, -750rpx) scale(0.9);
+		}
+	}
+	/* 备用 emoji 爱心动画 */
+	@keyframes floatUpHeart {
+		0% {
+			opacity: 1;
+			transform: translateY(0) scale(0.5) rotate(0deg);
+		}
+		20% {
+			opacity: 1;
+			transform: translateY(-100px) scale(1) rotate(10deg);
+		}
+		40% {
+			opacity: 0.9;
+			transform: translateY(-200px) scale(1.2) rotate(-5deg);
+		}
+		60% {
+			opacity: 0.7;
+			transform: translateY(-300px) scale(1.1) rotate(8deg);
+		}
+		80% {
+			opacity: 0.4;
+			transform: translateY(-400px) scale(1) rotate(-3deg);
+		}
+		100% {
+			opacity: 0;
+			transform: translateY(-500px) scale(0.8) rotate(0deg);
+		}
+	}
+	
+	/* emoji 爱心样式 */
+	.emoji-heart {
+		position: absolute;
+		pointer-events: none;
+		z-index: 10000;
+		text-shadow: 0 0 10px rgba(255, 105, 180, 0.8);
+		will-change: transform, opacity;
+	}
+
+	/* 增强的向上飘动动画 - 左侧（带复杂的路径和旋转） */
+	@keyframes floatUpWithWobbleLeft {
+		0% {
+			opacity: 1;
+			transform:
+				translate(0, 0)
+				scale(0)
+				rotate(0deg)
+				perspective(1000px)
+				rotateX(0deg)
+				rotateY(0deg);
+			filter: blur(0px) brightness(1.2);
+		}
+		5% {
+			opacity: 1;
+			transform:
+				translate(var(--spread-x, 0), calc(var(--spread-y, 0) * 0.5))
+				scale(1.2)
+				rotate(calc(var(--rotation, 0deg) * 0.1))
+				perspective(1000px)
+				rotateX(5deg)
+				rotateY(5deg);
+			filter: blur(0px) brightness(1.3);
+		}
+		20% {
+			opacity: 1;
+			transform:
+				translate(calc(var(--spread-x, 0) * 0.8), calc(var(--spread-y, 0) * 0.6))
+				scale(1.1)
+				rotate(calc(var(--rotation, 0deg) * 0.3))
+				perspective(1000px)
+				rotateX(8deg)
+				rotateY(8deg);
+			filter: blur(0px) brightness(1.2);
+		}
+		40% {
+			opacity: 0.95;
+			transform:
+				translate(calc(var(--spread-x, 0) * 0.5), calc(var(--spread-y, 0) * 0.2))
+				scale(1.05)
+				rotate(calc(var(--rotation, 0deg) * 0.6))
+				perspective(1000px)
+				rotateX(10deg)
+				rotateY(-5deg);
+			filter: blur(0px) brightness(1.1);
+		}
+		60% {
+			opacity: 0.7;
+			transform:
+				translate(calc(var(--spread-x, 0) * 0.2), calc(var(--spread-y, 0) * -0.3))
+				scale(1)
+				rotate(calc(var(--rotation, 0deg) * 0.9))
+				perspective(1000px)
+				rotateX(12deg)
+				rotateY(3deg);
+			filter: blur(1px) brightness(1);
+		}
+		80% {
+			opacity: 0.3;
+			transform:
+				translate(calc(var(--spread-x, 0) * -0.2), calc(var(--spread-y, 0) * -0.8))
+				scale(0.8)
+				rotate(var(--rotation, 0deg))
+				perspective(1000px)
+				rotateX(15deg)
+				rotateY(10deg);
+			filter: blur(2px) brightness(0.9);
+		}
+		100% {
+			opacity: 0;
+			transform:
+				translate(calc(var(--spread-x, 0) * -0.5), calc(var(--spread-y, 0) * -1.5))
+				scale(0.2)
+				rotate(calc(var(--rotation, 0deg) * 1.2))
+				perspective(1000px)
+				rotateX(20deg)
+				rotateY(15deg);
+			filter: blur(3px) brightness(0.5);
 		}
 	}
 
-	/* 通用向上飘动动画 */
-	@keyframes floatUp {
+	/* 增强的向上飘动动画 - 右侧（带相反的旋转） */
+	@keyframes floatUpWithWobbleRight {
 		0% {
 			opacity: 1;
-			transform: translateY(0) scale(0.8);
+			transform:
+				translate(0, 0)
+				scale(0)
+				rotate(0deg)
+				perspective(1000px)
+				rotateX(0deg)
+				rotateY(0deg);
+			filter: blur(0px) brightness(1.2);
 		}
-		15% {
+		5% {
 			opacity: 1;
-			transform: translateY(-40rpx) scale(1);
+			transform:
+				translate(var(--spread-x, 0), calc(var(--spread-y, 0) * 0.5))
+				scale(1.2)
+				rotate(calc(var(--rotation, 0deg) * 0.1))
+				perspective(1000px)
+				rotateX(5deg)
+				rotateY(-5deg);
+			filter: blur(0px) brightness(1.3);
 		}
-		35% {
-			opacity: 0.9;
-			transform: translateY(-120rpx) scale(1.1);
+		20% {
+			opacity: 1;
+			transform:
+				translate(calc(var(--spread-x, 0) * 0.8), calc(var(--spread-y, 0) * 0.6))
+				scale(1.1)
+				rotate(calc(var(--rotation, 0deg) * 0.3))
+				perspective(1000px)
+				rotateX(8deg)
+				rotateY(-8deg);
+			filter: blur(0px) brightness(1.2);
+		}
+		40% {
+			opacity: 0.95;
+			transform:
+				translate(calc(var(--spread-x, 0) * 0.5), calc(var(--spread-y, 0) * 0.2))
+				scale(1.05)
+				rotate(calc(var(--rotation, 0deg) * 0.6))
+				perspective(1000px)
+				rotateX(10deg)
+				rotateY(5deg);
+			filter: blur(0px) brightness(1.1);
 		}
 		60% {
 			opacity: 0.7;
-			transform: translateY(-220rpx) scale(1);
+			transform:
+				translate(calc(var(--spread-x, 0) * 0.2), calc(var(--spread-y, 0) * -0.3))
+				scale(1)
+				rotate(calc(var(--rotation, 0deg) * 0.9))
+				perspective(1000px)
+				rotateX(12deg)
+				rotateY(-3deg);
+			filter: blur(1px) brightness(1);
 		}
 		80% {
-			opacity: 0.4;
-			transform: translateY(-350rpx) scale(0.8);
+			opacity: 0.3;
+			transform:
+				translate(calc(var(--spread-x, 0) * -0.2), calc(var(--spread-y, 0) * -0.8))
+				scale(0.8)
+				rotate(var(--rotation, 0deg))
+				perspective(1000px)
+				rotateX(15deg)
+				rotateY(-10deg);
+			filter: blur(2px) brightness(0.9);
 		}
 		100% {
 			opacity: 0;
-			transform: translateY(-500rpx) scale(0.5);
+			transform:
+				translate(calc(var(--spread-x, 0) * -0.5), calc(var(--spread-y, 0) * -1.5))
+				scale(0.2)
+				rotate(calc(var(--rotation, 0deg) * 1.2))
+				perspective(1000px)
+				rotateX(20deg)
+				rotateY(-15deg);
+			filter: blur(3px) brightness(0.5);
 		}
 	}
 
@@ -4155,49 +5646,75 @@
 		background: radial-gradient(circle, rgba(0, 191, 255, 0.4) 0%, transparent 70%);
 	}
 
-	/* 预设观点滑块样式 */
+	/* 预设观点显示 - 紧凑版本 */
 	.preset-section {
-		background-color: #FFFFFF;
-		border: 6rpx solid #000;
-		border-radius: 30rpx;
-		padding: 25rpx;
-		margin-bottom: 20rpx;
-		box-shadow: 0 8rpx 20rpx rgba(0, 0, 0, 0.1);
+		background-color: #FFFFFF !important;
+		background: #FFFFFF !important;
+		border: 3rpx solid #000;
+		border-radius: 12rpx;
+		padding: 10rpx 12rpx;
+		margin-bottom: 8rpx;
+		box-shadow: 0 3rpx 10rpx rgba(0, 0, 0, 0.1);
+		opacity: 1 !important;
+		position: relative;
+		z-index: 10;
 	}
 
 	.preset-header {
-		text-align: center;
-		margin-bottom: 25rpx;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 8rpx;
+		position: relative;
 	}
 
 	.preset-title {
-		font-size: 36rpx;
+		font-size: 22rpx;
 		font-weight: bold;
 		color: #333;
-		display: block;
-		margin-bottom: 10rpx;
+		display: flex;
+		align-items: center;
+		gap: 4rpx;
 	}
 
 	.preset-subtitle {
-		font-size: 24rpx;
+		font-size: 18rpx;
 		color: #666;
 		display: block;
-		line-height: 1.5;
-		padding: 0 10rpx;
+		line-height: 1.3;
+		margin-bottom: 6rpx;
+	}
+	
+	/* 辩题显示 - 紧凑版本 */
+	.preset-debate-topic {
+		margin-bottom: 8rpx;
+		padding: 6rpx 8rpx;
+		background: linear-gradient(135deg, rgba(255, 20, 147, 0.08) 0%, rgba(255, 140, 0, 0.08) 100%);
+		border-radius: 6rpx;
+		border: 1rpx solid rgba(255, 20, 147, 0.2);
+	}
+	
+	.debate-topic-text {
+		font-size: 20rpx;
+		color: #333;
+		font-weight: 600;
+		line-height: 1.4;
+		display: block;
+		text-align: center;
 	}
 
 	.preset-slider-container {
-		margin-bottom: 20rpx;
+		margin-bottom: 8rpx;
 	}
 
 	.slider-labels {
 		display: flex;
 		justify-content: space-between;
-		margin-bottom: 20rpx;
+		margin-bottom: 6rpx;
 	}
 
 	.slider-label {
-		font-size: 28rpx;
+		font-size: 18rpx;
 		font-weight: bold;
 		color: #333;
 	}
@@ -4211,8 +5728,8 @@
 	}
 
 	.slider-wrapper {
-		margin: 20rpx 0;
-		padding: 0 20rpx;
+		margin: 6rpx 0;
+		padding: 0 8rpx;
 	}
 
 	.preset-slider {
@@ -4221,27 +5738,305 @@
 
 	.preset-info {
 		text-align: center;
-		margin-top: 15rpx;
+		margin-top: 6rpx;
 	}
 
 	.preset-info-row {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 20rpx;
+		gap: 8rpx;
 	}
 
 	.preset-percentage {
-		font-size: 40rpx;
+		font-size: 26rpx;
 		font-weight: bold;
 		color: #FF1493;
 		display: inline-block;
 	}
 
 	.preset-desc {
-		font-size: 26rpx;
+		font-size: 18rpx;
 		color: #666;
 		display: inline-block;
+	}
+	
+	/* 预设观点面板关闭按钮样式 */
+	.preset-close-btn {
+		width: 32rpx;
+		height: 32rpx;
+		background-color: #FF6B6B;
+		border: 2rpx solid #000;
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0 2rpx 6rpx rgba(255, 107, 107, 0.3);
+		transition: all 0.3s ease;
+		flex-shrink: 0;
+	}
+	
+	.preset-close-btn:active {
+		transform: scale(0.95);
+		background-color: #FF5252;
+	}
+	
+	.close-icon {
+		font-size: 16rpx;
+		color: #FFFFFF;
+		font-weight: bold;
+	}
+	
+	/* 预设观点票数信息显示 */
+	.preset-votes-info {
+		margin-top: 6rpx;
+		padding: 6rpx 8rpx;
+		background: linear-gradient(135deg, rgba(255, 214, 61, 0.1) 0%, rgba(78, 205, 196, 0.1) 100%);
+		border-radius: 6rpx;
+		border: 1rpx solid #FFD93D;
+	}
+	
+	.preset-votes-text {
+		font-size: 18rpx;
+		font-weight: bold;
+		color: #FF1493;
+		display: block;
+		margin-bottom: 3rpx;
+	}
+	
+	.preset-votes-detail {
+		font-size: 16rpx;
+		color: #666;
+		display: block;
+		line-height: 1.3;
+	}
+	
+	/* 预设观点确定按钮容器 - 圆形按钮版本 */
+	.preset-confirm-btn-wrapper {
+		display: flex;
+		justify-content: center;
+		align-items: center;
+		margin: 8rpx 0;
+	}
+	
+	.preset-confirm-btn-circle {
+		width: 56rpx;
+		height: 56rpx;
+		background: linear-gradient(135deg, #FF1493 0%, #FF8C00 100%);
+		border: 3rpx solid #000;
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		box-shadow: 0 4rpx 0 rgba(0, 0, 0, 0.2);
+		transition: all 0.3s ease;
+	}
+	
+	.preset-confirm-btn-circle:active {
+		transform: translateY(2rpx) scale(0.95);
+		box-shadow: 0 2rpx 0 rgba(0, 0, 0, 0.2);
+	}
+	
+	.confirm-btn-text {
+		font-size: 32rpx;
+		font-weight: 900;
+		color: #FFFFFF;
+		text-shadow: 1rpx 1rpx 0 rgba(0, 0, 0, 0.3);
+		line-height: 1;
+	}
+	
+	/* 预设观点缩小按钮行 */
+	.preset-mini-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 1rpx 2rpx;
+		margin: 1rpx 0;
+	}
+
+	/* 激励标语样式 */
+	.vote-message-text {
+		font-size: 26rpx;
+		font-weight: 500;
+		color: #555;
+		letter-spacing: 1rpx;
+		flex: 1;
+		text-align: left;
+		position: relative;
+		padding-left: 10rpx;
+		border-left: 3rpx solid rgba(255, 107, 157, 0.6);
+	}
+
+	/* 预设观点缩小按钮样式 */
+	.preset-mini-button {
+		background: linear-gradient(135deg, #FF1493 0%, #FF69B4 50%, #FFB6C1 100%);
+		border: 3rpx solid #000;
+		border-radius: 50%;
+		width: 70rpx;
+		height: 70rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 20rpx;
+		box-shadow: 0 6rpx 16rpx rgba(255, 20, 147, 0.4), 
+		            0 3rpx 6rpx rgba(255, 20, 147, 0.2),
+		            inset 0 1rpx 3rpx rgba(255, 255, 255, 0.3);
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		position: relative;
+		overflow: hidden;
+		align-self: flex-end;
+		margin-left: auto;
+		margin-right: 0;
+	}
+	
+	.preset-mini-button::before {
+		content: '';
+		position: absolute;
+		top: -50%;
+		left: -50%;
+		width: 200%;
+		height: 200%;
+		background: linear-gradient(45deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+		transform: rotate(45deg);
+		transition: all 0.6s ease;
+		opacity: 0;
+	}
+	
+	.preset-mini-button:hover::before {
+		opacity: 1;
+		animation: shimmer 1.5s ease-in-out;
+	}
+	
+	@keyframes shimmer {
+		0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+		100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+	}
+	
+	.preset-mini-button:active {
+		transform: scale(0.92);
+		box-shadow: 0 4rpx 12rpx rgba(255, 20, 147, 0.5), 
+		            0 2rpx 4rpx rgba(255, 20, 147, 0.3),
+		            inset 0 1rpx 2rpx rgba(0, 0, 0, 0.1);
+	}
+	
+	.mini-button-value {
+		font-size: 22rpx;
+		font-weight: 900;
+		color: #FFFFFF;
+		text-align: center;
+		text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.3);
+		letter-spacing: 0.5rpx;
+		position: relative;
+		z-index: 1;
+		transition: all 0.3s ease;
+	}
+	
+	/* 数值变化时的炫酷动画效果 */
+	.preset-mini-button.value-changing {
+		transform: scale(1.2) rotate(5deg);
+		box-shadow: 0 8rpx 25rpx rgba(255, 20, 147, 0.6), 
+		            0 4rpx 12rpx rgba(255, 20, 147, 0.4),
+		            inset 0 2rpx 6rpx rgba(255, 255, 255, 0.4);
+		animation: buttonPulse 0.6s ease-in-out;
+	}
+	
+	.mini-button-value.value-animate {
+		animation: valueShake 0.6s ease-in-out;
+		color: #FFD700;
+		text-shadow: 0 0 10rpx rgba(255, 215, 0, 0.8), 
+		             0 2rpx 4rpx rgba(0, 0, 0, 0.5);
+		transform: scale(1.1);
+	}
+	
+	@keyframes buttonPulse {
+		0% { 
+			transform: scale(1) rotate(0deg);
+			box-shadow: 0 6rpx 16rpx rgba(255, 20, 147, 0.4), 
+			            0 3rpx 6rpx rgba(255, 20, 147, 0.2),
+			            inset 0 1rpx 3rpx rgba(255, 255, 255, 0.3);
+		}
+		25% { 
+			transform: scale(1.15) rotate(2deg);
+			box-shadow: 0 10rpx 30rpx rgba(255, 20, 147, 0.7), 
+			            0 5rpx 15rpx rgba(255, 20, 147, 0.5),
+			            inset 0 2rpx 8rpx rgba(255, 255, 255, 0.5);
+		}
+		50% { 
+			transform: scale(1.2) rotate(5deg);
+			box-shadow: 0 12rpx 35rpx rgba(255, 20, 147, 0.8), 
+			            0 6rpx 18rpx rgba(255, 20, 147, 0.6),
+			            inset 0 3rpx 10rpx rgba(255, 255, 255, 0.6);
+		}
+		75% { 
+			transform: scale(1.1) rotate(3deg);
+			box-shadow: 0 8rpx 25rpx rgba(255, 20, 147, 0.6), 
+			            0 4rpx 12rpx rgba(255, 20, 147, 0.4),
+			            inset 0 2rpx 6rpx rgba(255, 255, 255, 0.4);
+		}
+		100% { 
+			transform: scale(1) rotate(0deg);
+			box-shadow: 0 6rpx 16rpx rgba(255, 20, 147, 0.4), 
+			            0 3rpx 6rpx rgba(255, 20, 147, 0.2),
+			            inset 0 1rpx 3rpx rgba(255, 255, 255, 0.3);
+		}
+	}
+	
+	@keyframes valueShake {
+		0% { 
+			transform: scale(1) translateX(0);
+			color: #FFFFFF;
+			text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.3);
+		}
+		10% { 
+			transform: scale(1.1) translateX(-2rpx);
+			color: #FFD700;
+			text-shadow: 0 0 8rpx rgba(255, 215, 0, 0.6);
+		}
+		20% { 
+			transform: scale(1.15) translateX(2rpx);
+			color: #FFA500;
+			text-shadow: 0 0 12rpx rgba(255, 165, 0, 0.8);
+		}
+		30% { 
+			transform: scale(1.2) translateX(-1rpx);
+			color: #FFD700;
+			text-shadow: 0 0 15rpx rgba(255, 215, 0, 1);
+		}
+		40% { 
+			transform: scale(1.15) translateX(1rpx);
+			color: #FFA500;
+			text-shadow: 0 0 12rpx rgba(255, 165, 0, 0.8);
+		}
+		50% { 
+			transform: scale(1.1) translateX(0);
+			color: #FFD700;
+			text-shadow: 0 0 10rpx rgba(255, 215, 0, 0.8);
+		}
+		60% { 
+			transform: scale(1.05) translateX(-1rpx);
+			color: #FFA500;
+			text-shadow: 0 0 8rpx rgba(255, 165, 0, 0.6);
+		}
+		70% { 
+			transform: scale(1.02) translateX(1rpx);
+			color: #FFD700;
+			text-shadow: 0 0 6rpx rgba(255, 215, 0, 0.4);
+		}
+		80% { 
+			transform: scale(1.01) translateX(0);
+			color: #FFA500;
+			text-shadow: 0 0 4rpx rgba(255, 165, 0, 0.3);
+		}
+		90% { 
+			transform: scale(1.005) translateX(0);
+			color: #FFD700;
+			text-shadow: 0 0 2rpx rgba(255, 215, 0, 0.2);
+		}
+		100% { 
+			transform: scale(1) translateX(0);
+			color: #FFFFFF;
+			text-shadow: 0 1rpx 3rpx rgba(0, 0, 0, 0.3);
+		}
 	}
 
 	.start-live-btn {
@@ -4301,7 +6096,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		z-index: 1000;
+		z-index: 10000;
 		backdrop-filter: blur(8rpx);
 		animation: commentModalFadeIn 0.3s ease-out;
 	}
@@ -4413,7 +6208,6 @@
 		font-weight: bold;
 		text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.3);
 	}
-
 	.comment-modal-content {
 		padding: 36rpx;
 		background: linear-gradient(135deg, #fafbfc 0%, #f8f9fa 100%);
@@ -4951,4 +6745,3 @@
 		}
 	}
 </style>
-

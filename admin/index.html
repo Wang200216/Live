@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>直播辩论小程序 - 后台管理系统</title>
+	<link rel="stylesheet" href="/admin/styles.css">
+	<style>
+		/* 防止浏览器默认样式干扰 */
+		a, a:link, a:visited, a:hover, a:active {
+			text-decoration: none;
+			color: inherit;
+		}
+	</style>
+</head>
+<body>
+	<div id="app">
+		<!-- 侧边栏 -->
+		<aside class="sidebar">
+			<div class="sidebar-header">
+				<h2>🎯 直播辩论管理</h2>
+			</div>
+			<nav class="sidebar-nav">
+				<a href="#dashboard" class="nav-item active" data-page="dashboard">
+					<span class="nav-icon">📊</span>
+					<span class="nav-text">数据概览</span>
+				</a>
+				<a href="#live-setup" class="nav-item" data-page="live-setup">
+					<span class="nav-icon">🎬</span>
+					<span class="nav-text">直播设置</span>
+				</a>
+
+				<a href="#users" class="nav-item" data-page="users">
+					<span class="nav-icon">👥</span>
+					<span class="nav-text">用户管理</span>
+				</a>
+				<a href="#votes" class="nav-item" data-page="votes">
+					<span class="nav-icon">🗳️</span>
+					<span class="nav-text">票数管理</span>
+				</a>
+				<a href="#ai-content" class="nav-item" data-page="ai-content">
+					<span class="nav-icon">🤖</span>
+					<span class="nav-text">AI 内容管理</span>
+				</a>
+				<a href="#statistics" class="nav-item" data-page="statistics">
+					<span class="nav-icon">📈</span>
+					<span class="nav-text">数据统计</span>
+				</a>
+			</nav>
+		</aside>
+
+		<!-- 主内容区 -->
+		<main class="main-content">
+			<!-- 顶部栏 -->
+			<header class="topbar">
+				<h1 class="page-title"></h1>
+				<div class="topbar-actions">
+					<button class="btn btn-sm" id="control-live-btn" style="margin-right: 15px;">开始直播</button>
+					<span class="status-indicator">
+						<span class="status-dot"></span>
+						<span id="live-status-text">未开播</span>
+					</span>
+				</div>
+			</header>
+
+			<!-- 页面内容 -->
+			<div class="page-content">
+				<!-- 数据概览页 -->
+				<div id="dashboard" class="page active">
+					<div class="stats-grid">
+						<div class="stat-card">
+							<div class="stat-icon">👥</div>
+							<div class="stat-info">
+								<div class="stat-value" id="total-users">0</div>
+								<div class="stat-label">总用户数</div>
+							</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-icon">📺</div>
+							<div class="stat-info">
+								<div class="stat-value" id="live-status">未开播</div>
+								<div class="stat-label">直播状态</div>
+							</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-icon">💬</div>
+							<div class="stat-info">
+								<div class="stat-value" id="total-votes">0</div>
+								<div class="stat-label">总投票数</div>
+							</div>
+						</div>
+						<div class="stat-card">
+							<div class="stat-icon">🔥</div>
+							<div class="stat-info">
+								<div class="stat-value" id="active-users">0</div>
+								<div class="stat-label">在线用户</div>
+							</div>
+						</div>
+					</div>
+
+					<div class="chart-section">
+						<h3>实时投票趋势</h3>
+						<canvas id="votes-chart"></canvas>
+					</div>
+				</div>
+
+				<!-- 直播设置整合页 -->
+				<div id="live-setup" class="page">
+					<div class="page-header">
+						<h2>直播设置</h2>
+						<div style="display: flex; gap: 10px;">
+							<button class="btn btn-success" id="start-live-now-btn" style="display: none;">立即开始直播</button>
+							<button class="btn btn-primary" id="save-and-schedule-btn">保存并设置计划</button>
+						</div>
+					</div>
+					
+					<div class="form-section" style="max-width: 1200px; margin: 0 auto;">
+						<!-- 步骤指示器 -->
+						<div class="setup-steps" style="display: flex; justify-content: space-between; margin-bottom: 30px; padding: 20px; background: white; border-radius: 8px;">
+							<div class="step-item" style="flex: 1; text-align: center; padding: 10px; border-bottom: 3px solid #667eea;">
+								<div style="font-weight: bold; color: #667eea;">步骤 1</div>
+								<div style="color: #666; margin-top: 5px;">选择直播流</div>
+							</div>
+							<div class="step-item" style="flex: 1; text-align: center; padding: 10px; border-bottom: 3px solid #667eea;">
+								<div style="font-weight: bold; color: #667eea;">步骤 2</div>
+								<div style="color: #666; margin-top: 5px;">设置辩论</div>
+							</div>
+							<div class="step-item" style="flex: 1; text-align: center; padding: 10px; border-bottom: 3px solid #667eea;">
+								<div style="font-weight: bold; color: #667eea;">步骤 3</div>
+								<div style="color: #666; margin-top: 5px;">设置时间</div>
+							</div>
+						</div>
+						
+						<!-- 直播流设置 -->
+						<div class="setup-section" style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
+							<h3 style="margin-top: 0; margin-bottom: 20px; color: #333;">📺 步骤 1: 选择直播流</h3>
+							<div class="form-group">
+								<label>选择直播流 <span style="color: red;">*</span></label>
+								<select id="setup-stream-id" class="form-select" required>
+									<option value="">请选择直播流</option>
+								</select>
+								<small id="setup-stream-hint" style="color: #666; margin-top: 5px; display: block;">若暂无直播流，可在下方直接创建</small>
+							</div>
+
+							<!-- 就地创建直播流 -->
+							<div id="setup-create-stream" style="margin-top: 15px; padding: 15px; border: 1px dashed #ccc; border-radius: 8px; background: #fafafa;">
+								<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+									<strong>创建直播流</strong>
+									<button id="setup-toggle-create-stream" class="btn btn-secondary" type="button" style="padding: 6px 10px;">展开/收起</button>
+								</div>
+								<div id="setup-create-stream-form" style="display: none;">
+									<div class="form-group">
+										<label>流名称 <span style="color: red;">*</span></label>
+										<input type="text" id="setup-new-stream-name" class="form-input" placeholder="例如：测试直播">
+									</div>
+									<div class="form-group">
+										<label>流地址 (m3u8/rtmp/flv) <span style="color: red;">*</span></label>
+										<input type="url" id="setup-new-stream-url" class="form-input" placeholder="https://example.com/live/stream.m3u8">
+									</div>
+									<div class="form-group">
+										<label>流类型</label>
+										<select id="setup-new-stream-type" class="form-select">
+											<option value="hls">HLS (m3u8)</option>
+											<option value="rtmp">RTMP</option>
+											<option value="flv">FLV</option>
+										</select>
+									</div>
+									<div class="form-group" style="display: flex; align-items: center; gap: 10px;">
+										<label>是否启用</label>
+										<label class="switch">
+											<input type="checkbox" id="setup-new-stream-enabled" checked>
+											<span class="slider"></span>
+										</label>
+									</div>
+									<div class="form-actions" style="display: flex; gap: 10px;">
+										<button id="setup-save-stream-btn" type="button" class="btn btn-primary">保存直播流并选用</button>
+									</div>
+								</div>
+							</div>
+						</div>
+						
+						<!-- 辩论设置 -->
+						<div class="setup-section" style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
+							<h3 style="margin-top: 0; margin-bottom: 20px; color: #333;">💬 步骤 2: 设置辩论</h3>
+							<div class="form-group">
+								<label>辩题标题 <span style="color: red;">*</span></label>
+								<input type="text" id="setup-debate-title" class="form-input" placeholder="请输入辩题标题" required>
+							</div>
+							<div class="form-group">
+								<label>辩题描述</label>
+								<textarea id="setup-debate-description" class="form-textarea" placeholder="请输入辩题描述" rows="3"></textarea>
+							</div>
+							<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+								<div class="form-group">
+									<label>正方立场 <span style="color: red;">*</span></label>
+									<input type="text" id="setup-left-position" class="form-input" placeholder="例如：会按" required>
+								</div>
+								<div class="form-group">
+									<label>反方立场 <span style="color: red;">*</span></label>
+									<input type="text" id="setup-right-position" class="form-input" placeholder="例如：不会按" required>
+								</div>
+							</div>
+						</div>
+						
+						<!-- 直播时间设置 -->
+						<div class="setup-section" style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd;">
+							<h3 style="margin-top: 0; margin-bottom: 20px; color: #333;">⏰ 步骤 3: 设置直播时间</h3>
+							<div class="form-group">
+								<label>
+									<input type="radio" name="live-mode" value="now" id="live-mode-now" checked style="margin-right: 8px;">
+									立即开始直播
+								</label>
+							</div>
+							<div class="form-group">
+								<label>
+									<input type="radio" name="live-mode" value="schedule" id="live-mode-schedule" style="margin-right: 8px;">
+									定时开始直播
+								</label>
+							</div>
+							<div id="schedule-time-group" style="display: none; margin-top: 15px;">
+								<div class="form-group">
+									<label>直播开始时间 <span style="color: red;">*</span></label>
+									<input type="datetime-local" id="setup-start-time" class="form-input">
+								</div>
+								<div class="form-group">
+									<label>直播结束时间（可选）</label>
+									<input type="datetime-local" id="setup-end-time" class="form-input">
+									<small style="color: #666;">留空则手动停止直播</small>
+								</div>
+							</div>
+						</div>
+						
+						<!-- 操作按钮 -->
+						<div class="form-actions" style="display: flex; gap: 15px; margin-top: 30px; padding-top: 20px; border-top: 2px solid #eee;">
+							<button type="button" class="btn btn-success" id="setup-start-now-btn" style="flex: 1; padding: 15px; font-size: 16px; font-weight: bold; display: flex;">
+								🚀 立即开始直播
+							</button>
+							<button type="button" class="btn btn-primary" id="setup-schedule-btn" style="flex: 1; padding: 15px; font-size: 16px; font-weight: bold; display: none;">
+								⏰ 保存并设置定时开始
+							</button>
+						</div>
+					</div>
+				</div>
+
+
+
+				<!-- 用户管理页 -->
+				<div id="users" class="page">
+					<div class="page-header">
+						<h2>用户管理</h2>
+						<div class="search-box">
+							<input type="text" id="user-search" class="search-input" placeholder="搜索用户...">
+						</div>
+					</div>
+
+					<div class="table-container">
+						<table class="data-table">
+							<thead>
+								<tr>
+									<th>用户ID</th>
+									<th>昵称</th>
+									<th>头像</th>
+									<th>注册时间</th>
+									<th>投票次数</th>
+									<th>参与辩论</th>
+									<th>状态</th>
+									<th>操作</th>
+								</tr>
+							</thead>
+							<tbody id="users-table-body">
+								<!-- 用户列表将通过JS动态生成 -->
+							</tbody>
+						</table>
+					</div>
+				</div>
+
+				<!-- 票数管理页 -->
+				<div id="votes" class="page">
+					<div class="page-header">
+						<h2>票数管理</h2>
+						<button class="btn btn-danger" id="reset-votes-btn">重置票数</button>
+					</div>
+					
+					<div class="form-section">
+						<div class="votes-display" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 20px;">
+							<div class="vote-card" style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; text-align: center;">
+								<h3>正方票数</h3>
+								<div class="vote-value" id="admin-left-votes" style="font-size: 32px; font-weight: bold; margin: 10px 0;">0</div>
+								<input type="number" id="left-votes-input" class="form-input" placeholder="设置正方票数" min="0" style="margin: 10px 0;">
+								<button class="btn btn-primary" id="update-left-votes-btn">更新正方票数</button>
+							</div>
+							<div class="vote-card" style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; text-align: center;">
+								<h3>反方票数</h3>
+								<div class="vote-value" id="admin-right-votes" style="font-size: 32px; font-weight: bold; margin: 10px 0;">0</div>
+								<input type="number" id="right-votes-input" class="form-input" placeholder="设置反方票数" min="0" style="margin: 10px 0;">
+								<button class="btn btn-primary" id="update-right-votes-btn">更新反方票数</button>
+							</div>
+							<div class="vote-card" style="padding: 20px; border: 1px solid #ddd; border-radius: 8px; text-align: center;">
+								<h3>总票数</h3>
+								<div class="vote-value" id="admin-total-votes" style="font-size: 32px; font-weight: bold; margin: 10px 0;">0</div>
+								<div class="vote-percentage" id="admin-vote-percentage" style="margin-top: 10px; color: #666;">正方: 50% | 反方: 50%</div>
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- AI 内容管理页 -->
+				<div id="ai-content" class="page">
+					<div class="page-header">
+						<h2>AI 内容管理</h2>
+						<button class="btn btn-primary" id="add-ai-content-btn">+ 添加 AI 内容</button>
+					</div>
+					
+					<div class="ai-content-list" id="ai-content-list" style="margin-top: 20px;">
+						<!-- AI 内容列表将通过 JS 动态生成 -->
+					</div>
+				</div>
+
+				<!-- 评论查看弹窗 -->
+				<div id="comments-modal" class="modal">
+					<div class="modal-content">
+						<div class="modal-header">
+							<h3>用户评论</h3>
+							<span class="modal-close" data-modal="comments-modal">&times;</span>
+						</div>
+						<div class="modal-body">
+							<div id="comments-list">
+								<!-- 评论列表由 JS 填充 -->
+							</div>
+						</div>
+					</div>
+				</div>
+
+				<!-- 数据统计页 -->
+				<div id="statistics" class="page">
+					<div class="page-header">
+						<h2>数据统计</h2>
+						<div class="date-filter">
+							<input type="date" id="date-from" class="date-input">
+							<span>至</span>
+							<input type="date" id="date-to" class="date-input">
+							<button class="btn btn-secondary" id="filter-btn">查询</button>
+						</div>
+					</div>
+
+					<div class="stats-cards">
+						<div class="stat-card-large">
+							<h3>投票分析</h3>
+							<canvas id="vote-analysis-chart"></canvas>
+						</div>
+						<div class="stat-card-large">
+							<h3>用户活跃度</h3>
+							<canvas id="user-activity-chart"></canvas>
+						</div>
+					</div>
+				</div>
+			</div>
+		</main>
+	</div>
+
+	<!-- 添加/编辑 AI 内容弹窗 -->
+	<div id="ai-content-modal" class="modal">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h3>添加/编辑 AI 内容</h3>
+				<span class="modal-close" data-modal="ai-content-modal">&times;</span>
+			</div>
+			<div class="modal-body">
+				<form id="ai-content-form">
+					<input type="hidden" id="ai-content-id">
+					<div class="form-group">
+						<label>内容文本</label>
+						<textarea id="ai-content-text" class="form-textarea" placeholder="请输入 AI 内容..." required></textarea>
+					</div>
+					<div class="form-group">
+						<label>立场</label>
+						<select id="ai-content-side" class="form-select" required>
+							<option value="left">正方</option>
+							<option value="right">反方</option>
+						</select>
+					</div>
+					<div class="form-group">
+						<label>辩题 ID</label>
+						<input type="text" id="ai-content-debate-id" class="form-input" placeholder="留空使用默认辩题">
+					</div>
+					<div class="modal-actions">
+						<button type="button" class="btn btn-secondary" id="cancel-ai-content-btn">取消</button>
+						<button type="submit" class="btn btn-primary">保存</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</div>
+
+	<!-- 添加直播流弹窗 -->
+	<div id="stream-modal" class="modal">
+		<div class="modal-content">
+			<div class="modal-header">
+				<h3>添加/编辑直播流</h3>
+				<span class="modal-close">&times;</span>
+			</div>
+			<div class="modal-body">
+				<form id="stream-form">
+					<input type="hidden" id="stream-id">
+					<div class="form-group">
+						<label>流名称</label>
+						<input type="text" id="stream-name" class="form-input" placeholder="例如：测试直播" required>
+					</div>
+					<div class="form-group">
+						<label>流地址 (m3u8/rtmp/flv)</label>
+						<input type="url" id="stream-url" class="form-input" placeholder="https://example.com/live/stream.m3u8" required>
+					</div>
+					<div class="form-group">
+						<label>流类型</label>
+						<select id="stream-type" class="form-select">
+							<option value="hls">HLS (m3u8)</option>
+							<option value="rtmp">RTMP</option>
+							<option value="flv">FLV</option>
+						</select>
+					</div>
+					<div class="form-group">
+						<label>是否启用</label>
+						<label class="switch">
+							<input type="checkbox" id="stream-enabled" checked>
+							<span class="slider"></span>
+						</label>
+					</div>
+					<div class="modal-actions">
+						<button type="button" class="btn btn-secondary" id="cancel-stream-btn">取消</button>
+						<button type="submit" class="btn btn-primary">保存</button>
+					</div>
+				</form>
+			</div>
+		</div>
+	</div>
+
+	<script src="/admin/admin.js"></script>
+</body>
+</html>
+
