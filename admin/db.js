@@ -222,6 +222,33 @@ const statistics = {
 		return stats;
 	},
 	
+	updateDashboard: (data) => {
+		const stats = readData('statistics');
+		// 更新传入的字段
+		if (data.totalVotes !== undefined) {
+			stats.totalVotes = data.totalVotes;
+		}
+		if (data.lastLiveTime !== undefined) {
+			stats.lastLiveTime = data.lastLiveTime;
+		}
+		if (data.liveDuration !== undefined) {
+			stats.liveDuration = data.liveDuration;
+		}
+		// 更新其他可能的字段
+		if (data.totalUsers !== undefined) {
+			stats.totalUsers = data.totalUsers;
+		}
+		if (data.totalComments !== undefined) {
+			stats.totalComments = data.totalComments;
+		}
+		if (data.totalLikes !== undefined) {
+			stats.totalLikes = data.totalLikes;
+		}
+		stats.updatedAt = new Date().toISOString();
+		writeData('statistics', stats);
+		return stats;
+	},
+	
 	getDashboard: () => {
 		const stats = readData('statistics');
 		const users = readData('users');

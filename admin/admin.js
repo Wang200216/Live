@@ -438,6 +438,7 @@ async function loadDashboard() {
 		// 更新直播状态
 		if (data.isLive !== undefined) {
 			currentLiveStatus = data.isLive;
+			globalState.isLive = data.isLive; // 同时更新 globalState，确保按钮状态正确
 		}
 		
 		document.getElementById('total-users').textContent = data.totalUsers || 0;
@@ -445,6 +446,9 @@ async function loadDashboard() {
 		document.getElementById('total-votes').textContent = data.totalVotes || 0;
 		document.getElementById('active-users').textContent = data.activeUsers || 0;
 		document.getElementById('live-status-text').textContent = data.isLive ? '直播中' : '未开播';
+		
+		// 更新直播控制按钮状态
+		updateLiveControlButton(data.isLive);
 		
 		// 更新票数显示
 		if (data.leftVotes !== undefined && data.rightVotes !== undefined) {
