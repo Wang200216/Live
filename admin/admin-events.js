@@ -257,26 +257,37 @@ async function loadAIContentList(page = 1) {
 	}
 	
 	// 渲染内容列表
-	container.innerHTML = data.items.map(item => `
-		<div class="ai-content-item" style="padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; background: white;">
-			<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
-				<div style="flex: 1;">
-					<span style="display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; background: ${item.position === 'left' ? '#e8f5e9' : '#e3f2fd'}; color: ${item.position === 'left' ? '#4CAF50' : '#2196F3'}; margin-right: 10px;">
-						${item.position === 'left' ? '⚔️ 正方' : '🛡️ 反方'}
-					</span>
-					<span style="color: #999; font-size: 12px;">${item.timestamp}</span>
-					<span style="color: #999; font-size: 12px; margin-left: 10px;">置信度: ${(item.confidence * 100).toFixed(0)}%</span>
+	container.innerHTML = data.items.map(item => {
+		// 转义HTML特殊字符以防止XSS
+		const safeContent = (item.content || item.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+		const safeId = (item.id || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+		const timestamp = item.timestamp || '';
+		
+		return `
+			<div class="ai-content-item" style="padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; background: white;">
+				<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+					<div style="flex: 1;">
+						<span style="display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; background: ${item.position === 'left' ? '#e8f5e9' : '#e3f2fd'}; color: ${item.position === 'left' ? '#4CAF50' : '#2196F3'}; margin-right: 10px;">
+							${item.position === 'left' ? '⚔️ 正方' : '🛡️ 反方'}
+						</span>
+						<span style="color: #999; font-size: 12px;">${timestamp}</span>
+						<span style="color: #999; font-size: 12px; margin-left: 10px;">置信度: ${((item.confidence || 0) * 100).toFixed(0)}%</span>
+					</div>
+					<button class="btn btn-danger btn-sm" onclick="deleteAIContentItem('${safeId}')" style="padding: 4px 12px;">删除</button>
 				</div>
-				<button class="btn btn-danger btn-sm" onclick="deleteAIContentItem('${item.id}')" style="padding: 4px 12px;">删除</button>
+				<div style="color: #333; line-height: 1.6; margin-bottom: 10px;">${safeContent}</div>
+				<div style="display: flex; gap: 15px; color: #999; font-size: 12px; margin-bottom: 10px;">
+					<span>👁️ ${(item.statistics && item.statistics.views) || 0} 查看</span>
+					<span>❤️ ${(item.statistics && item.statistics.likes) || 0} 点赞</span>
+					<span>💬 ${(item.statistics && item.statistics.comments) || 0} 评论</span>
+				</div>
+				<div style="display: flex; gap: 10px;">
+					<button class="btn btn-danger btn-sm" onclick="deleteAIContentItem('${safeId}')" style="padding: 4px 12px;">删除</button>
+					${(item.statistics && item.statistics.comments > 0) ? `<button class="btn btn-primary btn-sm" onclick='openCommentsModal("${safeId}")' style="padding: 4px 12px;">查看评论 (${item.statistics.comments})</button>` : '<button class="btn btn-secondary btn-sm" disabled style="padding: 4px 12px;">暂无评论</button>'}
+				</div>
 			</div>
-			<div style="color: #333; line-height: 1.6; margin-bottom: 10px;">${item.content}</div>
-			<div style="display: flex; gap: 15px; color: #999; font-size: 12px;">
-				<span>👁️ ${item.statistics.views} 查看</span>
-				<span>❤️ ${item.statistics.likes} 点赞</span>
-				<span>💬 ${item.statistics.comments} 评论</span>
-			</div>
-		</div>
-	`).join('');
+		`;
+	}).join('');
 	
 	// 更新分页
 	const pagination = document.getElementById('ai-content-pagination');

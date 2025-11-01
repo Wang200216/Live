@@ -149,8 +149,8 @@
 						
 						<!-- 选项 -->
 						<div style="margin-top: 25px; padding-top: 25px; border-top: 1px solid #eee; text-align: center;">
-							<label style="display: inline-flex; align-items: center; gap: 10px; cursor: pointer;">
-								<input type="checkbox" id="auto-start-ai-checkbox" checked style="width: 18px; height: 18px; cursor: pointer;">
+							<label style="display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
+								<input type="checkbox" id="auto-start-ai-checkbox" style="width: 18px; height: 18px; cursor: pointer; pointer-events: auto; position: relative; z-index: 1; margin: 0; flex-shrink: 0;">
 								<span style="font-size: 14px; color: #666;">开始直播时自动启动AI识别</span>
 							</label>
 						</div>
@@ -242,8 +242,6 @@
 									<th>昵称</th>
 									<th>头像</th>
 									<th>注册时间</th>
-									<th>投票次数</th>
-									<th>参与辩论</th>
 									<th>状态</th>
 									<th>操作</th>
 								</tr>
@@ -446,7 +444,7 @@
 							<h3>用户评论</h3>
 							<span class="modal-close" data-modal="comments-modal">&times;</span>
 						</div>
-						<div class="modal-body">
+						<div class="modal-body" style="max-height: 500px; overflow-y: auto;">
 							<div id="comments-list">
 								<!-- 评论列表由 JS 填充 -->
 							</div>

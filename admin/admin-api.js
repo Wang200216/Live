@@ -287,6 +287,42 @@ async function fetchAIContentList(page = 1, pageSize = 20, startTime = null, end
 	});
 }
 
+/**
+ * 获取AI内容评论列表
+ * @param {string} contentId - AI内容ID
+ * @param {number} page - 页码（从1开始）
+ * @param {number} pageSize - 每页数量
+ * @returns {Promise<Object|null>}
+ */
+async function fetchAIContentComments(contentId, page = 1, pageSize = 20) {
+	const queryParams = new URLSearchParams({
+		page,
+		pageSize
+	});
+	
+	return await apiRequest(`/api/admin/ai-content/${contentId}/comments?${queryParams}`, {
+		method: 'GET'
+	});
+}
+
+/**
+ * 删除AI内容评论
+ * @param {string} contentId - AI内容ID
+ * @param {string} commentId - 评论ID
+ * @param {string} reason - 删除原因
+ * @param {boolean} notifyUsers - 是否通知用户
+ * @returns {Promise<Object|null>}
+ */
+async function deleteAIContentComment(contentId, commentId, reason = '', notifyUsers = true) {
+	return await apiRequest(`/api/admin/ai-content/${contentId}/comments/${commentId}`, {
+		method: 'DELETE',
+		body: JSON.stringify({
+			reason,
+			notifyUsers
+		})
+	});
+}
+
 // ==================== 直播流管理接口 ====================
 
 /**

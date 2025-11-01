@@ -991,6 +991,133 @@ app.get('/api/admin/ai-content/:id', (req, res) => {
 	}
 });
 
+// 获取AI内容评论列表（必须在 /api/admin/ai-content/:id/comments/:commentId 之前定义）
+app.get('/api/admin/ai-content/:id/comments', (req, res) => {
+	try {
+		const { id } = req.params;
+		const page = parseInt(req.query.page) || 1;
+		const pageSize = parseInt(req.query.pageSize) || 20;
+		
+		// 查找AI内容
+		const content = aiDebateContent.find(item => item.id === id);
+		
+		if (!content) {
+			return res.status(404).json({
+				success: false,
+				message: 'AI内容不存在'
+			});
+		}
+		
+		// 获取评论列表（从 content.comments 或 content.items.comments）
+		let comments = [];
+		if (content.comments && Array.isArray(content.comments)) {
+			comments = content.comments;
+		} else if (content.items && Array.isArray(content.items)) {
+			// 如果评论在 items 数组中
+			const contentItem = content.items.find(item => item.id === id);
+			if (contentItem && contentItem.comments) {
+				comments = contentItem.comments;
+			}
+		}
+		
+		// 分页
+		const total = comments.length;
+		const start = (page - 1) * pageSize;
+		const end = start + pageSize;
+		const paginatedComments = comments.slice(start, end);
+		
+		res.json({
+			success: true,
+			data: {
+				contentId: id,
+				contentText: content.content || content.text || '',
+				total: total,
+				page: page,
+				pageSize: pageSize,
+				comments: paginatedComments
+			},
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('获取AI内容评论列表失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '获取评论列表失败: ' + error.message
+		});
+	}
+});
+
+// 删除AI内容评论
+app.delete('/api/admin/ai-content/:id/comments/:commentId', (req, res) => {
+	try {
+		const { id, commentId } = req.params;
+		const { reason = '', notifyUsers = true } = req.body;
+		
+		// 查找AI内容
+		const content = aiDebateContent.find(item => item.id === id);
+		
+		if (!content) {
+			return res.status(404).json({
+				success: false,
+				message: 'AI内容不存在'
+			});
+		}
+		
+		// 获取评论列表
+		let comments = [];
+		if (content.comments && Array.isArray(content.comments)) {
+			comments = content.comments;
+		}
+		
+		// 查找评论
+		const commentIndex = comments.findIndex(c => (c.commentId || c.id) === commentId);
+		
+		if (commentIndex === -1) {
+			return res.status(404).json({
+				success: false,
+				message: '评论不存在'
+			});
+		}
+		
+		// 删除评论
+		const deletedComment = comments.splice(commentIndex, 1)[0];
+		
+		// 更新内容中的评论数组
+		content.comments = comments;
+		
+		// 更新统计数据
+		if (content.statistics) {
+			content.statistics.comments = (content.statistics.comments || 0) - 1;
+		}
+		
+		// 如果通知用户，可以在这里发送WebSocket消息
+		if (notifyUsers) {
+			// broadcast('comment-deleted', { contentId: id, commentId: commentId });
+		}
+		
+		console.log(`🗑️  已删除评论: ${commentId}, 原因: ${reason || '管理员删除'}`);
+		
+		res.json({
+			success: true,
+			data: {
+				contentId: id,
+				commentId: commentId,
+				deleted: true
+			},
+			message: '评论已删除',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('删除评论失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '删除评论失败: ' + error.message
+		});
+	}
+});
+
 app.post('/api/admin/ai-content', (req, res) => {
 	try {
 		const { text, side, debate_id } = req.body;

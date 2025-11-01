@@ -752,7 +752,7 @@ async function loadLiveSetup() {
 							if (startTimeEl) startTimeEl.textContent = data.liveStartTime || '-';
 						}
 					}
-				} else {
+		} else {
 					statusEl.innerHTML = '<span style="color: #999;">⚪ 未开播</span>';
 					// 启用/禁用按钮
 					const startBtn = document.getElementById('admin-start-live-btn');
@@ -773,8 +773,8 @@ async function loadLiveSetup() {
 		const streamSelect = document.getElementById('setup-stream-id');
 		if (streamSelect) {
 			try {
-				const streamsResponse = await fetch(`${API_BASE}/streams`);
-				const streams = await streamsResponse.json();
+		const streamsResponse = await fetch(`${API_BASE}/streams`);
+		const streams = await streamsResponse.json();
 		streamSelect.innerHTML = '<option value="">请选择直播流</option>';
 		
 				if (Array.isArray(streams)) {
@@ -1230,7 +1230,7 @@ async function loadUsers() {
 		tbody.innerHTML = '';
 		
 		if (data.users.length === 0) {
-			tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: #999;">暂无用户</td></tr>';
+			tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 40px; color: #999;">暂无用户</td></tr>';
 			return;
 		}
 		
@@ -1261,8 +1261,6 @@ async function loadUsers() {
 				<td>${(user.nickname || '未设置').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
 				<td><img src="${avatarSrc}" class="avatar-img" onerror="this.src='${placeholderSvg}'; this.onerror=null;"></td>
 				<td>${user.joinTime ? new Date(user.joinTime).toLocaleString() : '-'}</td>
-				<td>${user.statistics ? user.statistics.totalVotes || 0 : 0}</td>
-				<td>${user.statistics ? user.statistics.totalComments || 0 : 0}</td>
 				<td><span class="badge ${user.status === 'online' ? 'success' : 'secondary'}">${user.status === 'online' ? '在线' : '离线'}</span></td>
 				<td>
 					<button class="btn btn-sm btn-secondary" onclick='viewUser("${safeUserId}")'>查看</button>
@@ -1347,59 +1345,71 @@ function stopVotesAutoRefresh() {
 
 // ==================== AI 内容管理 ====================
 async function loadAIContent() {
-    try {
-        const data = await fetchAIContentList(1, 20);
-        if (!data || !data.items) {
-            console.error('获取AI内容列表失败');
-		return;
+	try {
+		const data = await fetchAIContentList(1, 20);
+		if (!data || !data.items) {
+			console.error('获取AI内容列表失败');
+			return;
+		}
+		
+		const container = document.getElementById('ai-content-list');
+		if (!container) return;
+		
+		if (data.items.length === 0) {
+			container.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">暂无AI内容</div>';
+			return;
+		}
+		
+		// 使用与loadAIContentList相同的样式渲染
+		container.innerHTML = data.items.map(item => {
+			// 转义HTML特殊字符以防止XSS
+			const safeContent = (item.content || item.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+			const safeId = (item.id || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+			const timestamp = item.timestamp || '';
+			
+			return `
+				<div class="ai-content-item" style="padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; background: white;">
+					<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+						<div style="flex: 1;">
+							<span style="display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; background: ${item.position === 'left' ? '#e8f5e9' : '#e3f2fd'}; color: ${item.position === 'left' ? '#4CAF50' : '#2196F3'}; margin-right: 10px;">
+								${item.position === 'left' ? '⚔️ 正方' : '🛡️ 反方'}
+							</span>
+							<span style="color: #999; font-size: 12px;">${timestamp}</span>
+							<span style="color: #999; font-size: 12px; margin-left: 10px;">置信度: ${((item.confidence || 0) * 100).toFixed(0)}%</span>
+						</div>
+						<button class="btn btn-danger btn-sm" onclick="deleteAIContentItem('${safeId}')" style="padding: 4px 12px;">删除</button>
+					</div>
+					<div style="color: #333; line-height: 1.6; margin-bottom: 10px;">${safeContent}</div>
+					<div style="display: flex; gap: 15px; color: #999; font-size: 12px; margin-bottom: 10px;">
+						<span>👁️ ${(item.statistics && item.statistics.views) || 0} 查看</span>
+						<span>❤️ ${(item.statistics && item.statistics.likes) || 0} 点赞</span>
+						<span>💬 ${(item.statistics && item.statistics.comments) || 0} 评论</span>
+					</div>
+					<div style="display: flex; gap: 10px;">
+						<button class="btn btn-danger btn-sm" onclick="deleteAIContentItem('${safeId}')" style="padding: 4px 12px;">删除</button>
+						${(item.statistics && item.statistics.comments > 0) ? `<button class="btn btn-primary btn-sm" onclick='openCommentsModal("${safeId}")' style="padding: 4px 12px;">查看评论 (${item.statistics.comments})</button>` : '<button class="btn btn-secondary btn-sm" disabled style="padding: 4px 12px;">暂无评论</button>'}
+					</div>
+				</div>
+			`;
+		}).join('');
+		
+		// 更新分页
+		const pagination = document.getElementById('ai-content-pagination');
+		if (pagination) {
+			if (data.total > 20) {
+				pagination.style.display = 'block';
+				const pageInfo = document.getElementById('ai-page-info');
+				if (pageInfo) {
+					pageInfo.textContent = `第 ${data.page || 1} 页 / 共 ${Math.ceil((data.total || 0) / 20)} 页`;
+				}
+			} else {
+				pagination.style.display = 'none';
+			}
+		}
+	} catch (error) {
+		console.error('加载 AI 内容失败:', error);
+		showNotification('加载 AI 内容失败', 'error');
 	}
-	
-            const contentList = document.getElementById('ai-content-list');
-            contentList.innerHTML = '';
-            
-        if (data.items.length === 0) {
-                contentList.innerHTML = '<div class="empty-state">暂无 AI 内容</div>';
-                return;
-            }
-            
-        data.items.forEach(content => {
-                const contentCard = createAIContentCard(content);
-                contentList.appendChild(contentCard);
-            });
-    } catch (error) {
-        console.error('加载 AI 内容失败:', error);
-        showNotification('加载 AI 内容失败', 'error');
-    }
-}
-
-function createAIContentCard(content) {
-	const card = document.createElement('div');
-	card.className = 'ai-content-card';
-	const sideText = content.position === 'left' ? '正方' : (content.position === 'right' ? '反方' : '中立');
-	const sideClass = content.position === 'left' ? 'side-left' : (content.position === 'right' ? 'side-right' : 'side-neutral');
-	const timestamp = content.timestamp ? new Date(content.timestamp).toLocaleString() : '-';
-	const confidence = content.confidence !== undefined ? (content.confidence * 100).toFixed(0) + '%' : '-';
-	
-	card.innerHTML = `
-		<div class="ai-content-header">
-			<span class="ai-content-side ${sideClass}">${sideText}</span>
-			<span class="ai-content-time">${timestamp}</span>
-			${confidence !== '-' ? `<span style="color: #999; font-size: 12px; margin-left: 10px;">置信度: ${confidence}</span>` : ''}
-		</div>
-		<div class="ai-content-body">
-			<p>${content.content || content.text || ''}</p>
-			<div class="ai-content-meta">
-				<span>查看: ${content.statistics ? content.statistics.views || 0 : 0}</span>
-				<span>点赞: ${content.statistics ? content.statistics.likes || 0 : 0}</span>
-				<span>评论: ${content.statistics ? content.statistics.comments || 0 : 0}</span>
-			</div>
-		</div>
-		<div class="ai-content-actions">
-			<button class="btn btn-sm btn-danger" onclick='deleteAIContentItem("${content.id}")'>删除</button>
-			${content.comments && content.comments.length > 0 ? `<button class="btn btn-sm" onclick='openCommentsModal("${content.id}")'>查看评论</button>` : ''}
-		</div>
-	`;
-	return card;
 }
 
 // 打开 AI 内容编辑弹窗
@@ -1422,34 +1432,103 @@ function closeAIContentModal() {
 }
 
 // 评论弹窗
-function openCommentsModal(contentId) {
-	// 直接从当前列表数据再取一次，保证取到最新评论
-	fetch(`/api/ai-content`).then(r => r.json()).then(result => {
-		if (!result.success) throw new Error('加载失败');
-		const item = (result.data || []).find(c => c.id === contentId);
+// 打开评论查看弹窗
+async function openCommentsModal(contentId) {
 		const modal = document.getElementById('comments-modal');
 		const listEl = document.getElementById('comments-list');
-		listEl.innerHTML = '';
-		const comments = (item && item.comments) ? item.comments : [];
+	
+	if (!modal || !listEl) {
+		console.error('评论弹窗元素不存在');
+		return;
+	}
+	
+	// 显示加载状态
+	listEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">加载中...</div>';
+	modal.classList.add('show');
+	
+	try {
+		// 调用API获取评论列表
+		const data = await fetchAIContentComments(contentId, 1, 50);
+		
+		if (!data || !data.comments) {
+			listEl.innerHTML = '<div class="empty-state">暂无评论</div>';
+			return;
+		}
+		
+		const comments = data.comments || [];
+		
 		if (comments.length === 0) {
 			listEl.innerHTML = '<div class="empty-state">暂无评论</div>';
-		} else {
-			comments.forEach(cm => {
-				const row = document.createElement('div');
-				row.style.borderBottom = '1px solid #eee';
-				row.style.padding = '10px 0';
-				const timeText = cm.timestamp ? new Date(cm.timestamp).toLocaleString() : '';
-				row.innerHTML = `<div style="font-weight:600;">${cm.user || '匿名用户'} <span style="color:#999;font-weight:400;">${timeText}</span></div>
-				<div style="margin-top:6px;color:#333;">${cm.text || ''}</div>`;
-				listEl.appendChild(row);
-			});
+			return;
 		}
-		modal.classList.add('show');
-	}).catch(err => {
-		console.error('加载评论失败:', err);
-		showNotification('加载评论失败', 'error');
-	});
+		
+		// 清空列表
+		listEl.innerHTML = '';
+		
+		// 显示评论总数
+		const header = document.createElement('div');
+		header.style.cssText = 'padding: 10px 15px; background: #f5f5f5; border-bottom: 1px solid #e0e0e0; margin: -15px -15px 15px -15px; font-weight: 600;';
+		header.textContent = `共 ${data.total || comments.length} 条评论`;
+		listEl.appendChild(header);
+		
+		// 渲染评论列表
+		comments.forEach(comment => {
+			const commentEl = document.createElement('div');
+			commentEl.style.cssText = 'padding: 15px; border-bottom: 1px solid #eee; background: white;';
+			
+			const timestamp = comment.timestamp ? new Date(comment.timestamp).toLocaleString('zh-CN') : '';
+			const avatar = comment.avatar || '👤';
+			const nickname = comment.nickname || '匿名用户';
+			const likes = comment.likes || 0;
+			
+			commentEl.innerHTML = `
+				<div style="display: flex; align-items: center; margin-bottom: 10px;">
+					<span style="font-size: 24px; margin-right: 10px;">${avatar}</span>
+					<div style="flex: 1;">
+						<div style="font-weight: 600; color: #333; margin-bottom: 4px;">${nickname}</div>
+						<div style="font-size: 12px; color: #999;">
+							${timestamp}
+							${likes > 0 ? `<span style="margin-left: 10px;">❤️ ${likes}</span>` : ''}
+						</div>
+					</div>
+					<button class="btn btn-sm btn-danger" onclick='deleteComment("${contentId}", "${comment.commentId || comment.id}")' style="padding: 4px 8px; font-size: 12px;">删除</button>
+				</div>
+				<div style="color: #333; line-height: 1.6; margin-top: 8px;">${(comment.content || comment.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+			`;
+			
+			listEl.appendChild(commentEl);
+		});
+		
+	} catch (error) {
+		console.error('加载评论失败:', error);
+		listEl.innerHTML = '<div class="empty-state" style="color: #f44336;">加载评论失败: ' + error.message + '</div>';
+		showNotification('加载评论失败: ' + error.message, 'error');
+	}
 }
+
+// 将 openCommentsModal 挂载到 window 对象，供 HTML onclick 调用
+window.openCommentsModal = openCommentsModal;
+
+// 删除评论（全局函数，供HTML onclick调用）
+window.deleteComment = async function(contentId, commentId) {
+	if (!confirm('确定要删除这条评论吗？')) {
+		return;
+	}
+	
+	const reason = prompt('请输入删除原因（可选）：');
+	
+	try {
+		const result = await deleteAIContentComment(contentId, commentId, reason || '管理员删除', true);
+		if (result) {
+			showNotification('评论已删除', 'success');
+			// 重新加载评论列表
+			await openCommentsModal(contentId);
+		}
+	} catch (error) {
+		console.error('删除评论失败:', error);
+		showNotification('删除评论失败: ' + error.message, 'error');
+	}
+};
 
 document.querySelector('[data-modal="comments-modal"]')?.addEventListener('click', () => {
 	document.getElementById('comments-modal').classList.remove('show');
@@ -1535,21 +1614,21 @@ async function loadStatistics() {
 			<div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
 				<h4 style="margin: 0 0 10px 0; color: #666; font-size: 14px;">观众总数</h4>
 				<div style="font-size: 32px; font-weight: 700; color: #667eea;">${data.totalUsers || 0}</div>
-			</div>
+  </div>
 			<div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
 				<h4 style="margin: 0 0 10px 0; color: #666; font-size: 14px;">累计投票</h4>
 				<div style="font-size: 32px; font-weight: 700; color: #4CAF50;">${data.totalVotes || 0}</div>
-			</div>
+  </div>
 			<div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
 				<h4 style="margin: 0 0 10px 0; color: #666; font-size: 14px;">活跃用户</h4>
 				<div style="font-size: 32px; font-weight: 700; color: #FF9800;">${data.activeUsers || 0}</div>
-			</div>
+  </div>
 			<div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
 				<h4 style="margin: 0 0 10px 0; color: #666; font-size: 14px;">投票分布</h4>
 				<div style="font-size: 18px; font-weight: 700; color: #2196F3; margin-bottom: 5px;">正方: ${data.leftVotes || 0}</div>
 				<div style="font-size: 18px; font-weight: 700; color: #f44336;">反方: ${data.rightVotes || 0}</div>
-			</div>
-		`;
+  </div>
+`;
 		
 		// 如果有投票统计数据，显示时间线（如果页面有对应容器）
 		if (voteStats && voteStats.timeline) {
