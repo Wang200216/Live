@@ -11,6 +11,9 @@ const SERVER_CONFIG = {
 	}
 };
 
+// 将配置挂载到 window 对象，供其他脚本使用
+window.SERVER_CONFIG = SERVER_CONFIG;
+
 const API_BASE = `${SERVER_CONFIG.BASE_URL}/api/admin`;
 
 // 全局状态（如果admin-api.js已经创建了简单的版本，这里会覆盖它）

@@ -7,8 +7,8 @@ const getAPIBase = () => {
 	if (window.SERVER_CONFIG && window.SERVER_CONFIG.BASE_URL) {
 		return window.SERVER_CONFIG.BASE_URL;
 	}
-	// 默认使用本地服务器（8080端口）
-	return 'http://localhost:8080';
+	// 默认使用真实服务器（如果admin.js未加载，使用真实服务器地址）
+	return 'http://192.168.31.189:8000';
 };
 
 // ==================== 通用请求函数 ====================
