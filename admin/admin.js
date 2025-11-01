@@ -1,5 +1,40 @@
 // 后台管理系统主逻辑
-const API_BASE = '/api/admin';
+// 服务器配置
+const SERVER_CONFIG = {
+	// 本地开发时使用
+	LOCAL_URL: 'http://localhost:8000',
+	// 真实服务器地址（后端开发完成后使用）
+	REAL_URL: 'http://192.168.31.189:8000',
+	// 当前使用的地址（修改这里切换服务器）
+	get BASE_URL() {
+		return this.REAL_URL; // 切换到 REAL_URL 使用真实服务器
+	}
+};
+
+const API_BASE = `${SERVER_CONFIG.BASE_URL}/api/admin`;
+
+// 全局状态（如果admin-api.js已经创建了简单的版本，这里会覆盖它）
+const globalState = window.globalState || {
+	isLive: false,
+	liveId: null,
+	aiStatus: 'stopped', // stopped / running / paused
+	aiSessionId: null,
+	currentVotes: {
+		leftVotes: 0,
+		rightVotes: 0
+	}
+};
+
+// 扩展globalState对象，添加缺失的属性
+globalState.liveId = globalState.liveId || null;
+globalState.aiSessionId = globalState.aiSessionId || null;
+globalState.currentVotes = globalState.currentVotes || {
+	leftVotes: 0,
+	rightVotes: 0
+};
+
+// 确保window.globalState引用的是这个对象
+window.globalState = globalState;
 
 // WebSocket 连接
 let ws = null;
@@ -16,10 +51,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // 初始化 WebSocket 连接
 function initWebSocket() {
-	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-	const wsUrl = `${protocol}//${window.location.host}/ws`;
-	
+	// 从服务器配置获取WebSocket地址
 	try {
+	const baseUrl = new URL(SERVER_CONFIG.BASE_URL);
+	const protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+	const wsUrl = `${protocol}//${baseUrl.host}/ws`;
+	
+	console.log('🔌 连接WebSocket:', wsUrl);
+	
+		// 如果已有连接，先关闭
+		if (ws && ws.readyState !== WebSocket.CLOSED) {
+			try {
+				ws.close();
+			} catch (e) {
+				console.warn('关闭旧WebSocket连接时出错:', e);
+			}
+		}
+		
 		ws = new WebSocket(wsUrl);
 		
 		ws.onopen = () => {
@@ -42,25 +90,37 @@ function initWebSocket() {
 			updateConnectionStatus(false);
 		};
 		
-		ws.onclose = () => {
-			console.log('WebSocket 已断开，5秒后尝试重连...');
+		ws.onclose = (event) => {
+			console.log('WebSocket 已断开，5秒后尝试重连...', event.code, event.reason);
 			updateConnectionStatus(false);
-			// 5秒后尝试重连
+			// 5秒后尝试重连（如果不是主动关闭）
+			if (event.code !== 1000) {
 			wsReconnectTimer = setTimeout(() => {
 				initWebSocket();
 			}, 5000);
+			}
 		};
 		
-		// 心跳保持连接
-		setInterval(() => {
+		// 心跳保持连接（只设置一次）
+		if (!window.wsHeartbeatInterval) {
+			window.wsHeartbeatInterval = setInterval(() => {
 			if (ws && ws.readyState === WebSocket.OPEN) {
+					try {
 				ws.send(JSON.stringify({ type: 'ping' }));
+					} catch (error) {
+						console.error('发送心跳失败:', error);
+					}
 			}
 		}, 30000); // 每30秒发送一次 ping
+		}
 		
 	} catch (error) {
 		console.error('WebSocket 初始化失败:', error);
 		updateConnectionStatus(false);
+		// 如果URL解析失败，5秒后重试
+		wsReconnectTimer = setTimeout(() => {
+			initWebSocket();
+		}, 5000);
 	}
 }
 
@@ -77,20 +137,89 @@ function updateConnectionStatus(connected) {
 
 // 处理 WebSocket 消息
 function handleWebSocketMessage(message) {
+	console.log('📨 收到WebSocket消息:', message.type, message.data);
+	
 	switch (message.type) {
 		case 'connected':
-			console.log('📨', message.message);
+			console.log('✅', message.message);
 			break;
 		case 'state':
 			// 初始状态同步
 			updateDashboardFromState(message.data);
+			if (message.data.liveStatus) {
+				globalState.isLive = true;
+			}
+			if (message.data.votes) {
+				globalState.currentVotes = message.data.votes;
+			}
+			break;
+		case 'live-started':
+			// 直播开始
+			globalState.isLive = true;
+			globalState.liveId = message.data.liveId;
+			updateLiveStatus({ status: 'started', streamUrl: message.data.streamUrl });
+			showNotification('直播已开始', 'success');
+			loadDashboard();
+			break;
+		case 'live-stopped':
+			// 直播停止
+			globalState.isLive = false;
+			globalState.liveId = null;
+			updateLiveStatus({ status: 'stopped' });
+			showNotification('直播已停止', 'info');
+			loadDashboard();
+			break;
+		case 'votes-updated':
+			// 投票数据更新
+			globalState.currentVotes = {
+				leftVotes: message.data.leftVotes,
+				rightVotes: message.data.rightVotes
+			};
+			updateVotesDisplay(message.data);
+			showNotification('票数已更新', 'success');
+			break;
+		case 'ai-started':
+			// AI识别启动
+			globalState.aiStatus = 'running';
+			globalState.aiSessionId = message.data.aiSessionId;
+			updateAIStatus('running');
+			showNotification('AI识别已启动', 'success');
+			break;
+		case 'ai-stopped':
+			// AI识别停止
+			globalState.aiStatus = 'stopped';
+			globalState.aiSessionId = null;
+			updateAIStatus('stopped');
+			showNotification('AI识别已停止', 'info');
+			break;
+		case 'ai-status-changed':
+			// AI状态变更
+			globalState.aiStatus = message.data.status;
+			updateAIStatus(message.data.status);
+			showNotification(`AI识别已${message.data.status === 'paused' ? '暂停' : '恢复'}`, 'info');
+			break;
+		case 'ai-content-added':
+			// AI内容添加
+			showNotification('新的AI内容已生成', 'info');
+			if (document.getElementById('ai-content').classList.contains('active')) {
+				loadAIContent();
+			}
+			break;
+		case 'ai-content-deleted':
+			// AI内容删除
+			showNotification('AI内容已删除', 'info');
+			if (document.getElementById('ai-content').classList.contains('active')) {
+				loadAIContent();
+			}
 			break;
 		case 'vote-updated':
-			// 实时投票更新
-			updateVotesDisplay(message.data.votes);
+			// 实时投票更新（兼容旧格式）
+			if (message.data.votes) {
+				updateVotesDisplay(message.data.votes);
+			}
 			break;
 		case 'live-status-changed':
-			// 直播状态变化
+			// 直播状态变化（兼容旧格式）
 			updateLiveStatus(message.data);
 			break;
 		case 'debate-updated':
@@ -288,6 +417,9 @@ function loadPageData(page) {
 				document.getElementById('votes-container') && (document.getElementById('votes-container').innerHTML = '<div style="color: #FF9800; padding: 40px 0; text-align: center;">直播未开始，无需实时监控票数～</div>');
 			}
 			break;
+		case 'stream-manage':
+			loadStreamsList();
+			break;
 		case 'ai-content':
 			loadAIContent();
 			break;
@@ -299,19 +431,36 @@ function loadPageData(page) {
 
 // ==================== 数据概览 ====================
 async function loadDashboard() {
-	if (!currentLiveStatus) {
-		document.getElementById('dashboard-container') && (document.getElementById('dashboard-container').innerHTML = '<div style="color: #FF9800; padding: 40px 0; text-align: center;">直播未开始，无需实时监控～</div>');
-		return;
-	}
 	try {
-		const response = await fetch(`${API_BASE}/dashboard`);
-		const data = await response.json();
+		const data = await fetchDashboard();
+		if (!data) return;
+		
+		// 更新直播状态
+		if (data.isLive !== undefined) {
+			currentLiveStatus = data.isLive;
+		}
 		
 		document.getElementById('total-users').textContent = data.totalUsers || 0;
 		document.getElementById('live-status').textContent = data.isLive ? '🟢 直播中' : '⚪ 未开播';
 		document.getElementById('total-votes').textContent = data.totalVotes || 0;
 		document.getElementById('active-users').textContent = data.activeUsers || 0;
 		document.getElementById('live-status-text').textContent = data.isLive ? '直播中' : '未开播';
+		
+		// 更新票数显示
+		if (data.leftVotes !== undefined && data.rightVotes !== undefined) {
+			globalState.currentVotes = {
+				leftVotes: data.leftVotes,
+				rightVotes: data.rightVotes
+			};
+		}
+		
+		// 更新AI状态
+		if (data.aiStatus) {
+			globalState.aiStatus = data.aiStatus;
+			if (typeof updateAIControlButtons === 'function') {
+				updateAIControlButtons(data.aiStatus);
+			}
+		}
 	} catch (error) {
 		console.error('加载概览数据失败:', error);
 	}
@@ -538,10 +687,11 @@ let currentLiveStatus = false;
 // 加载当前直播状态
 async function loadLiveStatus() {
 	try {
-		const response = await fetch(`${API_BASE}/live/status`);
-		const status = await response.json();
-		currentLiveStatus = status.isLive;
-		updateLiveControlButton(status.isLive);
+		const data = await fetchDashboard();
+		if (data && data.isLive !== undefined) {
+			currentLiveStatus = data.isLive;
+			updateLiveControlButton(data.isLive);
+		}
 	} catch (error) {
 		console.error('获取直播状态失败:', error);
 	}
@@ -561,28 +711,8 @@ function updateLiveControlButton(isLive) {
 	}
 }
 
-// 控制直播状态
-async function controlLive(action) {
-	try {
-		const response = await fetch(`${API_BASE}/live/control`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ action })
-		});
-		
-		if (response.ok) {
-			const result = await response.json();
-			currentLiveStatus = result.status === 'started';
-			updateLiveControlButton(currentLiveStatus);
-			showNotification(`直播已${currentLiveStatus ? '开始' : '停止'}`, 'success');
-		} else {
-			throw new Error('操作失败');
-		}
-	} catch (error) {
-		console.error('控制直播失败:', error);
-		showNotification('操作失败', 'error');
-	}
-}
+// 控制直播状态 - 已移至admin-events.js中处理
+// 使用admin-api.js中的startLive和stopLive函数
 
 // 绑定直播控制按钮
 const controlLiveBtn = document.getElementById('control-live-btn');
@@ -600,13 +730,59 @@ if (controlLiveBtn) {
 // ==================== 直播设置整合页 ====================
 async function loadLiveSetup() {
 	try {
-		// 加载直播流列表
-		const streamsResponse = await fetch(`${API_BASE}/streams`);
-		const streams = await streamsResponse.json();
+		// 加载当前直播状态
+		const data = await fetchDashboard();
+		if (data) {
+			// 更新直播状态显示
+			const statusEl = document.getElementById('live-control-status');
+			if (statusEl) {
+				if (data.isLive) {
+					statusEl.innerHTML = '<span style="color: #4CAF50;">🟢 直播中</span>';
+					// 启用/禁用按钮
+					const startBtn = document.getElementById('admin-start-live-btn');
+					const stopBtn = document.getElementById('admin-stop-live-btn');
+					if (startBtn) startBtn.disabled = true;
+					if (stopBtn) stopBtn.disabled = false;
+					
+					// 显示直播流信息
+					if (data.liveStreamUrl) {
+						const streamInfoEl = document.getElementById('live-stream-info');
+						if (streamInfoEl) {
+							streamInfoEl.style.display = 'block';
+							const streamIdEl = document.getElementById('live-stream-id');
+							const streamUrlEl = document.getElementById('live-stream-url');
+							const startTimeEl = document.getElementById('live-start-time');
+							if (streamIdEl) streamIdEl.textContent = data.liveId || '-';
+							if (streamUrlEl) streamUrlEl.textContent = data.liveStreamUrl || '-';
+							if (startTimeEl) startTimeEl.textContent = data.liveStartTime || '-';
+						}
+					}
+				} else {
+					statusEl.innerHTML = '<span style="color: #999;">⚪ 未开播</span>';
+					// 启用/禁用按钮
+					const startBtn = document.getElementById('admin-start-live-btn');
+					const stopBtn = document.getElementById('admin-stop-live-btn');
+					if (startBtn) startBtn.disabled = false;
+					if (stopBtn) stopBtn.disabled = true;
+					
+					// 隐藏直播流信息
+					const streamInfoEl = document.getElementById('live-stream-info');
+					if (streamInfoEl) {
+						streamInfoEl.style.display = 'none';
+					}
+				}
+			}
+		}
 		
+		// 如果有其他旧的表单元素，尝试加载（但这些元素可能不存在）
 		const streamSelect = document.getElementById('setup-stream-id');
+		if (streamSelect) {
+			try {
+				const streamsResponse = await fetch(`${API_BASE}/streams`);
+				const streams = await streamsResponse.json();
 		streamSelect.innerHTML = '<option value="">请选择直播流</option>';
 		
+				if (Array.isArray(streams)) {
 		streams.forEach(stream => {
 			if (stream.enabled) {
 				const option = document.createElement('option');
@@ -615,49 +791,34 @@ async function loadLiveSetup() {
 				streamSelect.appendChild(option);
 			}
 		});
-
-		// 如果没有任何直播流，提示并展开创建区域
-		const createWrap = document.getElementById('setup-create-stream');
-		const createForm = document.getElementById('setup-create-stream-form');
-		if (Array.isArray(streams) && streams.length === 0) {
-			if (createWrap) createWrap.style.display = 'block';
-			if (createForm) createForm.style.display = 'block';
-			const hint = document.getElementById('setup-stream-hint');
-			if (hint) hint.textContent = '当前暂无直播流，请先创建一个直播流';
+				}
+			} catch (error) {
+				console.warn('加载直播流列表失败:', error);
+			}
 		}
 		
-		// 加载当前辩论设置
+		// 加载辩论设置（如果元素存在）
+		const debateTitleEl = document.getElementById('setup-debate-title');
+		const debateDescEl = document.getElementById('setup-debate-description');
+		const leftPosEl = document.getElementById('setup-left-position');
+		const rightPosEl = document.getElementById('setup-right-position');
+		
+		if (debateTitleEl || debateDescEl || leftPosEl || rightPosEl) {
+			try {
 		const debateResponse = await fetch(`${API_BASE}/debate`);
 		const debate = await debateResponse.json();
 		
 		if (debate) {
-			document.getElementById('setup-debate-title').value = debate.title || '';
-			document.getElementById('setup-debate-description').value = debate.description || '';
-			document.getElementById('setup-left-position').value = debate.leftPosition || '';
-			document.getElementById('setup-right-position').value = debate.rightPosition || '';
-		}
-		
-		// 加载当前直播状态与计划（使用 /live/status）
-		const statusResponse = await fetch(`${API_BASE}/live/status`);
-		const statusResult = await statusResponse.json();
-		const schedule = statusResult?.schedule;
-		if (schedule && schedule.isScheduled) {
-			if (schedule.streamId) {
-				streamSelect.value = schedule.streamId;
-			}
-			if (schedule.scheduledStartTime) {
-				const startDate = new Date(schedule.scheduledStartTime);
-				document.getElementById('setup-start-time').value = formatDateTimeLocal(startDate);
-				document.getElementById('live-mode-schedule').checked = true;
-			}
-			if (schedule.scheduledEndTime) {
-				const endDate = new Date(schedule.scheduledEndTime);
-				document.getElementById('setup-end-time').value = formatDateTimeLocal(endDate);
+					if (debateTitleEl) debateTitleEl.value = debate.title || '';
+					if (debateDescEl) debateDescEl.value = debate.description || '';
+					if (leftPosEl) leftPosEl.value = debate.leftPosition || '';
+					if (rightPosEl) rightPosEl.value = debate.rightPosition || '';
+				}
+			} catch (error) {
+				console.warn('加载辩论设置失败:', error);
 			}
 		}
 		
-		// 更新按钮显示
-		updateLiveModeButtons();
 	} catch (error) {
 		console.error('加载直播设置失败:', error);
 		showNotification('加载失败', 'error');
@@ -1064,24 +1225,52 @@ loadLiveStatus();
 // ==================== 用户管理 ====================
 async function loadUsers() {
 	try {
-		const response = await fetch(`${API_BASE}/users`);
-		const users = await response.json();
+		const data = await fetchUserList(1, 20, {});
+		if (!data || !data.users) {
+			console.error('获取用户列表失败');
+			return;
+		}
 		
 		const tbody = document.getElementById('users-table-body');
 		tbody.innerHTML = '';
 		
-		users.forEach(user => {
+		if (data.users.length === 0) {
+			tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 40px; color: #999;">暂无用户</td></tr>';
+			return;
+		}
+		
+		data.users.forEach(user => {
 			const row = document.createElement('tr');
+			// 获取头像URL，支持多种字段名
+			const avatarUrl = user.avatar || user.avatarUrl || '';
+			
+			// 占位符URL（使用单引号避免在HTML属性中冲突）
+			const placeholderSvg = 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'40\' height=\'40\'%3E%3Crect width=\'40\' height=\'40\' fill=\'%23e0e0e0\'/%3E%3Ctext x=\'50%25\' y=\'50%25\' text-anchor=\'middle\' dy=\'.3em\' fill=\'%23999\' font-size=\'14\'%3E头像%3C/text%3E%3C/svg%3E';
+			
+			// 如果头像URL包含 logo.png、为空、或无法访问（微信头像等），使用占位符
+			// 同时过滤掉可能导致语法错误的URL
+			let avatarSrc = placeholderSvg;
+			if (avatarUrl && 
+			    !avatarUrl.includes('logo.png') && 
+			    !avatarUrl.includes('thirdwx.qlogo.cn') &&
+			    avatarUrl.startsWith('http')) {
+				// 转义HTML特殊字符
+				avatarSrc = avatarUrl.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+			}
+			
+			// 转义userId中的特殊字符，防止XSS和语法错误
+			const safeUserId = (user.userId || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+			
 			row.innerHTML = `
-				<td>${user.id.slice(0, 8)}...</td>
-				<td>${user.nickName || '未设置'}</td>
-				<td><img src="${user.avatarUrl || '/static/logo.png'}" class="avatar-img" onerror="this.src='/static/logo.png'"></td>
-				<td>${new Date(user.createdAt).toLocaleString()}</td>
-				<td>${user.totalVotes || 0}</td>
-				<td>${user.joinedDebates || 0}</td>
-				<td><span class="badge ${user.status || 'active'}">${user.status === 'active' ? '正常' : '已禁用'}</span></td>
+				<td>${user.userId ? user.userId.slice(0, 8) + '...' : 'N/A'}</td>
+				<td>${(user.nickname || '未设置').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+				<td><img src="${avatarSrc}" class="avatar-img" onerror="this.src='${placeholderSvg}'; this.onerror=null;"></td>
+				<td>${user.joinTime ? new Date(user.joinTime).toLocaleString() : '-'}</td>
+				<td>${user.statistics ? user.statistics.totalVotes || 0 : 0}</td>
+				<td>${user.statistics ? user.statistics.totalComments || 0 : 0}</td>
+				<td><span class="badge ${user.status === 'online' ? 'success' : 'secondary'}">${user.status === 'online' ? '在线' : '离线'}</span></td>
 				<td>
-					<button class="btn btn-sm btn-secondary" onclick='viewUser("${user.id}")'>查看</button>
+					<button class="btn btn-sm btn-secondary" onclick='viewUser("${safeUserId}")'>查看</button>
 				</td>
 			`;
 			tbody.appendChild(row);
@@ -1110,23 +1299,33 @@ function viewUser(id) {
 
 // ==================== 票数管理 ====================
 async function loadVotes() {
-	if (!currentLiveStatus) {
+	try {
+		// 从dashboard获取票数信息
+		const data = await fetchDashboard();
+		if (!data) return;
+		
+		if (!data.isLive) {
 		document.getElementById('votes-container') && (document.getElementById('votes-container').innerHTML = '<div style="color: #FF9800; padding: 40px 0; text-align: center;">直播未开始，无需实时监控票数～</div>');
 		return;
 	}
-	try {
-		// 使用公开GET票数接口，避免因管理端路由差异导致404
-		const response = await fetch(`/api/votes`);
-		const result = await response.json();
 		
-		if (result.success) {
-			const votes = result.data;
-			document.getElementById('admin-left-votes').textContent = votes.leftVotes || 0;
-			document.getElementById('admin-right-votes').textContent = votes.rightVotes || 0;
-			document.getElementById('admin-total-votes').textContent = votes.totalVotes || 0;
+		const leftVotes = data.leftVotes || 0;
+		const rightVotes = data.rightVotes || 0;
+		const totalVotes = data.totalVotes || (leftVotes + rightVotes);
+		const leftPercentage = data.leftPercentage || (totalVotes > 0 ? Math.round((leftVotes / totalVotes) * 100) : 50);
+		const rightPercentage = data.rightPercentage || (totalVotes > 0 ? Math.round((rightVotes / totalVotes) * 100) : 50);
+		
+		document.getElementById('admin-left-votes').textContent = leftVotes;
+		document.getElementById('admin-right-votes').textContent = rightVotes;
+		document.getElementById('admin-total-votes').textContent = totalVotes;
 			document.getElementById('admin-vote-percentage').textContent = 
-				`正方: ${votes.leftPercentage || 50}% | 反方: ${votes.rightPercentage || 50}%`;
-		}
+			`正方: ${leftPercentage}% | 反方: ${rightPercentage}%`;
+			
+		// 更新全局状态
+		globalState.currentVotes = {
+			leftVotes,
+			rightVotes
+		};
 	} catch (error) {
 		console.error('加载票数失败:', error);
 		showNotification('加载票数失败', 'error');
@@ -1149,113 +1348,29 @@ function stopVotesAutoRefresh() {
     votesTimer = null;
 }
 
-// 更新正方票数
-document.getElementById('update-left-votes-btn')?.addEventListener('click', async () => {
-	const input = document.getElementById('left-votes-input');
-	const value = parseInt(input.value);
-	
-	if (isNaN(value) || value < 0) {
-		showNotification('请输入有效的票数', 'error');
-		return;
-	}
-	
-	try {
-		const response = await fetch(`${API_BASE}/votes`, {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ leftVotes: value })
-		});
-		
-		const result = await response.json();
-		if (result.success) {
-			showNotification('正方票数已更新', 'success');
-			input.value = '';
-			loadVotes();
-		} else {
-			throw new Error(result.error || '更新失败');
-		}
-	} catch (error) {
-		console.error('更新票数失败:', error);
-		showNotification('更新票数失败', 'error');
-	}
-});
-
-// 更新反方票数
-document.getElementById('update-right-votes-btn')?.addEventListener('click', async () => {
-	const input = document.getElementById('right-votes-input');
-	const value = parseInt(input.value);
-	
-	if (isNaN(value) || value < 0) {
-		showNotification('请输入有效的票数', 'error');
-		return;
-	}
-	
-	try {
-		const response = await fetch(`${API_BASE}/votes`, {
-			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ rightVotes: value })
-		});
-		
-		const result = await response.json();
-		if (result.success) {
-			showNotification('反方票数已更新', 'success');
-			input.value = '';
-			loadVotes();
-		} else {
-			throw new Error(result.error || '更新失败');
-		}
-	} catch (error) {
-		console.error('更新票数失败:', error);
-		showNotification('更新票数失败', 'error');
-	}
-});
-
-// 重置票数
-document.getElementById('reset-votes-btn')?.addEventListener('click', async () => {
-	if (!confirm('确定要重置所有票数为 0 吗？此操作不可撤销！')) {
-		return;
-	}
-	
-	try {
-		const response = await fetch(`${API_BASE}/votes/reset`, {
-			method: 'POST'
-		});
-		
-		const result = await response.json();
-		if (result.success) {
-			showNotification('票数已重置', 'success');
-			loadVotes();
-		} else {
-			throw new Error(result.error || '重置失败');
-		}
-	} catch (error) {
-		console.error('重置票数失败:', error);
-		showNotification('重置票数失败', 'error');
-	}
-});
+// 票数管理相关函数已移至admin-events.js中处理
 
 // ==================== AI 内容管理 ====================
 async function loadAIContent() {
     try {
-        // 使用公开 GET 接口，避免部分环境下 /api/admin/ai-content 404
-        const response = await fetch(`/api/ai-content`);
-        const result = await response.json();
-        
-        if (result.success) {
+        const data = await fetchAIContentList(1, 20);
+        if (!data || !data.items) {
+            console.error('获取AI内容列表失败');
+		return;
+	}
+	
             const contentList = document.getElementById('ai-content-list');
             contentList.innerHTML = '';
             
-            if (result.data.length === 0) {
+        if (data.items.length === 0) {
                 contentList.innerHTML = '<div class="empty-state">暂无 AI 内容</div>';
                 return;
             }
             
-            result.data.forEach(content => {
+        data.items.forEach(content => {
                 const contentCard = createAIContentCard(content);
                 contentList.appendChild(contentCard);
             });
-        }
     } catch (error) {
         console.error('加载 AI 内容失败:', error);
         showNotification('加载 AI 内容失败', 'error');
@@ -1265,26 +1380,28 @@ async function loadAIContent() {
 function createAIContentCard(content) {
 	const card = document.createElement('div');
 	card.className = 'ai-content-card';
-	const sideText = content.side === 'left' ? '正方' : '反方';
-	const sideClass = content.side === 'left' ? 'side-left' : 'side-right';
+	const sideText = content.position === 'left' ? '正方' : (content.position === 'right' ? '反方' : '中立');
+	const sideClass = content.position === 'left' ? 'side-left' : (content.position === 'right' ? 'side-right' : 'side-neutral');
+	const timestamp = content.timestamp ? new Date(content.timestamp).toLocaleString() : '-';
+	const confidence = content.confidence !== undefined ? (content.confidence * 100).toFixed(0) + '%' : '-';
 	
 	card.innerHTML = `
 		<div class="ai-content-header">
 			<span class="ai-content-side ${sideClass}">${sideText}</span>
-			<span class="ai-content-time">${new Date(content.timestamp).toLocaleString()}</span>
+			<span class="ai-content-time">${timestamp}</span>
+			${confidence !== '-' ? `<span style="color: #999; font-size: 12px; margin-left: 10px;">置信度: ${confidence}</span>` : ''}
 		</div>
 		<div class="ai-content-body">
-			<p>${content.text}</p>
+			<p>${content.content || content.text || ''}</p>
 			<div class="ai-content-meta">
-				<span>点赞: ${content.likes || 0}</span>
-				<span>评论: ${(content.comments || []).length}</span>
-				<span>辩题 ID: ${content.debate_id || 'N/A'}</span>
+				<span>查看: ${content.statistics ? content.statistics.views || 0 : 0}</span>
+				<span>点赞: ${content.statistics ? content.statistics.likes || 0 : 0}</span>
+				<span>评论: ${content.statistics ? content.statistics.comments || 0 : 0}</span>
 			</div>
 		</div>
 		<div class="ai-content-actions">
-			<button class="btn btn-sm btn-primary" onclick='editAIContent("${content.id}")'>编辑</button>
-			<button class="btn btn-sm btn-danger" onclick='deleteAIContent("${content.id}")'>删除</button>
-			<button class="btn btn-sm" onclick='openCommentsModal("${content.id}")'>查看评论</button>
+			<button class="btn btn-sm btn-danger" onclick='deleteAIContentItem("${content.id}")'>删除</button>
+			${content.comments && content.comments.length > 0 ? `<button class="btn btn-sm" onclick='openCommentsModal("${content.id}")'>查看评论</button>` : ''}
 		</div>
 	`;
 	return card;
@@ -1389,81 +1506,65 @@ document.getElementById('ai-content-form')?.addEventListener('submit', async (e)
 document.getElementById('cancel-ai-content-btn')?.addEventListener('click', closeAIContentModal);
 document.querySelector('[data-modal="ai-content-modal"]')?.addEventListener('click', closeAIContentModal);
 
-async function editAIContent(id) {
-	try {
-		// 使用公开列表接口并在前端筛选，避免 /api/admin/ai-content/:id 404
-		const response = await fetch(`/api/ai-content`);
-		const result = await response.json();
-		if (!result.success) throw new Error(result.error || '加载失败');
-		const item = (result.data || []).find(c => c.id === id);
-		if (!item) throw new Error('未找到该内容');
-		openAIContentModal(item);
-	} catch (error) {
-		console.error('加载 AI 内容失败:', error);
-		showNotification('加载失败', 'error');
-	}
-}
-
-async function deleteAIContent(id) {
-	if (!confirm('确定要删除这个 AI 内容吗？此操作不可撤销！')) {
-		return;
-	}
-	
-	try {
-		const response = await fetch(`${API_BASE}/ai-content/${id}`, {
-			method: 'DELETE'
-		});
-		
-		const result = await response.json();
-		if (result.success) {
-			showNotification('删除成功', 'success');
-			loadAIContent();
-		} else {
-			throw new Error(result.error || '删除失败');
-		}
-	} catch (error) {
-		console.error('删除失败:', error);
-		showNotification('删除失败', 'error');
-	}
-}
+// deleteAIContent 函数已在 admin-api.js 中定义
+// 删除AI内容的调用通过admin-events.js中的deleteAIContentItem函数处理
 
 // ==================== 数据统计 ====================
 async function loadStatistics() {
 	try {
-		const summaryResp = await fetch(`${API_BASE}/statistics/summary`);
-		const dailyResp = await fetch(`${API_BASE}/statistics/daily`);
-		const summary = await summaryResp.json();
-		const daily = await dailyResp.json();
+		// 使用 dashboard 接口获取统计数据
+		const data = await fetchDashboard();
+		if (!data) {
+			console.error('获取统计数据失败');
+			return;
+		}
+		
+		// 获取投票统计
+		const voteStats = await fetchVotesStatistics('24h');
 		
 		// 汇总概览渲染（若页面有对应元素可填充，没有则动态插入到 statistics 页面顶部）
 		const page = document.getElementById('statistics');
 		if (!page) return;
+		
+		// 创建概览卡片
 		let overview = page.querySelector('#stats-overview');
 		if (!overview) {
 			overview = document.createElement('div');
 			overview.id = 'stats-overview';
 			overview.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:16px;';
-			page.prepend(overview);
+			page.insertBefore(overview, page.firstChild);
 		}
-		const s = summary?.data || {};
+		
+		// 使用 dashboard 数据
 		overview.innerHTML = `
-  <div>
-    <h4>观众总数</h4>
-    <div style="font-size:24px;font-weight:700;">${s.totalUsers ?? 0}</div>
-  </div>
-  <div>
-    <h4>累计投票</h4>
-    <div style="font-size:24px;font-weight:700;">${s.totalVotes ?? 0}</div>
-  </div>
-  <div>
-    <h4>活跃用户</h4>
-    <div style="font-size:24px;font-weight:700;">${s.activeUsers ?? 0}</div>
-  </div>
-  <div>
-    <h4>直播场次</h4>
-    <div style="font-size:24px;font-weight:700;">${s.liveCount ?? 0}</div>
-  </div>
-`;
+			<div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+				<h4 style="margin: 0 0 10px 0; color: #666; font-size: 14px;">观众总数</h4>
+				<div style="font-size: 32px; font-weight: 700; color: #667eea;">${data.totalUsers || 0}</div>
+			</div>
+			<div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+				<h4 style="margin: 0 0 10px 0; color: #666; font-size: 14px;">累计投票</h4>
+				<div style="font-size: 32px; font-weight: 700; color: #4CAF50;">${data.totalVotes || 0}</div>
+			</div>
+			<div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+				<h4 style="margin: 0 0 10px 0; color: #666; font-size: 14px;">活跃用户</h4>
+				<div style="font-size: 32px; font-weight: 700; color: #FF9800;">${data.activeUsers || 0}</div>
+			</div>
+			<div style="background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+				<h4 style="margin: 0 0 10px 0; color: #666; font-size: 14px;">投票分布</h4>
+				<div style="font-size: 18px; font-weight: 700; color: #2196F3; margin-bottom: 5px;">正方: ${data.leftVotes || 0}</div>
+				<div style="font-size: 18px; font-weight: 700; color: #f44336;">反方: ${data.rightVotes || 0}</div>
+			</div>
+		`;
+		
+		// 如果有投票统计数据，显示时间线（如果页面有对应容器）
+		if (voteStats && voteStats.timeline) {
+			const timelineContainer = page.querySelector('#vote-timeline');
+			if (timelineContainer) {
+				// 可以在这里渲染投票趋势图
+				console.log('投票统计时间线:', voteStats.timeline);
+			}
+		}
+		
 	} catch (error) {
 		console.error('加载统计数据失败:', error);
 		showNotification('加载失败', 'error');
@@ -1471,6 +1572,12 @@ async function loadStatistics() {
 }
 
 // 全局通知方法，简单 alert 实现，可自定义美化
+// ==================== API函数 ====================
+// 所有API函数已在admin-api.js中定义，这里不再重复定义
+// 如果需要使用API函数，请使用admin-api.js中的函数
+
+// ==================== 辅助函数 ====================
+
 function showNotification(message, type = 'info') {
     // type可以为 'success' | 'error' | 'warning' | 'info'，可扩展美化
     alert(message);

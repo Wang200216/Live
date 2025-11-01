@@ -101,6 +101,11 @@ const streams = {
 		return newStream;
 	},
 	
+	// add方法作为create的别名，方便使用
+	add: function(streamData) {
+		return this.create(streamData);
+	},
+	
 	update: (id, streamData) => {
 		const streams = readData('streams');
 		const index = streams.findIndex(s => s.id === id);

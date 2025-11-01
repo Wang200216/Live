@@ -649,7 +649,14 @@
 				// 特效性能优化
 				maxConcurrentEffects: 30, // 最大同时特效数量
 				effectCleanupInterval: null, // 特效清理定时器
-				lastEffectCleanup: 0 // 上次清理时间
+				lastEffectCleanup: 0, // 上次清理时间
+				
+				// WebSocket 连接
+				socketTask: null, // WebSocket连接实例
+				wsReconnectTimer: null, // WebSocket重连定时器
+				wsHeartbeatTimer: null, // WebSocket心跳定时器
+				wsReconnectAttempts: 0, // WebSocket重连次数
+				wsMaxReconnectAttempts: 5 // WebSocket最大重连次数
 			}
 		},
 		computed: {
@@ -721,6 +728,9 @@
 
 			// ================= 自助自动拉取直播状态 =================
 			if (typeof this.fetchLiveStatus === 'function') this.fetchLiveStatus();
+			
+			// 建立WebSocket连接（用于接收实时更新）
+			this.connectWebSocket();
 		},
 		onShow() {
 			// 页面显示时，确保导航栏选中状态正确
@@ -754,6 +764,8 @@
 				});
 				this.effectTimeouts = [];
 			}
+			// 断开WebSocket连接
+			this.disconnectWebSocket();
 			// 清理防抖定时器
 			if (this.fetchVoteDataTimeout) {
 				clearTimeout(this.fetchVoteDataTimeout);
@@ -2642,6 +2654,283 @@
 							url: '/pages/profile/profile'
 						});
 						break;
+				}
+			},
+			
+			// ==================== WebSocket 连接与消息处理 ====================
+			
+			// 建立WebSocket连接
+			connectWebSocket() {
+				try {
+					// 获取服务器地址
+					const serverUrl = this.getServerUrl() || API_BASE_URL;
+					// 将 http/https 替换为 ws/wss
+					const wsUrl = serverUrl.replace(/^http/, 'ws');
+					
+					console.log('🔌 正在连接WebSocket:', wsUrl);
+					
+					// 创建WebSocket连接
+					this.socketTask = uni.connectSocket({
+						url: wsUrl,
+						success: () => {
+							console.log('✅ WebSocket连接请求已发送');
+						},
+						fail: (err) => {
+							console.error('❌ WebSocket连接请求失败:', err);
+							this.scheduleWSReconnect();
+						}
+					});
+					
+					// 监听连接打开
+					this.socketTask.onOpen(() => {
+						console.log('✅ WebSocket连接已建立');
+						this.wsReconnectAttempts = 0;
+						
+						// 启动心跳
+						this.startWSHeartbeat();
+						
+						// 发送初始消息（可选）
+						this.sendWSMessage({
+							type: 'register',
+							clientType: 'miniprogram',
+							userId: uni.getStorageSync('userId') || 'guest'
+						});
+					});
+					
+					// 监听消息接收
+					this.socketTask.onMessage((res) => {
+						try {
+							const data = JSON.parse(res.data);
+							this.handleWSMessage(data);
+						} catch (error) {
+							console.error('❌ WebSocket消息解析失败:', error);
+						}
+					});
+					
+					// 监听连接关闭
+					this.socketTask.onClose(() => {
+						console.warn('⚠️ WebSocket连接已关闭');
+						this.stopWSHeartbeat();
+						this.scheduleWSReconnect();
+					});
+					
+					// 监听连接错误
+					this.socketTask.onError((err) => {
+						console.error('❌ WebSocket连接错误:', err);
+						this.stopWSHeartbeat();
+						this.scheduleWSReconnect();
+					});
+					
+				} catch (error) {
+					console.error('❌ WebSocket连接失败:', error);
+					this.scheduleWSReconnect();
+				}
+			},
+			
+			// 处理WebSocket消息
+			handleWSMessage(data) {
+				console.log('📩 收到WebSocket消息:', data);
+				
+				switch (data.type) {
+					case 'liveStatus':
+						// 更新直播状态
+						this.handleLiveStatusUpdate(data.data);
+						break;
+						
+					case 'aiStatus':
+						// 更新AI状态
+						this.handleAIStatusUpdate(data.data);
+						break;
+						
+					case 'votesUpdate':
+						// 更新票数
+						this.handleVotesUpdate(data.data);
+						break;
+						
+					case 'newAIContent':
+						// 新增AI内容
+						this.handleNewAIContent(data.data);
+						break;
+						
+					case 'aiContentDeleted':
+						// AI内容被删除
+						this.handleAIContentDeleted(data.data);
+						break;
+						
+					case 'pong':
+						// 心跳响应
+						console.log('💓 WebSocket心跳响应');
+						break;
+						
+					default:
+						console.log('📩 未知消息类型:', data.type);
+				}
+			},
+			
+			// 处理直播状态更新
+			handleLiveStatusUpdate(data) {
+				console.log('🎬 直播状态更新:', data);
+				
+				// 更新直播状态
+				if (data.isLive !== undefined) {
+					this.isLiveStarted = data.isLive;
+				}
+				
+				// ✅ 接收并设置直播流URL
+				if (data.streamUrl) {
+					this.liveStreamUrl = data.streamUrl;
+					console.log('📺 更新直播流地址:', data.streamUrl);
+					
+					// 显示提示
+					uni.showToast({
+						title: '直播流已更新',
+						icon: 'success',
+						duration: 2000
+					});
+				}
+				
+				// 如果直播停止，可以清理状态
+				if (data.isLive === false) {
+					console.log('🛑 直播已停止');
+					// 保留liveStreamUrl，下次可以继续使用
+				}
+			},
+			
+			// 处理AI状态更新
+			handleAIStatusUpdate(data) {
+				console.log('🤖 AI状态更新:', data);
+				if (data.status) {
+					this.isListening = (data.status === 'running');
+					
+					// 根据AI状态变化，更新AI内容
+					if (data.status === 'running') {
+						// AI开始运行，启动定时刷新
+						if (this.recognitionTimer) {
+							clearInterval(this.recognitionTimer);
+						}
+						this.recognitionTimer = setInterval(() => {
+							this.fetchAIContent();
+						}, 5000);
+					} else if (data.status === 'stopped') {
+						// AI停止，清除定时器
+						if (this.recognitionTimer) {
+							clearInterval(this.recognitionTimer);
+							this.recognitionTimer = null;
+						}
+					}
+				}
+			},
+			
+			// 处理票数更新
+			handleVotesUpdate(data) {
+				console.log('📊 票数更新:', data);
+				
+				// 更新顶部对抗条的票数
+				if (data.leftVotes !== undefined) {
+					this.topLeftVotes = data.leftVotes;
+				}
+				if (data.rightVotes !== undefined) {
+					this.topRightVotes = data.rightVotes;
+				}
+				
+				// 更新百分比
+				if (data.leftPercentage !== undefined) {
+					this.leftPercentage = data.leftPercentage;
+				}
+				if (data.rightPercentage !== undefined) {
+					this.rightPercentage = data.rightPercentage;
+				}
+			},
+			
+			// 处理新增AI内容
+			handleNewAIContent(data) {
+				console.log('➕ 新增AI内容:', data);
+				// 检查是否已存在
+				const exists = this.aiMessages.some(msg => msg.serverId === data.id);
+				if (!exists) {
+					this.addAIMessage(data);
+				}
+			},
+			
+			// 处理AI内容删除
+			handleAIContentDeleted(data) {
+				console.log('🗑️ AI内容删除:', data);
+				const contentId = data.contentId;
+				// 从列表中移除
+				this.aiMessages = this.aiMessages.filter(msg => msg.serverId !== contentId);
+			},
+			
+			// 发送WebSocket消息
+			sendWSMessage(data) {
+				if (this.socketTask) {
+					this.socketTask.send({
+						data: JSON.stringify(data),
+						success: () => {
+							console.log('✅ WebSocket消息已发送:', data);
+						},
+						fail: (err) => {
+							console.error('❌ WebSocket消息发送失败:', err);
+						}
+					});
+				}
+			},
+			
+			// 启动心跳
+			startWSHeartbeat() {
+				this.stopWSHeartbeat();
+				this.wsHeartbeatTimer = setInterval(() => {
+					this.sendWSMessage({ type: 'ping' });
+				}, 30000); // 每30秒发送一次心跳
+			},
+			
+			// 停止心跳
+			stopWSHeartbeat() {
+				if (this.wsHeartbeatTimer) {
+					clearInterval(this.wsHeartbeatTimer);
+					this.wsHeartbeatTimer = null;
+				}
+			},
+			
+			// 计划重连
+			scheduleWSReconnect() {
+				// 清除之前的重连计划
+				if (this.wsReconnectTimer) {
+					clearTimeout(this.wsReconnectTimer);
+					this.wsReconnectTimer = null;
+				}
+				
+				// 检查是否达到最大重连次数
+				if (this.wsReconnectAttempts >= this.wsMaxReconnectAttempts) {
+					console.warn('⚠️ WebSocket已达到最大重连次数，停止重连');
+					return;
+				}
+				
+				this.wsReconnectAttempts++;
+				const delay = Math.min(1000 * Math.pow(2, this.wsReconnectAttempts), 30000); // 指数退避，最大30秒
+				
+				console.log(`🔄 将在 ${delay}ms 后尝试重连WebSocket (第${this.wsReconnectAttempts}次)`);
+				
+				this.wsReconnectTimer = setTimeout(() => {
+					this.connectWebSocket();
+				}, delay);
+			},
+			
+			// 断开WebSocket连接
+			disconnectWebSocket() {
+				if (this.socketTask) {
+					this.socketTask.close({
+						success: () => {
+							console.log('✅ WebSocket连接已断开');
+						}
+					});
+					this.socketTask = null;
+				}
+				
+				this.stopWSHeartbeat();
+				
+				if (this.wsReconnectTimer) {
+					clearTimeout(this.wsReconnectTimer);
+					this.wsReconnectTimer = null;
 				}
 			},
 			

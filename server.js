@@ -350,7 +350,27 @@ let globalLiveStatus = {
 	scheduledStartTime: null,
 	scheduledEndTime: null,
 	streamId: null,
-	isScheduled: false
+	isScheduled: false,
+	liveId: null,
+	startTime: null
+};
+
+// 添加AI识别状态管理
+let globalAIStatus = {
+	status: 'stopped',  // stopped / running / paused
+	aiSessionId: null,
+	startTime: null,
+	settings: {
+		mode: 'realtime',
+		interval: 5000,
+		sensitivity: 'high',
+		minConfidence: 0.7
+	},
+	statistics: {
+		totalContents: 0,
+		totalWords: 0,
+		averageConfidence: 0
+	}
 };
 
 // 定时检查直播计划
@@ -956,8 +976,8 @@ app.post('/api/admin/ai-content', (req, res) => {
 		aiDebateContent.push(newContent);
 		
 		// 广播新内容添加
-		broadcast('ai-content-added', {
-			content: newContent,
+		broadcast('newAIContent', {
+			...newContent,
 			updatedBy: 'admin'
 		});
 		
@@ -1020,8 +1040,8 @@ app.delete('/api/admin/ai-content/:id', (req, res) => {
 		const deletedContent = aiDebateContent.splice(index, 1)[0];
 		
 		// 广播内容删除
-		broadcast('ai-content-deleted', {
-			id: id,
+		broadcast('aiContentDeleted', {
+			contentId: id,
 			updatedBy: 'admin'
 		});
 		
@@ -1669,85 +1689,1062 @@ app.post('/api/wechat-login', async (req, res) => {
     }
 });
 
-// 用户投票
+// 用户投票（支持100票分配制）
 app.post('/api/user-vote', (req, res) => {
     console.log('═══════════════════════════════════════');
     console.log('✅ /api/user-vote 路由被调用');
     console.log('📥 请求来源:', req.headers.origin || req.headers.referer || '未知');
     console.log('📥 请求方法:', req.method);
-    console.log('📥 请求参数:', { side: req.body.side, votes: req.body.votes });
+    console.log('📥 请求参数:', req.body);
     console.log('📥 请求头:', {
         'content-type': req.headers['content-type'],
         'user-agent': req.headers['user-agent']?.substring(0, 50) + '...'
     });
     console.log('═══════════════════════════════════════');
     
-    const { side, votes } = req.body;
+    const { side, votes, leftVotes, rightVotes, userId } = req.body;
 
-    // 参数验证
-    if (!side) {
+    // 支持两种格式：
+    // 格式1（增量投票）: { side: "left"|"right", votes: number }
+    // 格式2（100票分配）: { leftVotes: number, rightVotes: number }
+    
+    let userLeftVotes = 0;
+    let userRightVotes = 0;
+    let voteMode = '';
+    
+    // 检测并解析不同格式
+    if (leftVotes !== undefined && rightVotes !== undefined) {
+        // 格式2：100票分配制
+        voteMode = '100票分配制';
+        userLeftVotes = parseInt(leftVotes) || 0;
+        userRightVotes = parseInt(rightVotes) || 0;
+        
+        // 验证总票数是否为100
+        const total = userLeftVotes + userRightVotes;
+        if (total !== 100) {
+            return res.status(400).json({
+                success: false,
+                message: `票数分配错误: 正方 ${userLeftVotes} + 反方 ${userRightVotes} = ${total}，必须等于100`
+            });
+        }
+        
+        if (userLeftVotes < 0 || userLeftVotes > 100 || userRightVotes < 0 || userRightVotes > 100) {
+            return res.status(400).json({
+                success: false,
+                message: "参数错误: 票数必须在 0-100 之间"
+            });
+        }
+        
+        console.log(`📊 100票分配制投票: 正方 ${userLeftVotes} 票, 反方 ${userRightVotes} 票`);
+        
+        // 100票分配制：直接累加用户的票数
+        currentVotes.leftVotes += userLeftVotes;
+        currentVotes.rightVotes += userRightVotes;
+        
+    } else if (side && (votes !== undefined || votes === null)) {
+        // 格式1：增量投票（兼容旧版本）
+        voteMode = '增量投票';
+        
+        if (side !== 'left' && side !== 'right') {
+            return res.status(400).json({
+                success: false,
+                message: "参数错误: side 必须为 'left' 或 'right'"
+            });
+        }
+
+        const voteCount = parseInt(votes) || 10;
+        if (voteCount < 1 || voteCount > 1000) {
+            return res.status(400).json({
+                success: false,
+                message: "参数错误: 投票数量必须在 1-1000 之间"
+            });
+        }
+        
+        console.log(`📊 增量投票: ${side === 'left' ? '正方' : '反方'} +${voteCount} 票`);
+        
+        if (side === 'left') {
+            currentVotes.leftVotes += voteCount;
+            userLeftVotes = voteCount;
+        } else {
+            currentVotes.rightVotes += voteCount;
+            userRightVotes = voteCount;
+        }
+        
+    } else {
         return res.status(400).json({
             success: false,
-            message: "缺少必要参数: side (必须为 'left' 或 'right')"
-        });
-    }
-
-    if (side !== 'left' && side !== 'right') {
-        return res.status(400).json({
-            success: false,
-            message: "参数错误: side 必须为 'left' 或 'right'"
-        });
-    }
-
-    const voteCount = parseInt(votes) || 10;
-    if (voteCount < 1 || voteCount > 1000) {
-        return res.status(400).json({
-            success: false,
-            message: "参数错误: 投票数量必须在 1-1000 之间"
+            message: "参数错误: 请提供 { leftVotes, rightVotes } 或 { side, votes }"
         });
     }
 
     // 更新数据库统计（如果已加载）
     try {
         const db = require('./admin/db.js');
-        if (req.body.userId) {
-            db.users.updateStats(req.body.userId, { votes: voteCount });
+        if (userId) {
+            const totalUserVotes = userLeftVotes + userRightVotes;
+            db.users.updateStats(userId, { votes: totalUserVotes });
         }
-        db.statistics.incrementVotes(voteCount);
+        db.statistics.incrementVotes(userLeftVotes + userRightVotes);
     } catch (error) {
         // 如果数据库模块未加载，忽略错误
         console.log('统计数据更新跳过（开发模式）');
     }
 
-    if (side === 'left') {
-        currentVotes.leftVotes += voteCount;
-    } else if (side === 'right') {
-        currentVotes.rightVotes += voteCount;
-    }
-
+    const total = currentVotes.leftVotes + currentVotes.rightVotes;
     const responseData = {
         success: true,
         data: {
             leftVotes: currentVotes.leftVotes,
             rightVotes: currentVotes.rightVotes,
-            leftPercentage: currentVotes.leftVotes + currentVotes.rightVotes > 0
-                ? Math.round((currentVotes.leftVotes / (currentVotes.leftVotes + currentVotes.rightVotes)) * 100)
+            totalVotes: total,
+            leftPercentage: total > 0
+                ? Math.round((currentVotes.leftVotes / total) * 100)
                 : 50,
-            rightPercentage: currentVotes.leftVotes + currentVotes.rightVotes > 0
-                ? Math.round((currentVotes.rightVotes / (currentVotes.leftVotes + currentVotes.rightVotes)) * 100)
+            rightPercentage: total > 0
+                ? Math.round((currentVotes.rightVotes / total) * 100)
                 : 50
-        }
+        },
+        message: `投票成功 (${voteMode})`
     };
+    
+    console.log(`✅ 投票成功！当前总票数: 正方 ${currentVotes.leftVotes} (${responseData.data.leftPercentage}%), 反方 ${currentVotes.rightVotes} (${responseData.data.rightPercentage}%)`);
 
-    // 广播投票更新给所有 WebSocket 客户端
-    broadcast('vote-updated', {
-        votes: responseData.data,
-        side: side,
-        voteCount: voteCount,
-        userId: req.body.userId || 'anonymous'
+    // 广播投票更新给所有 WebSocket 客户端（包括后台管理系统）
+    broadcast('votes-updated', {
+        leftVotes: currentVotes.leftVotes,
+        rightVotes: currentVotes.rightVotes,
+        leftPercentage: responseData.data.leftPercentage,
+        rightPercentage: responseData.data.rightPercentage,
+        totalVotes: total,
+        userVote: {
+            userId: userId || 'anonymous',
+            leftVotes: userLeftVotes,
+            rightVotes: userRightVotes,
+            mode: voteMode
+        },
+        timestamp: new Date().toISOString()
     });
 
     res.json(responseData);
+});
+
+// ==================== 后台管理系统控制接口 ====================
+
+// 一、直播控制接口
+
+// 1.1 开始直播
+app.post('/api/admin/live/start', (req, res) => {
+	try {
+		const { streamId, autoStartAI = false, notifyUsers = true } = req.body;
+		
+		// 检查直播是否已经开始
+		if (globalLiveStatus.isLive) {
+			return res.status(409).json({
+				success: false,
+				message: '直播已经在进行中'
+			});
+		}
+		
+		// 获取直播流
+		const db = require('./admin/db.js');
+		let stream = null;
+		
+		if (streamId) {
+			stream = db.streams.getById(streamId);
+			if (!stream) {
+				return res.status(404).json({
+					success: false,
+					message: '指定的直播流不存在'
+				});
+			}
+		} else {
+			stream = db.streams.getActive();
+			if (!stream) {
+				return res.status(400).json({
+					success: false,
+					message: '没有可用的直播流，请先配置直播流'
+				});
+			}
+		}
+		
+		// 生成直播ID
+		const liveId = uuidv4();
+		const startTime = new Date().toISOString();
+		
+		// 更新全局直播状态
+		globalLiveStatus.isLive = true;
+		globalLiveStatus.streamUrl = stream.url;
+		globalLiveStatus.streamId = stream.id;
+		globalLiveStatus.liveId = liveId;
+		globalLiveStatus.startTime = startTime;
+		
+		// 如果需要自动启动AI
+		if (autoStartAI && globalAIStatus.status !== 'running') {
+			globalAIStatus.status = 'running';
+			globalAIStatus.aiSessionId = uuidv4();
+			globalAIStatus.startTime = startTime;
+			
+			// 推送AI启动消息
+			broadcast('aiStatus', {
+				status: 'running',
+				aiSessionId: globalAIStatus.aiSessionId
+			});
+		}
+		
+		// 推送直播开始消息到小程序
+		if (notifyUsers) {
+			broadcast('liveStatus', {
+				isLive: true,
+				liveId: liveId,
+				streamUrl: stream.url,
+				startTime: startTime
+			});
+		}
+		
+		console.log(`✅ 直播已开始: ${liveId}, 流地址: ${stream.url}`);
+		
+		res.json({
+			success: true,
+			data: {
+				liveId: liveId,
+				streamUrl: stream.url,
+				status: 'started',
+				startTime: startTime,
+				notifiedUsers: wsClients.size
+			},
+			message: '直播已开始',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('开始直播失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '开始直播失败: ' + error.message
+		});
+	}
+});
+
+// 1.2 停止直播
+app.post('/api/admin/live/stop', (req, res) => {
+	try {
+		const { saveStatistics = true, notifyUsers = true } = req.body;
+		
+		if (!globalLiveStatus.isLive) {
+			return res.status(400).json({
+				success: false,
+				message: '直播未开始'
+			});
+		}
+		
+		const stopTime = new Date().toISOString();
+		const startTime = new Date(globalLiveStatus.startTime);
+		const duration = Math.floor((Date.now() - startTime.getTime()) / 1000);
+		
+		// 统计数据
+		const summary = {
+			totalViewers: wsClients.size,  // 简化统计
+			peakViewers: wsClients.size,
+			totalVotes: currentVotes.leftVotes + currentVotes.rightVotes,
+			totalComments: 0,  // 可以从数据库获取
+			totalLikes: 0
+		};
+		
+		// 保存统计数据到数据库
+		if (saveStatistics) {
+			const db = require('./admin/db.js');
+			db.statistics.updateDashboard({
+				totalVotes: summary.totalVotes,
+				lastLiveTime: stopTime,
+				liveDuration: duration
+			});
+		}
+		
+		const liveId = globalLiveStatus.liveId;
+		
+		// 重置直播状态
+		globalLiveStatus.isLive = false;
+		globalLiveStatus.streamUrl = null;
+		globalLiveStatus.liveId = null;
+		globalLiveStatus.startTime = null;
+		
+		// 推送直播停止消息
+		if (notifyUsers) {
+			broadcast('liveStatus', {
+				isLive: false,
+				liveId: liveId,
+				stopTime: stopTime
+			});
+		}
+		
+		console.log(`⏹️  直播已停止: ${liveId}`);
+		
+		res.json({
+			success: true,
+			data: {
+				liveId: liveId,
+				status: 'stopped',
+				stopTime: stopTime,
+				duration: duration,
+				summary: summary,
+				notifiedUsers: wsClients.size
+			},
+			message: '直播已停止',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('停止直播失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '停止直播失败: ' + error.message
+		});
+	}
+});
+
+// 1.3 更新投票数据
+app.post('/api/admin/live/update-votes', (req, res) => {
+	try {
+		const { action, leftVotes, rightVotes, reason, notifyUsers = true } = req.body;
+		
+		if (!action || !['set', 'add', 'reset'].includes(action)) {
+			return res.status(400).json({
+				success: false,
+				message: 'action参数必须是: set / add / reset'
+			});
+		}
+		
+		const beforeUpdate = {
+			leftVotes: currentVotes.leftVotes,
+			rightVotes: currentVotes.rightVotes
+		};
+		
+		// 执行操作
+		switch (action) {
+			case 'set':
+				currentVotes.leftVotes = parseInt(leftVotes) || 0;
+				currentVotes.rightVotes = parseInt(rightVotes) || 0;
+				break;
+			case 'add':
+				currentVotes.leftVotes += parseInt(leftVotes) || 0;
+				currentVotes.rightVotes += parseInt(rightVotes) || 0;
+				break;
+			case 'reset':
+				currentVotes.leftVotes = 0;
+				currentVotes.rightVotes = 0;
+				break;
+		}
+		
+		const total = currentVotes.leftVotes + currentVotes.rightVotes;
+		const afterUpdate = {
+			leftVotes: currentVotes.leftVotes,
+			rightVotes: currentVotes.rightVotes,
+			leftPercentage: total > 0 ? Math.round((currentVotes.leftVotes / total) * 100) : 50,
+			rightPercentage: total > 0 ? Math.round((currentVotes.rightVotes / total) * 100) : 50
+		};
+		
+		// 推送更新
+		if (notifyUsers) {
+			broadcast('votes-updated', afterUpdate);
+		}
+		
+		console.log(`📊 投票数据已更新 (${action}):`, afterUpdate);
+		
+		res.json({
+			success: true,
+			data: {
+				beforeUpdate,
+				afterUpdate,
+				updateTime: new Date().toISOString()
+			},
+			message: '投票数据已更新',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('更新投票数据失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '更新投票数据失败: ' + error.message
+		});
+	}
+});
+
+// 1.4 重置投票数据
+app.post('/api/admin/live/reset-votes', (req, res) => {
+	try {
+		const { resetTo, saveBackup = true, notifyUsers = true } = req.body;
+		
+		// 备份当前数据
+		const backup = saveBackup ? {
+			backupId: uuidv4(),
+			leftVotes: currentVotes.leftVotes,
+			rightVotes: currentVotes.rightVotes,
+			timestamp: new Date().toISOString()
+		} : null;
+		
+		// 重置票数
+		if (resetTo) {
+			currentVotes.leftVotes = parseInt(resetTo.leftVotes) || 0;
+			currentVotes.rightVotes = parseInt(resetTo.rightVotes) || 0;
+		} else {
+			currentVotes.leftVotes = 0;
+			currentVotes.rightVotes = 0;
+		}
+		
+		// 推送更新
+		if (notifyUsers) {
+			broadcast('votes-updated', {
+				leftVotes: currentVotes.leftVotes,
+				rightVotes: currentVotes.rightVotes,
+				leftPercentage: 50,
+				rightPercentage: 50
+			});
+		}
+		
+		console.log('🔄 投票数据已重置');
+		
+		res.json({
+			success: true,
+			data: {
+				backup,
+				currentVotes: {
+					leftVotes: currentVotes.leftVotes,
+					rightVotes: currentVotes.rightVotes
+				}
+			},
+			message: '投票数据已重置',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('重置投票数据失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '重置投票数据失败: ' + error.message
+		});
+	}
+});
+
+// 二、AI控制接口
+
+// 2.1 启动AI识别
+app.post('/api/admin/ai/start', (req, res) => {
+	try {
+		const { settings, notifyUsers = true } = req.body;
+		
+		if (globalAIStatus.status === 'running') {
+			return res.status(409).json({
+				success: false,
+				message: 'AI识别已在运行中'
+			});
+		}
+		
+		// 更新设置
+		if (settings) {
+			globalAIStatus.settings = {
+				...globalAIStatus.settings,
+				...settings
+			};
+		}
+		
+		// 启动AI
+		globalAIStatus.status = 'running';
+		globalAIStatus.aiSessionId = uuidv4();
+		globalAIStatus.startTime = new Date().toISOString();
+		globalAIStatus.statistics = {
+			totalContents: 0,
+			totalWords: 0,
+			averageConfidence: 0
+		};
+		
+		// 推送AI启动消息
+		if (notifyUsers) {
+			broadcast('aiStatus', {
+				status: 'running',
+				aiSessionId: globalAIStatus.aiSessionId
+			});
+		}
+		
+		console.log(`🤖 AI识别已启动: ${globalAIStatus.aiSessionId}`);
+		
+		res.json({
+			success: true,
+			data: {
+				aiSessionId: globalAIStatus.aiSessionId,
+				status: 'running',
+				startTime: globalAIStatus.startTime,
+				settings: globalAIStatus.settings
+			},
+			message: 'AI识别已启动',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('启动AI识别失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '启动AI识别失败: ' + error.message
+		});
+	}
+});
+
+// 2.2 停止AI识别
+app.post('/api/admin/ai/stop', (req, res) => {
+	try {
+		const { saveHistory = true, notifyUsers = true } = req.body;
+		
+		if (globalAIStatus.status === 'stopped') {
+			return res.status(400).json({
+				success: false,
+				message: 'AI识别未运行'
+			});
+		}
+		
+		const stopTime = new Date().toISOString();
+		const startTime = new Date(globalAIStatus.startTime);
+		const duration = Math.floor((Date.now() - startTime.getTime()) / 1000);
+		
+		const aiSessionId = globalAIStatus.aiSessionId;
+		const summary = { ...globalAIStatus.statistics };
+		
+		// 重置状态
+		globalAIStatus.status = 'stopped';
+		globalAIStatus.aiSessionId = null;
+		globalAIStatus.startTime = null;
+		
+		// 推送AI停止消息
+		if (notifyUsers) {
+			broadcast('aiStatus', {
+				status: 'stopped',
+				aiSessionId: aiSessionId
+			});
+		}
+		
+		console.log(`⏹️  AI识别已停止: ${aiSessionId}`);
+		
+		res.json({
+			success: true,
+			data: {
+				aiSessionId: aiSessionId,
+				status: 'stopped',
+				stopTime: stopTime,
+				duration: duration,
+				summary: summary
+			},
+			message: 'AI识别已停止',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('停止AI识别失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '停止AI识别失败: ' + error.message
+		});
+	}
+});
+
+// 2.3 暂停/恢复AI识别
+app.post('/api/admin/ai/toggle', (req, res) => {
+	try {
+		const { action, notifyUsers = true } = req.body;
+		
+		if (!action || !['pause', 'resume'].includes(action)) {
+			return res.status(400).json({
+				success: false,
+				message: 'action参数必须是: pause / resume'
+			});
+		}
+		
+		if (action === 'pause') {
+			if (globalAIStatus.status !== 'running') {
+				return res.status(400).json({
+					success: false,
+					message: 'AI识别未运行，无法暂停'
+				});
+			}
+			globalAIStatus.status = 'paused';
+		} else if (action === 'resume') {
+			if (globalAIStatus.status !== 'paused') {
+				return res.status(400).json({
+					success: false,
+					message: 'AI识别未暂停，无法恢复'
+				});
+			}
+			globalAIStatus.status = 'running';
+		}
+		
+		// 推送状态变更
+		if (notifyUsers) {
+			broadcast('aiStatus', {
+				status: globalAIStatus.status
+			});
+		}
+		
+		console.log(`🤖 AI识别状态已变更: ${globalAIStatus.status}`);
+		
+		res.json({
+			success: true,
+			data: {
+				aiSessionId: globalAIStatus.aiSessionId,
+				status: globalAIStatus.status,
+				actionTime: new Date().toISOString()
+			},
+			message: globalAIStatus.status === 'paused' ? 'AI识别已暂停' : 'AI识别已恢复',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('切换AI状态失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '切换AI状态失败: ' + error.message
+		});
+	}
+});
+
+// 2.4 删除AI内容
+app.delete('/api/admin/ai/content/:contentId', (req, res) => {
+	try {
+		const { contentId } = req.params;
+		const { reason, notifyUsers = true } = req.body;
+		
+		if (!contentId) {
+			return res.status(400).json({
+				success: false,
+				message: '缺少内容ID'
+			});
+		}
+		
+		// 这里应该从数据库删除AI内容
+		// 暂时模拟删除成功
+		
+		// 推送删除消息
+		if (notifyUsers) {
+			broadcast('aiContentDeleted', {
+				contentId: contentId
+			});
+		}
+		
+		console.log(`🗑️  AI内容已删除: ${contentId}`);
+		
+		res.json({
+			success: true,
+			data: {
+				contentId: contentId,
+				deleteTime: new Date().toISOString(),
+				reason: reason || '管理员删除'
+			},
+			message: '内容已删除',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('删除AI内容失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '删除AI内容失败: ' + error.message
+		});
+	}
+});
+
+// 三、数据查询接口
+
+// 3.1 实时数据概览
+app.get('/api/admin/dashboard', (req, res) => {
+	try {
+		const db = require('./admin/db.js');
+		const users = db.users.getAll();
+		const debate = db.debate.get();
+		
+		const totalVotes = currentVotes.leftVotes + currentVotes.rightVotes;
+		const leftPercentage = totalVotes > 0 ? Math.round((currentVotes.leftVotes / totalVotes) * 100) : 50;
+		const rightPercentage = totalVotes > 0 ? Math.round((currentVotes.rightVotes / totalVotes) * 100) : 50;
+		
+		// 计算直播时长
+		let liveDuration = 0;
+		if (globalLiveStatus.isLive && globalLiveStatus.startTime) {
+			const startTime = new Date(globalLiveStatus.startTime);
+			liveDuration = Math.floor((Date.now() - startTime.getTime()) / 1000);
+		}
+		
+		const data = {
+			totalUsers: users.length,
+			activeUsers: wsClients.size,
+			isLive: globalLiveStatus.isLive,
+			liveStreamUrl: globalLiveStatus.streamUrl,
+			totalVotes: totalVotes,
+			leftVotes: currentVotes.leftVotes,
+			rightVotes: currentVotes.rightVotes,
+			leftPercentage: leftPercentage,
+			rightPercentage: rightPercentage,
+			totalComments: 0,  // 可从数据库获取
+			totalLikes: 0,     // 可从数据库获取
+			aiStatus: globalAIStatus.status,
+			debateTopic: {
+				title: debate.title,
+				leftSide: debate.leftPosition,
+				rightSide: debate.rightPosition,
+				description: debate.description
+			},
+			liveStartTime: globalLiveStatus.startTime,
+			liveDuration: liveDuration
+		};
+		
+		res.json({
+			success: true,
+			data: data,
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('获取数据概览失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '获取数据概览失败: ' + error.message
+		});
+	}
+});
+
+// 3.2 用户列表
+app.get('/api/admin/miniprogram/users', (req, res) => {
+	try {
+		const db = require('./admin/db.js');
+		const users = db.users.getAll();
+		
+		const page = parseInt(req.query.page) || 1;
+		const pageSize = parseInt(req.query.pageSize) || 20;
+		const status = req.query.status || 'all';
+		const orderBy = req.query.orderBy || 'joinTime';
+		
+		// 过滤用户
+		let filteredUsers = users;
+		if (status === 'online') {
+			// 简化处理：假设所有WebSocket连接的用户都是在线
+			filteredUsers = users.filter(u => wsClients.size > 0);
+		}
+		
+		// 排序
+		filteredUsers.sort((a, b) => {
+			if (orderBy === 'votes') {
+				return (b.statistics?.totalVotes || 0) - (a.statistics?.totalVotes || 0);
+			}
+			return new Date(b.joinTime) - new Date(a.joinTime);
+		});
+		
+		// 分页
+		const total = filteredUsers.length;
+		const start = (page - 1) * pageSize;
+		const end = start + pageSize;
+		const paginatedUsers = filteredUsers.slice(start, end);
+		
+		res.json({
+			success: true,
+			data: {
+				total: total,
+				page: page,
+				pageSize: pageSize,
+				users: paginatedUsers.map(u => ({
+					userId: u.id,
+					nickname: u.nickname,
+					avatar: u.avatar,
+					status: 'online',  // 简化处理
+					lastActiveTime: new Date().toISOString(),
+					statistics: u.statistics || {
+						totalVotes: 0,
+						totalComments: 0,
+						totalLikes: 0,
+						currentPosition: 'neutral'
+					},
+					joinTime: u.createdAt || new Date().toISOString()
+				}))
+			},
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('获取用户列表失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '获取用户列表失败: ' + error.message
+		});
+	}
+});
+
+// 3.3 投票统计
+app.get('/api/admin/votes/statistics', (req, res) => {
+	try {
+		const timeRange = req.query.timeRange || '1h';
+		
+		const totalVotes = currentVotes.leftVotes + currentVotes.rightVotes;
+		const leftPercentage = totalVotes > 0 ? Math.round((currentVotes.leftVotes / totalVotes) * 100) : 50;
+		const rightPercentage = totalVotes > 0 ? Math.round((currentVotes.rightVotes / totalVotes) * 100) : 50;
+		
+		// 简化：生成模拟时间轴数据
+		const timeline = [];
+		const now = new Date();
+		for (let i = 0; i < 10; i++) {
+			const time = new Date(now.getTime() - i * 60000);  // 每分钟一个点
+			timeline.unshift({
+				timestamp: time.toISOString(),
+				leftVotes: Math.floor(currentVotes.leftVotes * (10 - i) / 10),
+				rightVotes: Math.floor(currentVotes.rightVotes * (10 - i) / 10),
+				totalVotes: Math.floor(totalVotes * (10 - i) / 10),
+				activeUsers: wsClients.size
+			});
+		}
+		
+		res.json({
+			success: true,
+			data: {
+				summary: {
+					totalVotes: totalVotes,
+					leftVotes: currentVotes.leftVotes,
+					rightVotes: currentVotes.rightVotes,
+					leftPercentage: leftPercentage,
+					rightPercentage: rightPercentage,
+					growthRate: 5.2
+				},
+				timeline: timeline,
+				topVoters: []  // 可从数据库获取
+			},
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('获取投票统计失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '获取投票统计失败: ' + error.message
+		});
+	}
+});
+
+// 3.4 AI内容列表
+app.get('/api/admin/ai-content/list', (req, res) => {
+	try {
+		const page = parseInt(req.query.page) || 1;
+		const pageSize = parseInt(req.query.pageSize) || 20;
+		
+		// 这里应该从数据库获取AI内容
+		// 暂时返回空列表
+		res.json({
+			success: true,
+			data: {
+				total: 0,
+				page: page,
+				pageSize: pageSize,
+				items: []
+			},
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('获取AI内容列表失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '获取AI内容列表失败: ' + error.message
+		});
+	}
+});
+
+// ==================== 直播流管理接口 ====================
+
+// 获取所有直播流列表
+app.get('/api/admin/streams', (req, res) => {
+	try {
+		const streams = db.streams.getAll();
+		
+		res.json({
+			success: true,
+			data: streams,
+			total: streams.length,
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('获取直播流列表失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '获取直播流列表失败: ' + error.message
+		});
+	}
+});
+
+// 添加新的直播流
+app.post('/api/admin/streams', (req, res) => {
+	try {
+		const { name, url, type, description, enabled } = req.body;
+		
+		// 参数验证
+		if (!name || !url || !type) {
+			return res.status(400).json({
+				success: false,
+				message: '缺少必要参数: name, url, type 必填'
+			});
+		}
+		
+		// 验证URL格式
+		try {
+			new URL(url);
+		} catch (e) {
+			return res.status(400).json({
+				success: false,
+				message: '流地址格式不正确，请输入有效的URL'
+			});
+		}
+		
+		// 验证type
+		if (!['hls', 'rtmp', 'flv'].includes(type)) {
+			return res.status(400).json({
+				success: false,
+				message: 'type 必须是 hls, rtmp 或 flv'
+			});
+		}
+		
+		// 创建新流
+		const newStream = {
+			id: `stream-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+			name: name.trim(),
+			url: url.trim(),
+			type,
+			description: description ? description.trim() : '',
+			enabled: enabled !== false, // 默认启用
+			createdAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString()
+		};
+		
+		// 保存到数据库
+		db.streams.add(newStream);
+		
+		console.log('✅ 新增直播流:', newStream.name, newStream.url);
+		
+		res.json({
+			success: true,
+			data: newStream,
+			message: '直播流添加成功',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('添加直播流失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '添加直播流失败: ' + error.message
+		});
+	}
+});
+
+// 更新直播流
+app.put('/api/admin/streams/:streamId', (req, res) => {
+	try {
+		const { streamId } = req.params;
+		const { name, url, type, description, enabled } = req.body;
+		
+		// 查找流
+		const stream = db.streams.getById(streamId);
+		if (!stream) {
+			return res.status(404).json({
+				success: false,
+				message: '直播流不存在'
+			});
+		}
+		
+		// 验证URL格式（如果有更新）
+		if (url) {
+			try {
+				new URL(url);
+			} catch (e) {
+				return res.status(400).json({
+					success: false,
+					message: '流地址格式不正确，请输入有效的URL'
+				});
+			}
+		}
+		
+		// 验证type（如果有更新）
+		if (type && !['hls', 'rtmp', 'flv'].includes(type)) {
+			return res.status(400).json({
+				success: false,
+				message: 'type 必须是 hls, rtmp 或 flv'
+			});
+		}
+		
+		// 更新字段
+		const updates = {};
+		if (name !== undefined) updates.name = name.trim();
+		if (url !== undefined) updates.url = url.trim();
+		if (type !== undefined) updates.type = type;
+		if (description !== undefined) updates.description = description.trim();
+		if (enabled !== undefined) updates.enabled = enabled;
+		updates.updatedAt = new Date().toISOString();
+		
+		// 保存更新
+		const updatedStream = db.streams.update(streamId, updates);
+		
+		console.log('✅ 更新直播流:', streamId, updates);
+		
+		res.json({
+			success: true,
+			data: updatedStream,
+			message: '直播流更新成功',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('更新直播流失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '更新直播流失败: ' + error.message
+		});
+	}
+});
+
+// 删除直播流
+app.delete('/api/admin/streams/:streamId', (req, res) => {
+	try {
+		const { streamId } = req.params;
+		
+		// 查找流
+		const stream = db.streams.getById(streamId);
+		if (!stream) {
+			return res.status(404).json({
+				success: false,
+				message: '直播流不存在'
+			});
+		}
+		
+		// 检查是否正在使用
+		if (currentLiveStatus && currentLiveStatus.streamId === streamId) {
+			return res.status(400).json({
+				success: false,
+				message: '该直播流正在使用中，请先停止直播'
+			});
+		}
+		
+		// 删除
+		db.streams.delete(streamId);
+		
+		console.log('✅ 删除直播流:', streamId, stream.name);
+		
+		res.json({
+			success: true,
+			data: {
+				id: streamId,
+				name: stream.name
+			},
+			message: '直播流删除成功',
+			timestamp: Date.now()
+		});
+		
+	} catch (error) {
+		console.error('删除直播流失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '删除直播流失败: ' + error.message
+		});
+	}
 });
 
 // 启动服务器
