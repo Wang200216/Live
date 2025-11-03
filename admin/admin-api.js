@@ -13,19 +13,39 @@ const getAPIBase = () => {
 
 // ==================== 通用请求函数 ====================
 
+// 获取认证Token（如果需要）
+function getAuthToken() {
+	// 从localStorage或sessionStorage获取token
+	if (typeof window !== 'undefined') {
+		return localStorage.getItem('admin_token') || sessionStorage.getItem('admin_token') || null;
+	}
+	return null;
+}
+
 async function apiRequest(endpoint, options = {}) {
 	const API_BASE = getAPIBase();
 	const url = `${API_BASE}${endpoint}`;
+	
+	// 准备请求头
+	const headers = {
+		'Content-Type': 'application/json',
+		...options.headers
+	};
+	
+	// 如果是v1接口，添加认证token（如果存在）
+	if (endpoint.startsWith('/api/v1/')) {
+		const token = getAuthToken();
+		if (token) {
+			headers['Authorization'] = `Bearer ${token}`;
+		}
+	}
 	
 	try {
 		console.log(`📡 API 请求: ${options.method || 'GET'} ${endpoint}`, options.body ? JSON.parse(options.body) : '');
 		
 		const response = await fetch(url, {
 			...options,
-			headers: {
-				'Content-Type': 'application/json',
-				...options.headers
-			}
+			headers
 		});
 		
 		const data = await response.json();
@@ -269,20 +289,21 @@ async function fetchVotesStatistics(timeRange = '1h') {
  * 获取AI内容列表
  * @param {number} page - 页码（从1开始）
  * @param {number} pageSize - 每页数量
- * @param {string|null} startTime - 开始时间（可选）
- * @param {string|null} endTime - 结束时间（可选）
+ * @param {string|null} startTime - 开始时间（可选，ISO格式：2024-01-01T00:00:00）
+ * @param {string|null} endTime - 结束时间（可选，ISO格式：2024-01-01T23:59:59）
  * @returns {Promise<Object|null>}
  */
 async function fetchAIContentList(page = 1, pageSize = 20, startTime = null, endTime = null) {
 	const queryParams = new URLSearchParams({
-		page,
-		pageSize
+		page: page.toString(),
+		pageSize: pageSize.toString()
 	});
 	
 	if (startTime) queryParams.append('startTime', startTime);
 	if (endTime) queryParams.append('endTime', endTime);
 	
-	return await apiRequest(`/api/admin/ai-content/list?${queryParams}`, {
+	// 使用新的API路径 /api/v1/admin/ai-content/list
+	return await apiRequest(`/api/v1/admin/ai-content/list?${queryParams}`, {
 		method: 'GET'
 	});
 }
@@ -292,15 +313,16 @@ async function fetchAIContentList(page = 1, pageSize = 20, startTime = null, end
  * @param {string} contentId - AI内容ID
  * @param {number} page - 页码（从1开始）
  * @param {number} pageSize - 每页数量
- * @returns {Promise<Object|null>}
+ * @returns {Promise<Object|null>} 返回 { contentId, contentText, total, page, pageSize, comments }
  */
 async function fetchAIContentComments(contentId, page = 1, pageSize = 20) {
 	const queryParams = new URLSearchParams({
-		page,
-		pageSize
+		page: page.toString(),
+		pageSize: pageSize.toString()
 	});
 	
-	return await apiRequest(`/api/admin/ai-content/${contentId}/comments?${queryParams}`, {
+	// 使用新的API路径 /api/v1/admin/ai-content/{content_id}/comments
+	return await apiRequest(`/api/v1/admin/ai-content/${contentId}/comments?${queryParams}`, {
 		method: 'GET'
 	});
 }
@@ -314,7 +336,8 @@ async function fetchAIContentComments(contentId, page = 1, pageSize = 20) {
  * @returns {Promise<Object|null>}
  */
 async function deleteAIContentComment(contentId, commentId, reason = '', notifyUsers = true) {
-	return await apiRequest(`/api/admin/ai-content/${contentId}/comments/${commentId}`, {
+	// 使用新的API路径 /api/v1/admin/ai-content/{content_id}/comments/{comment_id}
+	return await apiRequest(`/api/v1/admin/ai-content/${contentId}/comments/${commentId}`, {
 		method: 'DELETE',
 		body: JSON.stringify({
 			reason,

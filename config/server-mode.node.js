@@ -27,11 +27,11 @@ const getCurrentServerConfig = () => {
             }
         };
     } else {
-        // 本地运行时使用8080端口，远程连接使用8000端口
+        // 使用真实服务器，统一使用8000端口
         return {
             mode: 'real',
             url: REAL_SERVER_URL,
-            port: 8080,  // 本地运行端口改为8080
+            port: 8000,  // 使用8000端口与前端请求保持一致
             wechat: {
                 useMock: false,
                 appid: REAL_WECHAT_CONFIG.appid,

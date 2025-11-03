@@ -922,6 +922,104 @@ app.get('/api/admin/ai-content', (req, res) => {
 	}
 });
 
+// ==================== v1 API 路由（兼容新版本前端） ====================
+// 这些路由与上面的路由功能相同，但使用 /api/v1 前缀，支持认证token
+
+// v1: 获取AI内容列表（必须在 /api/admin/ai-content/:id 之前定义，避免路由冲突）
+app.get('/api/v1/admin/ai-content/list', (req, res) => {
+	console.log('✅ v1 AI内容列表路由被调用:', req.query);
+	try {
+		const page = parseInt(req.query.page) || 1;
+		const pageSize = parseInt(req.query.pageSize) || 20;
+		const startTime = req.query.startTime || null;
+		const endTime = req.query.endTime || null;
+		
+		// 验证pageSize最大值
+		if (pageSize > 100) {
+			return res.status(400).json({
+				success: false,
+				message: 'pageSize最大值为100'
+			});
+		}
+		
+		// 从 aiDebateContent 数组中获取数据
+		let filteredContent = [...aiDebateContent];
+		
+		// 按时间过滤（如果有提供）
+		if (startTime) {
+			filteredContent = filteredContent.filter(item => {
+				const itemTime = item.timestamp || item.createdAt || 0;
+				return new Date(itemTime) >= new Date(startTime);
+			});
+		}
+		if (endTime) {
+			filteredContent = filteredContent.filter(item => {
+				const itemTime = item.timestamp || item.createdAt || 0;
+				return new Date(itemTime) <= new Date(endTime);
+			});
+		}
+		
+		// 计算总数
+		const total = filteredContent.length;
+		
+		// 分页
+		const start = (page - 1) * pageSize;
+		const end = start + pageSize;
+		const paginatedContent = filteredContent.slice(start, end);
+		
+		// 转换为文档格式
+		const items = paginatedContent.map(item => {
+			// 计算评论数
+			const commentCount = (item.comments && Array.isArray(item.comments)) ? item.comments.length : 0;
+			
+			// 转换timestamp为ISO格式
+			let timestampISO = '';
+			if (item.timestamp) {
+				// 如果是时间戳（数字），转换为ISO格式
+				if (typeof item.timestamp === 'number') {
+					timestampISO = new Date(item.timestamp).toISOString();
+				} else {
+					timestampISO = new Date(item.timestamp).toISOString();
+				}
+			} else if (item.createdAt) {
+				timestampISO = new Date(item.createdAt).toISOString();
+			} else {
+				timestampISO = new Date().toISOString();
+			}
+			
+			return {
+				id: item.id,
+				content: item.content || item.text || '', // 优先使用content，如果没有则使用text
+				type: 'summary', // 固定值
+				timestamp: timestampISO,
+				position: item.position || item.side || 'left', // side转换为position
+				confidence: item.confidence || 0.95, // 默认置信度
+				statistics: {
+					views: item.statistics?.views || item.views || 0,
+					likes: item.statistics?.likes || item.likes || 0,
+					comments: commentCount // 只返回数量，不返回详细评论
+				}
+			};
+		});
+		
+		res.json({
+			success: true,
+			data: {
+				total: total,
+				page: page,
+				items: items
+			}
+		});
+		
+	} catch (error) {
+		console.error('获取AI内容列表失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '获取AI内容列表失败: ' + error.message
+		});
+	}
+});
+
 // AI内容列表（必须在 /api/admin/ai-content/:id 之前定义，避免路由冲突）
 app.get('/api/admin/ai-content/list', (req, res) => {
 	try {
@@ -1118,6 +1216,190 @@ app.delete('/api/admin/ai-content/:id/comments/:commentId', (req, res) => {
 	}
 });
 
+// v1: 获取AI内容评论列表
+app.get('/api/v1/admin/ai-content/:id/comments', (req, res) => {
+	try {
+		const { id } = req.params;
+		const page = parseInt(req.query.page) || 1;
+		const pageSize = parseInt(req.query.pageSize) || 20;
+		
+		// 验证pageSize最大值
+		if (pageSize > 100) {
+			return res.status(400).json({
+				success: false,
+				message: 'pageSize最大值为100'
+			});
+		}
+		
+		// 查找AI内容
+		const content = aiDebateContent.find(item => item.id === id);
+		
+		if (!content) {
+			return res.status(404).json({
+				success: false,
+				message: 'AI内容不存在'
+			});
+		}
+		
+		// 获取评论列表（从 content.comments）
+		let comments = [];
+		if (content.comments && Array.isArray(content.comments)) {
+			comments = content.comments;
+		}
+		
+		// 按时间倒序排序（最新的在前）
+		comments.sort((a, b) => {
+			const timeA = a.timestamp || a.time || 0;
+			const timeB = b.timestamp || b.time || 0;
+			// 如果是时间戳，直接比较；如果是ISO字符串，转换为时间戳比较
+			const tsA = typeof timeA === 'number' ? timeA : new Date(timeA).getTime();
+			const tsB = typeof timeB === 'number' ? timeB : new Date(timeB).getTime();
+			return tsB - tsA; // 降序
+		});
+		
+		// 分页
+		const total = comments.length;
+		const start = (page - 1) * pageSize;
+		const end = start + pageSize;
+		const paginatedComments = comments.slice(start, end);
+		
+		// 转换为文档格式
+		const formattedComments = paginatedComments.map(comment => {
+			// 转换timestamp为ISO格式
+			let timestampISO = '';
+			if (comment.timestamp) {
+				if (typeof comment.timestamp === 'number') {
+					timestampISO = new Date(comment.timestamp).toISOString();
+				} else {
+					timestampISO = new Date(comment.timestamp).toISOString();
+				}
+			} else if (comment.time) {
+				// 如果只有time字段（如"刚刚"、"3分钟前"），使用当前时间
+				timestampISO = new Date().toISOString();
+			} else {
+				timestampISO = new Date().toISOString();
+			}
+			
+			// 判断是否为匿名用户
+			const userId = comment.userId || 
+				(comment.user === '匿名用户' || !comment.user ? 'anonymous' : null) || 
+				'anonymous';
+			
+			return {
+				commentId: comment.commentId || comment.id || '',
+				userId: userId,
+				nickname: comment.nickname || comment.user || '匿名用户',
+				avatar: comment.avatar || '👤',
+				content: comment.content || comment.text || '',
+				likes: comment.likes || 0,
+				timestamp: timestampISO
+			};
+		});
+		
+		res.json({
+			success: true,
+			data: {
+				contentId: id,
+				contentText: content.content || content.text || '',
+				total: total,
+				page: page,
+				pageSize: pageSize,
+				comments: formattedComments
+			}
+		});
+		
+	} catch (error) {
+		console.error('获取AI内容评论列表失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '获取评论列表失败: ' + error.message
+		});
+	}
+});
+
+// v1: 删除AI内容评论
+app.delete('/api/v1/admin/ai-content/:id/comments/:commentId', (req, res) => {
+	try {
+		const { id, commentId } = req.params;
+		const { reason = '', notifyUsers = true } = req.body;
+		
+		// 查找AI内容
+		const content = aiDebateContent.find(item => item.id === id);
+		
+		if (!content) {
+			return res.status(404).json({
+				success: false,
+				message: 'AI内容不存在'
+			});
+		}
+		
+		// 获取评论列表
+		let comments = [];
+		if (content.comments && Array.isArray(content.comments)) {
+			comments = content.comments;
+		}
+		
+		// 查找评论（支持commentId或id字段）
+		const commentIndex = comments.findIndex(c => {
+			const cId = c.commentId || c.id;
+			return cId === commentId || String(cId) === String(commentId);
+		});
+		
+		if (commentIndex === -1) {
+			return res.status(404).json({
+				success: false,
+				message: `评论ID ${commentId} 不存在或不属于内容ID ${id}`
+			});
+		}
+		
+		// 删除评论
+		const deletedComment = comments.splice(commentIndex, 1)[0];
+		
+		// 更新内容中的评论数组
+		content.comments = comments;
+		
+		// 更新统计数据
+		if (content.statistics) {
+			content.statistics.comments = (content.statistics.comments || 0) - 1;
+		} else {
+			content.statistics = {
+				views: content.statistics?.views || 0,
+				likes: content.statistics?.likes || content.likes || 0,
+				comments: comments.length
+			};
+		}
+		
+		// 如果通知用户，通过WebSocket广播删除通知
+		if (notifyUsers) {
+			broadcast('comment-deleted', {
+				contentId: id,
+				commentId: commentId,
+				timestamp: Date.now()
+			});
+		}
+		
+		console.log(`🗑️  已删除评论: ${commentId}, 原因: ${reason || '管理员删除'}`);
+		
+		// 按照文档格式返回响应
+		res.json({
+			success: true,
+			data: {
+				commentId: commentId,
+				contentId: id,
+				deleteTime: null // 由前端填充当前时间
+			},
+			message: '评论已删除'
+		});
+		
+	} catch (error) {
+		console.error('删除评论失败:', error);
+		res.status(500).json({
+			success: false,
+			message: '删除评论失败: ' + error.message
+		});
+	}
+});
+
 app.post('/api/admin/ai-content', (req, res) => {
 	try {
 		const { text, side, debate_id } = req.body;
@@ -1274,6 +1556,14 @@ const proxyMiddleware = createProxyMiddleware({
 	}
 });
 
+// 添加请求日志中间件（调试用）
+app.use((req, res, next) => {
+	if (req.path.startsWith('/api')) {
+		console.log(`📥 API请求: ${req.method} ${req.path}`);
+	}
+	next();
+});
+
 // 使用条件中间件来确保 /api 和 /admin 路径不会被代理
 app.use((req, res, next) => {
 	// 如果是 /api 或 /admin 路径，直接跳过代理，继续处理
@@ -1286,6 +1576,17 @@ app.use((req, res, next) => {
 
 // 静态文件服务
 app.use(express.static('.'));
+
+// 404处理器（调试用）
+app.use((req, res, next) => {
+	console.log(`⚠️  404未找到路由: ${req.method} ${req.url}`);
+	res.status(404).json({
+		error: 'Not Found',
+		path: req.url,
+		message: `路由 ${req.url} 未定义`,
+		server: 'Node.js/Express'
+	});
+});
 
 
 // 模拟数据

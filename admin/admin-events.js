@@ -289,13 +289,18 @@ async function loadAIContentList(page = 1) {
 		`;
 	}).join('');
 	
-	// 更新分页
+	// 更新分页（新接口返回格式：{ total, page, items }）
 	const pagination = document.getElementById('ai-content-pagination');
 	if (pagination) {
-		pagination.style.display = 'block';
-		const pageInfo = document.getElementById('ai-page-info');
-		if (pageInfo) {
-			pageInfo.textContent = `第 ${data.page} 页 / 共 ${Math.ceil(data.total / 20)} 页`;
+		const totalPages = data.total ? Math.ceil(data.total / 20) : 0;
+		if (totalPages > 1) {
+			pagination.style.display = 'block';
+			const pageInfo = document.getElementById('ai-page-info');
+			if (pageInfo) {
+				pageInfo.textContent = `第 ${data.page || page} 页 / 共 ${totalPages} 页`;
+			}
+		} else {
+			pagination.style.display = 'none';
 		}
 	}
 }

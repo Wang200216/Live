@@ -1447,15 +1447,17 @@ async function openCommentsModal(contentId) {
 	modal.classList.add('show');
 	
 	try {
-		// 调用API获取评论列表
-		const data = await fetchAIContentComments(contentId, 1, 50);
+		// 调用API获取评论列表（新接口返回格式：{ success: true, data: { contentId, contentText, total, page, pageSize, comments } }）
+		const responseData = await fetchAIContentComments(contentId, 1, 50);
 		
-		if (!data || !data.comments) {
+		// 适配新接口响应格式（apiRequest已经提取了data字段，直接使用）
+		// 新接口返回：{ contentId, contentText, total, page, pageSize, comments }
+		if (!responseData || !responseData.comments) {
 			listEl.innerHTML = '<div class="empty-state">暂无评论</div>';
 			return;
 		}
 		
-		const comments = data.comments || [];
+		const comments = responseData.comments || [];
 		
 		if (comments.length === 0) {
 			listEl.innerHTML = '<div class="empty-state">暂无评论</div>';
@@ -1465,35 +1467,39 @@ async function openCommentsModal(contentId) {
 		// 清空列表
 		listEl.innerHTML = '';
 		
-		// 显示评论总数
+		// 显示评论总数（新接口使用 total 字段）
 		const header = document.createElement('div');
 		header.style.cssText = 'padding: 10px 15px; background: #f5f5f5; border-bottom: 1px solid #e0e0e0; margin: -15px -15px 15px -15px; font-weight: 600;';
-		header.textContent = `共 ${data.total || comments.length} 条评论`;
+		header.textContent = `共 ${responseData.total || comments.length} 条评论`;
 		listEl.appendChild(header);
 		
-		// 渲染评论列表
+		// 渲染评论列表（新接口使用 comment.commentId）
 		comments.forEach(comment => {
 			const commentEl = document.createElement('div');
 			commentEl.style.cssText = 'padding: 15px; border-bottom: 1px solid #eee; background: white;';
 			
+			// 转义HTML特殊字符防止XSS
+			const safeContent = (comment.content || comment.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+			const safeCommentId = (comment.commentId || comment.id || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+			const safeNickname = (comment.nickname || '匿名用户').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+			
 			const timestamp = comment.timestamp ? new Date(comment.timestamp).toLocaleString('zh-CN') : '';
 			const avatar = comment.avatar || '👤';
-			const nickname = comment.nickname || '匿名用户';
 			const likes = comment.likes || 0;
 			
 			commentEl.innerHTML = `
 				<div style="display: flex; align-items: center; margin-bottom: 10px;">
 					<span style="font-size: 24px; margin-right: 10px;">${avatar}</span>
 					<div style="flex: 1;">
-						<div style="font-weight: 600; color: #333; margin-bottom: 4px;">${nickname}</div>
+						<div style="font-weight: 600; color: #333; margin-bottom: 4px;">${safeNickname}</div>
 						<div style="font-size: 12px; color: #999;">
 							${timestamp}
 							${likes > 0 ? `<span style="margin-left: 10px;">❤️ ${likes}</span>` : ''}
 						</div>
 					</div>
-					<button class="btn btn-sm btn-danger" onclick='deleteComment("${contentId}", "${comment.commentId || comment.id}")' style="padding: 4px 8px; font-size: 12px;">删除</button>
+					<button class="btn btn-sm btn-danger" onclick='deleteComment("${contentId}", "${safeCommentId}")' style="padding: 4px 8px; font-size: 12px;">删除</button>
 				</div>
-				<div style="color: #333; line-height: 1.6; margin-top: 8px;">${(comment.content || comment.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+				<div style="color: #333; line-height: 1.6; margin-top: 8px;">${safeContent}</div>
 			`;
 			
 			listEl.appendChild(commentEl);
