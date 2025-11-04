@@ -344,6 +344,10 @@ let globalLiveStatus = {
 	startTime: null
 };
 
+// 每个流的独立直播状态（支持多流同时管理）
+// 格式: { streamId: { isLive: true/false, liveId: 'xxx', startTime: 'xxx', streamUrl: 'xxx' } }
+let streamLiveStatuses = {};
+
 // 添加AI识别状态管理
 let globalAIStatus = {
 	status: 'stopped',  // stopped / running / paused
@@ -702,9 +706,22 @@ app.get('/api/admin/live/status', (req, res) => {
 	try {
 		const db = require('./admin/db.js');
 		const schedule = db.liveSchedule.get();
+		
+		// 获取启用的直播流（即使直播未开始，也返回启用的流地址）
+		let activeStream = null;
+		try {
+			activeStream = db.streams.getActive();
+		} catch (error) {
+			console.warn('获取启用直播流失败:', error);
+		}
+		
 		res.json({
 			...globalLiveStatus,
-			schedule: schedule
+			schedule: schedule,
+			// 如果直播未开始但有启用的流，返回流地址以便小程序使用
+			activeStreamUrl: activeStream ? activeStream.url : null,
+			activeStreamId: activeStream ? activeStream.id : null,
+			activeStreamName: activeStream ? activeStream.name : null
 		});
 	} catch (error) {
 		res.json(globalLiveStatus);
@@ -2305,14 +2322,6 @@ app.post('/api/admin/live/start', (req, res) => {
 	try {
 		const { streamId, autoStartAI = false, notifyUsers = true } = req.body;
 		
-		// 检查直播是否已经开始
-		if (globalLiveStatus.isLive) {
-			return res.status(409).json({
-				success: false,
-				message: '直播已经在进行中'
-			});
-		}
-		
 		// 获取直播流
 		const db = require('./admin/db.js');
 		let stream = null;
@@ -2335,11 +2344,44 @@ app.post('/api/admin/live/start', (req, res) => {
 			}
 		}
 		
+		// 检查该流是否已经在直播
+		if (streamLiveStatuses[stream.id] && streamLiveStatuses[stream.id].isLive) {
+			return res.status(409).json({
+				success: false,
+				message: '该直播流已经在进行中'
+			});
+		}
+		
+		// ⚠️ 重要：停止所有其他正在直播的流
+		for (const [otherStreamId, status] of Object.entries(streamLiveStatuses)) {
+			if (otherStreamId !== stream.id && status.isLive) {
+				console.log(`🛑 自动停止其他直播流: ${otherStreamId}`);
+				streamLiveStatuses[otherStreamId].isLive = false;
+				streamLiveStatuses[otherStreamId].stopTime = new Date().toISOString();
+				
+				// 广播其他流停止的消息
+				broadcast('liveStatus', {
+					streamId: otherStreamId,
+					isLive: false,
+					stopTime: streamLiveStatuses[otherStreamId].stopTime
+				});
+			}
+		}
+		
 		// 生成直播ID
 		const liveId = uuidv4();
 		const startTime = new Date().toISOString();
 		
-		// 更新全局直播状态
+		// 更新该流的直播状态
+		streamLiveStatuses[stream.id] = {
+			isLive: true,
+			liveId: liveId,
+			startTime: startTime,
+			streamUrl: stream.url,
+			streamName: stream.name
+		};
+		
+		// 更新全局直播状态（当前活跃的流）
 		globalLiveStatus.isLive = true;
 		globalLiveStatus.streamUrl = stream.url;
 		globalLiveStatus.streamId = stream.id;
@@ -2396,10 +2438,26 @@ app.post('/api/admin/live/start', (req, res) => {
 // 1.2 停止直播
 app.post('/api/admin/live/stop', (req, res) => {
 	try {
-		const { saveStatistics = true, notifyUsers = true } = req.body;
+		const { streamId, saveStatistics = true, notifyUsers = true } = req.body;
 		
-		// 如果直播未开始，直接返回成功（幂等操作）
-		if (!globalLiveStatus.isLive) {
+		// 确定要停止的流ID
+		const targetStreamId = streamId || globalLiveStatus.streamId;
+		
+		// 如果指定了streamId，检查该流是否在直播
+		if (targetStreamId && streamLiveStatuses[targetStreamId] && !streamLiveStatuses[targetStreamId].isLive) {
+			return res.json({
+				success: true,
+				data: {
+					status: 'stopped',
+					message: '该直播流未在直播，无需停止'
+				},
+				message: '该直播流未在直播，无需停止',
+				timestamp: Date.now()
+			});
+		}
+		
+		// 如果没有指定streamId且全局直播未开始，直接返回成功
+		if (!targetStreamId && !globalLiveStatus.isLive) {
 			return res.json({
 				success: true,
 				data: {
@@ -2412,20 +2470,49 @@ app.post('/api/admin/live/stop', (req, res) => {
 		}
 		
 		const stopTime = new Date().toISOString();
-		const startTime = new Date(globalLiveStatus.startTime);
-		const duration = Math.floor((Date.now() - startTime.getTime()) / 1000);
+		let startTime = null;
+		let duration = 0;
+		let liveId = null;
+		
+		// 如果指定了streamId，停止该流
+		if (targetStreamId && streamLiveStatuses[targetStreamId]) {
+			const streamStatus = streamLiveStatuses[targetStreamId];
+			if (streamStatus.isLive) {
+				startTime = new Date(streamStatus.startTime);
+				duration = Math.floor((Date.now() - startTime.getTime()) / 1000);
+				liveId = streamStatus.liveId;
+				
+				// 更新该流的状态
+				streamLiveStatuses[targetStreamId].isLive = false;
+				streamLiveStatuses[targetStreamId].stopTime = stopTime;
+			}
+		} else if (globalLiveStatus.isLive) {
+			// 停止全局直播状态
+			startTime = new Date(globalLiveStatus.startTime);
+			duration = Math.floor((Date.now() - startTime.getTime()) / 1000);
+			liveId = globalLiveStatus.liveId;
+		}
+		
+		// 如果停止的是当前活跃的流，重置全局状态
+		if (targetStreamId === globalLiveStatus.streamId || !targetStreamId) {
+			globalLiveStatus.isLive = false;
+			globalLiveStatus.streamUrl = null;
+			globalLiveStatus.streamId = null;
+			globalLiveStatus.liveId = null;
+			globalLiveStatus.startTime = null;
+		}
 		
 		// 统计数据
 		const summary = {
-			totalViewers: wsClients.size,  // 简化统计
+			totalViewers: wsClients.size,
 			peakViewers: wsClients.size,
 			totalVotes: currentVotes.leftVotes + currentVotes.rightVotes,
-			totalComments: 0,  // 可以从数据库获取
+			totalComments: 0,
 			totalLikes: 0
 		};
 		
 		// 保存统计数据到数据库
-		if (saveStatistics) {
+		if (saveStatistics && duration > 0) {
 			const db = require('./admin/db.js');
 			db.statistics.updateDashboard({
 				totalVotes: summary.totalVotes,
@@ -2434,17 +2521,10 @@ app.post('/api/admin/live/stop', (req, res) => {
 			});
 		}
 		
-		const liveId = globalLiveStatus.liveId;
-		
-		// 重置直播状态
-		globalLiveStatus.isLive = false;
-		globalLiveStatus.streamUrl = null;
-		globalLiveStatus.liveId = null;
-		globalLiveStatus.startTime = null;
-		
 		// 推送直播停止消息
 		if (notifyUsers) {
 			broadcast('liveStatus', {
+				streamId: targetStreamId,
 				isLive: false,
 				liveId: liveId,
 				stopTime: stopTime
@@ -2843,11 +2923,24 @@ app.get('/api/admin/dashboard', (req, res) => {
 			liveDuration = Math.floor((Date.now() - startTime.getTime()) / 1000);
 		}
 		
+		// 获取启用的直播流（从数据库查询，即使直播未开始也会返回）
+		let activeStream = null;
+		try {
+			activeStream = db.streams.getActive();
+		} catch (error) {
+			console.warn('获取启用直播流失败:', error);
+		}
+		
 		const data = {
 			totalUsers: users.length,
 			activeUsers: wsClients.size,
 			isLive: globalLiveStatus.isLive,
 			liveStreamUrl: globalLiveStatus.streamUrl,
+			streamId: globalLiveStatus.streamId || null, // 当前直播使用的流ID
+			// 添加启用的直播流信息（从数据库查询，方便小程序获取测试流地址）
+			activeStreamUrl: activeStream ? activeStream.url : null,
+			activeStreamId: activeStream ? activeStream.id : null,
+			activeStreamName: activeStream ? activeStream.name : null,
 			totalVotes: totalVotes,
 			leftVotes: currentVotes.leftVotes,
 			rightVotes: currentVotes.rightVotes,
@@ -3004,10 +3097,27 @@ app.get('/api/admin/streams', (req, res) => {
 	try {
 		const streams = db.streams.getAll();
 		
+		// 为每个流添加直播状态
+		const streamsWithStatus = streams.map(stream => {
+			const status = streamLiveStatuses[stream.id] || { isLive: false };
+			return {
+				...stream,
+				liveStatus: {
+					isLive: status.isLive || false,
+					liveId: status.liveId || null,
+					startTime: status.startTime || null,
+					stopTime: status.stopTime || null,
+					streamUrl: status.streamUrl || stream.url
+				}
+			};
+		});
+		
 		res.json({
 			success: true,
-			data: streams,
-			total: streams.length,
+			data: {
+				streams: streamsWithStatus,
+				total: streams.length
+			},
 			timestamp: Date.now()
 		});
 		

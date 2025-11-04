@@ -57,9 +57,12 @@
         "permission" : {
             "scope.userLocation" : {
                 "desc" : "你的位置信息将用于小程序位置接口的效果展示"
+            },
+            "camera" : {
+                "desc" : "用于直播流播放"
             }
         },
-        "requiredPrivateInfos" : [],
+        "requiredPrivateInfos" : ["getLocation"],
         "lazyCodeLoading" : "requiredComponents"
     },
     "mp-alipay" : {

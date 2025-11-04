@@ -7,6 +7,17 @@
 			}
 		},
 		{
+			"path": "pages/live-select/live-select",
+			"style": {
+				"navigationBarTitleText": "选择直播间",
+				"navigationStyle": "custom",
+				"app-plus": {
+					"titleNView": false,
+					"bounce": "none"
+				}
+			}
+		},
+		{
 			"path": "pages/home/home",
 			"style": {
 				"navigationBarTitleText": "首页",

@@ -83,10 +83,6 @@ async function apiRequest(endpoint, options = {}) {
 		
 	} catch (error) {
 		console.error(`❌ API 错误 (${endpoint}):`, error);
-		// 只在非关键错误时显示alert，避免干扰用户体验
-		if (endpoint !== '/api/admin/dashboard') {
-			alert(`操作失败: ${error.message}`);
-		}
 		return null;
 	}
 }
@@ -95,13 +91,18 @@ async function apiRequest(endpoint, options = {}) {
 
 /**
  * 开始直播
- * @param {string|null} streamId - 直播流ID（必填，null为使用默认）
+ * @param {string|null} streamId - 直播流ID（多直播模式下必填）
  * @param {boolean} autoStartAI - 是否自动启动AI识别
  * @param {boolean} notifyUsers - 是否推送通知给用户
  * @returns {Promise<Object|null>}
  */
 async function startLive(streamId = null, autoStartAI = false, notifyUsers = true) {
-	return await apiRequest('/api/admin/live/start', {
+	// 多直播支持：如果未指定 streamId，尝试获取默认的启用流
+	if (!streamId) {
+		console.warn('⚠️ 未指定 streamId，将使用后端默认的启用流');
+	}
+	
+	return await apiRequest('/api/v1/admin/live/start', {
 		method: 'POST',
 		body: JSON.stringify({
 			streamId,
@@ -113,14 +114,21 @@ async function startLive(streamId = null, autoStartAI = false, notifyUsers = tru
 
 /**
  * 停止直播
+ * @param {string|null} streamId - 直播流ID（多直播模式下必填，如果为null则停止当前直播）
  * @param {boolean} saveStatistics - 是否保存统计数据
  * @param {boolean} notifyUsers - 是否推送通知给用户
  * @returns {Promise<Object|null>}
  */
-async function stopLive(saveStatistics = true, notifyUsers = true) {
-	return await apiRequest('/api/admin/live/stop', {
+async function stopLive(streamId = null, saveStatistics = true, notifyUsers = true) {
+	// 多直播支持：streamId 参数
+	if (!streamId) {
+		console.warn('⚠️ 未指定 streamId，将停止当前正在进行的直播');
+	}
+	
+	return await apiRequest('/api/v1/admin/live/stop', {
 		method: 'POST',
 		body: JSON.stringify({
+			streamId,
 			saveStatistics,
 			notifyUsers
 		})

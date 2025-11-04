@@ -211,11 +211,15 @@ class ApiService {
 
   /**
    * 获取票数统计
+   * @param {string} streamId - 直播流ID（可选，不传则使用全局辩题）
    * @returns {Promise<Object>} 票数数据
    */
-  async getVotes() {
+  async getVotes(streamId = null) {
+    const url = streamId 
+      ? `/api/v1/votes?stream_id=${streamId}`
+      : '/api/v1/votes';
     return await this.request({
-      url: '/api/votes',
+      url,
       method: 'GET'
     });
   }
@@ -224,9 +228,10 @@ class ApiService {
    * 用户投票
    * @param {string} side - 投票方 ('left' 或 'right')
    * @param {number} votes - 投票数量，默认10
+   * @param {string} streamId - 直播流ID（可选，不传则使用全局辩题）
    * @returns {Promise<Object>} 投票结果
    */
-  async userVote(side, votes = 10) {
+  async userVote(side, votes = 10, streamId = null) {
     if (!side || !['left', 'right'].includes(side)) {
       throw new Error('投票方必须是 "left" 或 "right"');
     }
@@ -294,12 +299,17 @@ class ApiService {
       requestData.userId = String(userId);
     }
 
+    // 如果指定了 streamId，添加到请求中
+    if (streamId) {
+      requestData.streamId = streamId;
+    }
+
     console.log('📤 投票请求数据 (服务器格式):', JSON.stringify(requestData, null, 2));
     console.log('📤 原始参数:', { side, votes: voteCount });
 
     try {
       const response = await this.request({
-        url: '/api/user-vote',
+        url: '/api/v1/user-vote',
         method: 'POST',
         data: requestData
       });
@@ -328,11 +338,15 @@ class ApiService {
 
   /**
    * 获取AI识别内容
+   * @param {string} streamId - 直播流ID（可选，不传则使用全局辩题）
    * @returns {Promise<Object>} AI内容列表
    */
-  async getAiContent() {
+  async getAiContent(streamId = null) {
+    const url = streamId 
+      ? `/api/v1/ai-content?stream_id=${streamId}`
+      : '/api/v1/ai-content';
     return await this.request({
-      url: '/api/ai-content',
+      url,
       method: 'GET'
     });
   }
@@ -414,13 +428,33 @@ class ApiService {
 
   /**
    * 获取辩题信息
+   * @param {string} streamId - 直播流ID（可选，不传则使用全局辩题）
    * @returns {Promise<Object>} 辩题数据
    */
-  async getDebateTopic() {
+  async getDebateTopic(streamId = null) {
+    const url = streamId 
+      ? `/api/v1/debate-topic?stream_id=${streamId}`
+      : '/api/v1/debate-topic';
     return await this.request({
-      url: '/api/debate-topic',
+      url,
       method: 'GET'
     });
+  }
+
+  /**
+   * 查询用户投票状态
+   * @param {string} streamId - 直播流ID（可选，不传则使用全局辩题）
+   * @returns {Promise<Object>} 用户投票数据
+   */
+  async getUserVotes(streamId = null) {
+    const url = streamId 
+      ? `/api/v1/user-votes?stream_id=${streamId}`
+      : '/api/v1/user-votes';
+    const response = await this.request({ url, method: 'GET' });
+    if (response && response.success && response.data) {
+      return response.data;
+    }
+    return response;
   }
 
   // ==================== 工具方法 ====================
@@ -495,6 +529,20 @@ class ApiService {
   }
 
   /**
+   * 获取数据概览（包含直播状态）
+   * @returns {Promise<Object>} { isLive, liveStreamUrl, totalUsers, activeUsers, ... }
+   */
+  async getDashboard() {
+    const response = await this.request({ url: '/api/admin/dashboard', method: 'GET' });
+    // 如果返回的是包装格式 { success: true, data: {...} }，提取 data 字段
+    if (response && response.success && response.data) {
+      return response.data;
+    }
+    // 如果直接返回数据，直接返回
+    return response;
+  }
+
+  /**
    * 控制直播（用户直接控制）
    * @param {string} action - 'start' 或 'stop'
    * @param {string} streamId - 可选的直播流ID，不传则使用默认启用的直播流
@@ -532,6 +580,64 @@ class ApiService {
    */
   async stopLive() {
     return this.controlLive('stop');
+  }
+
+  /**
+   * 获取直播流列表
+   * @returns {Promise<Array>} 直播流列表
+   */
+  async getStreamsList() {
+    const response = await this.request({ url: '/api/v1/admin/streams', method: 'GET' });
+    // 处理多种可能的响应格式
+    // 格式1: {success: true, data: {streams: [...], total: 5}}
+    if (response && response.success && response.data && Array.isArray(response.data.streams)) {
+      return response.data.streams;
+    }
+    // 格式2: {success: true, data: [...]} (直接是数组)
+    if (response && response.success && Array.isArray(response.data)) {
+      return response.data;
+    }
+    // 格式3: 直接返回数组
+    if (Array.isArray(response)) {
+      return response;
+    }
+    // 格式4: {streams: [...]}
+    if (response && Array.isArray(response.streams)) {
+      return response.streams;
+    }
+    // 格式5: 直接返回数据对象
+    if (response && response.data && Array.isArray(response.data)) {
+      return response.data;
+    }
+    console.warn('⚠️ 无法解析直播流列表响应格式:', response);
+    return [];
+  }
+
+  /**
+   * 获取指定直播流的投票统计
+   * @param {string} streamId - 直播流ID（可选）
+   * @returns {Promise<Object>} 投票统计数据
+   */
+  async getVotesStatistics(streamId = null) {
+    const url = streamId 
+      ? `/api/v1/admin/votes/statistics?stream_id=${streamId}`
+      : '/api/v1/admin/votes/statistics';
+    const response = await this.request({ url, method: 'GET' });
+    if (response && response.success && response.data) {
+      return response.data;
+    }
+    return response;
+  }
+
+  /**
+   * 获取 WebSocket URL
+   * @returns {string} WebSocket连接地址
+   */
+  getWebSocketUrl() {
+    const baseUrl = this.baseURL || API_BASE_URL || 'http://localhost:8000';
+    const wsProtocol = baseUrl.startsWith('https') ? 'wss' : 'ws';
+    const wsHost = baseUrl.replace(/^https?:\/\//, '');
+    return `${wsProtocol}://${wsHost}/api/v1/ws`;
   }
 }
 

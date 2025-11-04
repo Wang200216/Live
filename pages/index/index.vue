@@ -356,11 +356,11 @@
 			console.log('登录成功，用户信息已保存')
 			console.log('✅ Token:', serverRes?.data?.token ? '已保存' : '未找到')
 			
-			// 5. 跳转到首页
+			// 5. 跳转到直播选择页
 			setTimeout(() => {
 				this.isLoading = false
 				uni.redirectTo({
-					url: '/pages/home/home'
+					url: '/pages/live-select/live-select'
 				})
 			}, 1000)
 			// #endif

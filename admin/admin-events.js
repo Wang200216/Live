@@ -125,7 +125,7 @@ function initAIEvents() {
 				// 先检查当前直播状态
 				const dashboard = await fetchDashboard();
 				if (!dashboard) {
-					alert('获取直播状态失败，请刷新页面重试');
+					console.error('获取直播状态失败');
 					return;
 				}
 				
@@ -133,7 +133,7 @@ function initAIEvents() {
 				const streamId = dashboard.streamId || null;
 				
 				if (!isLive) {
-					alert('⚠️ AI实时识别需要先开始直播！\n\n请先点击"开始直播"按钮，并勾选"自动启动AI识别"选项。');
+					console.warn('⚠️ AI实时识别需要先开始直播！请先点击"开始直播"按钮，并勾选"自动启动AI识别"选项。');
 					return;
 				}
 				
@@ -142,13 +142,13 @@ function initAIEvents() {
 					return;
 				}
 				
-				// ⚠️ 重要：使用直播接口启动，并设置 autoStartAI: true
-				// 先停止当前直播（不通知用户，避免干扰）
-				await stopLive(true, false);
-				
-				// 立即重新启动直播并自动启动AI
-				console.log('🔄 重新启动直播以启用AI识别...');
-				const result = await startLive(streamId, true, true);
+			// ⚠️ 重要：使用直播接口启动，并设置 autoStartAI: true
+			// 先停止当前直播（不通知用户，避免干扰）
+			await stopLive(streamId, true, false);
+			
+			// 立即重新启动直播并自动启动AI
+			console.log('🔄 重新启动直播以启用AI识别...');
+			const result = await startLive(streamId, true, true);
 				
 				if (result && result.success) {
 					console.log('✅ AI识别已通过直播接口启动');
@@ -175,11 +175,9 @@ function initAIEvents() {
 					}, 2000); // 延迟2秒，等待后端ASR服务启动
 				} else {
 					console.error('❌ 启动AI识别失败:', result);
-					alert('启动AI识别失败，请查看控制台日志');
 				}
 			} catch (error) {
 				console.error('❌ 启动AI识别失败:', error);
-				alert('启动AI识别失败: ' + (error.message || '未知错误'));
 			}
 		});
 	}
@@ -193,8 +191,12 @@ function initAIEvents() {
 			}
 			
 			try {
+				// 获取当前直播流ID
+				const dashboard = await fetchDashboard();
+				const streamId = dashboard?.streamId || null;
+				
 				// ⚠️ 重要修改：停止直播时会自动停止AI，无需单独调用 stopAI
-				const result = await stopLive(true, true);
+				const result = await stopLive(streamId, true, true);
 				
 				if (result && result.success) {
 					console.log('✅ AI识别已通过直播接口停止');
@@ -207,11 +209,10 @@ function initAIEvents() {
 						console.log('🧹 已清理AI内容刷新定时器');
 					}
 				} else {
-					alert('停止AI识别失败，请查看控制台日志');
+					console.error('❌ 停止AI识别失败:', result);
 				}
 			} catch (error) {
 				console.error('❌ 停止AI识别失败:', error);
-				alert('停止AI识别失败: ' + (error.message || '未知错误'));
 			}
 		});
 	}
@@ -383,6 +384,61 @@ window.deleteAIContentItem = async function(contentId) {
 
 // ==================== 直播控制事件 ====================
 
+// 立即更新直播状态UI（乐观更新）
+function updateLiveStatusUI(isLive) {
+	// 更新顶部控制按钮
+	const controlLiveBtn = document.getElementById('control-live-btn');
+	if (controlLiveBtn) {
+		if (isLive) {
+			controlLiveBtn.textContent = '停止直播';
+			controlLiveBtn.classList.remove('btn-primary', 'btn-success');
+			controlLiveBtn.classList.add('btn-danger');
+		} else {
+			controlLiveBtn.textContent = '开始直播';
+			controlLiveBtn.classList.remove('btn-danger');
+			controlLiveBtn.classList.add('btn-primary');
+		}
+	}
+	
+	// 更新顶部状态显示
+	const statusText = document.getElementById('live-status-text');
+	if (statusText) {
+		statusText.textContent = isLive ? '直播中' : '未开播';
+	}
+	const liveStatusEl = document.getElementById('live-status');
+	if (liveStatusEl) {
+		liveStatusEl.textContent = isLive ? '🟢 直播中' : '⚪ 未开播';
+	}
+	
+	// 更新直播控制页面按钮
+	const adminStartLiveBtn = document.getElementById('admin-start-live-btn');
+	const adminStopLiveBtn = document.getElementById('admin-stop-live-btn');
+	if (adminStartLiveBtn && adminStopLiveBtn) {
+		adminStartLiveBtn.disabled = isLive;
+		adminStopLiveBtn.disabled = !isLive;
+	}
+	
+	// 更新直播控制页面状态显示
+	const liveControlStatusEl = document.getElementById('live-control-status');
+	if (liveControlStatusEl) {
+		if (isLive) {
+			liveControlStatusEl.innerHTML = '<span style="color: #4CAF50;">🟢 直播中</span>';
+		} else {
+			liveControlStatusEl.innerHTML = '<span style="color: #999;">⚪ 未开播</span>';
+			// 隐藏直播流信息
+			const streamInfoEl = document.getElementById('live-stream-info');
+			if (streamInfoEl) {
+				streamInfoEl.style.display = 'none';
+			}
+		}
+	}
+	
+	// 更新全局状态
+	if (window.globalState) {
+		window.globalState.isLive = isLive;
+	}
+}
+
 function initLiveControlEvents() {
 	// 顶部直播控制按钮
 	const controlLiveBtn = document.getElementById('control-live-btn');
@@ -397,7 +453,6 @@ function initLiveControlEvents() {
 				}
 				
 				const isLive = dashboard.isLive || false;
-				const globalState = window.globalState || {};
 				
 				// 更新 globalState 为最新状态
 				if (window.globalState) {
@@ -409,14 +464,32 @@ function initLiveControlEvents() {
 					if (!confirm('确定要停止直播吗？')) {
 						return;
 					}
-					const result = await stopLive(true, true);
-					if (result && result.success) {
-						controlLiveBtn.textContent = '开始直播';
-						controlLiveBtn.classList.remove('btn-danger');
-						controlLiveBtn.classList.add('btn-success');
-						if (window.globalState) {
-							window.globalState.isLive = false;
+					
+					// 立即更新UI（乐观更新）
+					updateLiveStatusUI(false);
+					
+					try {
+						// 从 dashboard 获取当前流ID
+						const dashboard = await fetchDashboard();
+						const streamId = dashboard?.streamId || null;
+						
+						const result = await stopLive(streamId, true, true);
+						// 判断成功：有 success 为 true，或者有 status === 'stopped'，或者 result 不为空且没有错误字段
+						const isSuccess = result && (
+							result.success === true || 
+							result.status === 'stopped' ||
+							result.data?.status === 'stopped' ||
+							(!result.error && !result.message)
+						);
+						
+						if (!isSuccess) {
+							// API失败，回滚UI
+							updateLiveStatusUI(true);
+							console.error('停止直播失败:', result);
+							return;
 						}
+						
+						console.log('✅ 停止直播成功:', result);
 						
 						// 清理AI内容刷新定时器
 						if (window.aiContentRefreshTimer) {
@@ -425,55 +498,112 @@ function initLiveControlEvents() {
 							console.log('🧹 已清理AI内容刷新定时器');
 						}
 						
-						// 刷新 dashboard 以更新显示
-						if (typeof loadDashboard === 'function') {
-							loadDashboard();
+						// 立即刷新所有流状态列表
+						if (typeof loadAllStreamsStatus === 'function') {
+							loadAllStreamsStatus();
 						}
+						
+						// 刷新 dashboard 和状态列表
+						setTimeout(() => {
+							if (typeof loadDashboard === 'function') {
+								loadDashboard();
+							}
+							if (typeof loadAllStreamsStatus === 'function') {
+								loadAllStreamsStatus();
+							}
+						}, 1000); // 延迟1秒，确保后端状态已更新
+					} catch (error) {
+						// API异常，回滚UI
+						updateLiveStatusUI(true);
+						console.error('停止直播失败:', error);
 					}
 				} else {
 					// 开始直播
-					// 先获取可用的直播流
-					const streamId = null; // 使用默认直播流
+					// 获取选中的直播流ID（从直播控制页面）
+					const streamSelect = document.getElementById('stream-select');
+					const streamId = streamSelect?.value || null; // 如果未选择，使用默认直播流
 					const autoStartAI = confirm('是否同时启动AI识别？');
 					
-			const result = await startLive(streamId, autoStartAI, true);
-			if (result && result.success) {
-				controlLiveBtn.textContent = '停止直播';
-				controlLiveBtn.classList.remove('btn-success');
-				controlLiveBtn.classList.add('btn-danger');
-				if (window.globalState) {
-					window.globalState.isLive = true;
-				}
-				
-				// 如果自动启动了AI，设置定时刷新AI内容
-				if (autoStartAI) {
-					setTimeout(() => {
-						if (typeof loadAIContentList === 'function') {
-							console.log('📡 AI已自动启动，开始订阅AI内容更新...');
-							loadAIContentList(1);
+					// 立即更新UI（乐观更新）
+					updateLiveStatusUI(true);
+					
+					try {
+						const result = await startLive(streamId, autoStartAI, true);
+						// 判断成功：有 success 为 true，或者有 streamUrl 或 status === 'started'
+						const isSuccess = result && (
+							result.success === true || 
+							result.streamUrl || 
+							result.status === 'started' ||
+							result.data?.streamUrl ||
+							result.data?.status === 'started'
+						);
+						
+						if (!isSuccess) {
+							// API失败，回滚UI
+							updateLiveStatusUI(false);
+							console.error('开始直播失败:', result);
+							return;
 						}
 						
-						// 设置定时刷新AI内容列表
-						if (window.aiContentRefreshTimer) {
-							clearInterval(window.aiContentRefreshTimer);
-						}
-						window.aiContentRefreshTimer = setInterval(() => {
-							if (typeof loadAIContentList === 'function') {
-								loadAIContentList(1);
+						console.log('✅ 开始直播成功:', result);
+						
+						// 更新直播流信息（如果API返回了）
+						if (result.streamUrl || result.data?.streamUrl) {
+							const streamUrl = result.streamUrl || result.data?.streamUrl;
+							const streamInfoEl = document.getElementById('live-stream-info');
+							if (streamInfoEl) {
+								streamInfoEl.style.display = 'block';
+								const streamIdEl = document.getElementById('live-stream-id');
+								const streamUrlEl = document.getElementById('live-stream-url');
+								const startTimeEl = document.getElementById('live-start-time');
+								if (streamIdEl) streamIdEl.textContent = result.liveId || result.data?.liveId || '-';
+								if (streamUrlEl) streamUrlEl.textContent = streamUrl || '-';
+								if (startTimeEl) startTimeEl.textContent = result.startTime || result.data?.startTime || '-';
 							}
-						}, 5000); // 每5秒刷新一次
-					}, 2000); // 延迟2秒，等待后端ASR服务启动
-				}
-				
-				// 刷新 dashboard 以更新显示
-				if (typeof loadDashboard === 'function') {
-					loadDashboard();
-				}
-			}
+						}
+						
+						// 如果自动启动了AI，设置定时刷新AI内容
+						if (autoStartAI) {
+							setTimeout(() => {
+								if (typeof loadAIContentList === 'function') {
+									console.log('📡 AI已自动启动，开始订阅AI内容更新...');
+									loadAIContentList(1);
+								}
+								
+								// 设置定时刷新AI内容列表
+								if (window.aiContentRefreshTimer) {
+									clearInterval(window.aiContentRefreshTimer);
+								}
+								window.aiContentRefreshTimer = setInterval(() => {
+									if (typeof loadAIContentList === 'function') {
+										loadAIContentList(1);
+									}
+								}, 5000); // 每5秒刷新一次
+							}, 2000); // 延迟2秒，等待后端ASR服务启动
+						}
+						
+						// 立即刷新所有流状态列表
+						if (typeof loadAllStreamsStatus === 'function') {
+							loadAllStreamsStatus();
+						}
+						
+						// 刷新 dashboard 和状态列表
+						setTimeout(() => {
+							if (typeof loadDashboard === 'function') {
+								loadDashboard();
+							}
+							if (typeof loadAllStreamsStatus === 'function') {
+								loadAllStreamsStatus();
+							}
+						}, 1000); // 延迟1秒，确保后端状态已更新
+					} catch (error) {
+						// API异常，回滚UI
+						updateLiveStatusUI(false);
+						console.error('开始直播失败:', error);
+					}
 				}
 			} catch (error) {
 				console.error('获取直播状态失败:', error);
-				alert('获取直播状态失败，请刷新页面重试');
 			}
 		});
 	}
@@ -485,35 +615,49 @@ function initLiveControlEvents() {
 	if (adminStartLiveBtn) {
 		adminStartLiveBtn.addEventListener('click', async () => {
 			const autoStartAI = document.getElementById('auto-start-ai-checkbox')?.checked || false;
-			const streamId = null; // 使用默认直播流
+			// 获取选中的直播流ID
+			const streamSelect = document.getElementById('stream-select');
+			const streamId = streamSelect?.value || null; // 如果未选择，使用默认直播流
 			
-			if (!confirm('确定要开始直播吗？')) {
+			if (!confirm('确定要开始直播吗？' + (streamId ? '\n将使用选中的直播流。' : '\n将使用默认启用的直播流。'))) {
 				return;
 			}
 			
-			const result = await startLive(streamId, autoStartAI, true);
-			if (result && result.success) {
-				adminStartLiveBtn.disabled = true;
-				adminStopLiveBtn.disabled = false;
-				if (window.globalState) {
-					window.globalState.isLive = true;
+			// 立即更新UI（乐观更新）
+			updateLiveStatusUI(true);
+			
+			try {
+				const result = await startLive(streamId, autoStartAI, true);
+				// 判断成功：有 success 为 true，或者有 streamUrl 或 status === 'started'
+				const isSuccess = result && (
+					result.success === true || 
+					result.streamUrl || 
+					result.status === 'started' ||
+					result.data?.streamUrl ||
+					result.data?.status === 'started'
+				);
+				
+				if (!isSuccess) {
+					// API失败，回滚UI
+					updateLiveStatusUI(false);
+					console.error('开始直播失败:', result);
+					return;
 				}
 				
-				// 更新显示
-				const statusEl = document.getElementById('live-control-status');
-				if (statusEl) {
-					statusEl.innerHTML = '<span style="color: #4CAF50;">🟢 直播中</span>';
-				}
+				console.log('✅ 开始直播成功:', result);
 				
-				// 更新直播流信息
+				// 更新直播流信息（如果API返回了）
 				if (result.streamUrl || result.data?.streamUrl) {
 					const streamUrl = result.streamUrl || result.data?.streamUrl;
 					const streamInfoEl = document.getElementById('live-stream-info');
 					if (streamInfoEl) {
 						streamInfoEl.style.display = 'block';
-						document.getElementById('live-stream-id').textContent = result.liveId || result.data?.liveId || '-';
-						document.getElementById('live-stream-url').textContent = streamUrl || '-';
-						document.getElementById('live-start-time').textContent = result.startTime || result.data?.startTime || '-';
+						const streamIdEl = document.getElementById('live-stream-id');
+						const streamUrlEl = document.getElementById('live-stream-url');
+						const startTimeEl = document.getElementById('live-start-time');
+						if (streamIdEl) streamIdEl.textContent = result.liveId || result.data?.liveId || '-';
+						if (streamUrlEl) streamUrlEl.textContent = streamUrl || '-';
+						if (startTimeEl) startTimeEl.textContent = result.startTime || result.data?.startTime || '-';
 					}
 				}
 				
@@ -536,46 +680,90 @@ function initLiveControlEvents() {
 						}, 5000); // 每5秒刷新一次
 					}, 2000); // 延迟2秒，等待后端ASR服务启动
 				}
+				
+				// 立即刷新所有流状态列表
+				if (typeof loadAllStreamsStatus === 'function') {
+					loadAllStreamsStatus();
+				}
+				
+				// 刷新 dashboard 和状态列表
+				setTimeout(() => {
+					if (typeof loadDashboard === 'function') {
+						loadDashboard();
+					}
+					if (typeof loadAllStreamsStatus === 'function') {
+						loadAllStreamsStatus();
+					}
+				}, 1000); // 延迟1秒，确保后端状态已更新
+			} catch (error) {
+				// API异常，回滚UI
+				updateLiveStatusUI(false);
+				console.error('开始直播失败:', error);
 			}
 		});
 	}
 	
 	if (adminStopLiveBtn) {
 		adminStopLiveBtn.addEventListener('click', async () => {
+			// 获取当前直播流ID（多直播支持）
+			const streamSelect = document.getElementById('stream-select');
+			const streamId = streamSelect?.value || null;
+			
 			if (!confirm('确定要停止直播吗？')) {
 				return;
 			}
 			
-			const result = await stopLive(true, true);
-			if (result && result.success) {
-				adminStartLiveBtn.disabled = false;
-				adminStopLiveBtn.disabled = true;
-				if (window.globalState) {
-					window.globalState.isLive = false;
-				}
-				
-				// 清理AI内容刷新定时器
-				if (window.aiContentRefreshTimer) {
-					clearInterval(window.aiContentRefreshTimer);
-					window.aiContentRefreshTimer = null;
-					console.log('🧹 已清理AI内容刷新定时器');
-				}
-				
-				// 更新显示
-				const statusEl = document.getElementById('live-control-status');
-				if (statusEl) {
-					statusEl.innerHTML = '<span style="color: #999;">⚪ 未开播</span>';
-				}
-				
-				// 隐藏直播流信息
-				const streamInfoEl = document.getElementById('live-stream-info');
-				if (streamInfoEl) {
-					streamInfoEl.style.display = 'none';
-				}
+			// 立即更新UI（乐观更新）
+			updateLiveStatusUI(false);
+			
+					try {
+						const result = await stopLive(streamId, true, true);
+						// 判断成功：有 success 为 true，或者有 status === 'stopped'，或者 result 不为空且没有错误字段
+						const isSuccess = result && (
+							result.success === true || 
+							result.status === 'stopped' ||
+							result.data?.status === 'stopped' ||
+							(!result.error && !result.message)
+						);
+						
+						if (!isSuccess) {
+							// API失败，回滚UI
+							updateLiveStatusUI(true);
+							console.error('停止直播失败:', result);
+							return;
+						}
+						
+						console.log('✅ 停止直播成功:', result);
+						
+						// 清理AI内容刷新定时器
+						if (window.aiContentRefreshTimer) {
+							clearInterval(window.aiContentRefreshTimer);
+							window.aiContentRefreshTimer = null;
+							console.log('🧹 已清理AI内容刷新定时器');
+						}
+						
+						// 立即刷新所有流状态列表
+						if (typeof loadAllStreamsStatus === 'function') {
+							loadAllStreamsStatus();
+						}
+						
+						// 刷新 dashboard 和状态列表
+						setTimeout(() => {
+							if (typeof loadDashboard === 'function') {
+								loadDashboard();
+							}
+							if (typeof loadAllStreamsStatus === 'function') {
+								loadAllStreamsStatus();
+							}
+						}, 1000); // 延迟1秒，确保后端状态已更新
+					} catch (error) {
+						// API异常，回滚UI
+						updateLiveStatusUI(true);
+						console.error('停止直播失败:', error);
+					}
+				});
 			}
-		});
-	}
-}
+		}
 
 console.log('✅ 后台管理系统事件处理器加载完成');
 
