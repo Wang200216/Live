@@ -79,7 +79,7 @@
 						:key="liveStreamUrl"
 						:src="liveStreamUrl"
 						class="live-player"
-						mode="live"
+						:mode="getPlayerMode()"
 						autoplay
 						:muted="isMuted"
 						object-fit="contain"
@@ -959,7 +959,29 @@
 			}, 1500);
 		},
 		methods: {
-			// ==================== 播放器缓冲配置方法 ====================
+			// ==================== 播放器配置方法 ====================
+
+			/**
+			 * 根据流格式获取播放器模式
+			 * - RTMP 格式：使用 "live" 模式
+			 * - FLV 格式：使用 "RTC" 模式（重要！）
+			 * - HLS 格式：使用 "RTC" 模式
+			 */
+			getPlayerMode() {
+				if (this.liveStreamUrl) {
+					if (this.liveStreamUrl.includes('.flv')) {
+						console.log('🎬 [播放器模式] FLV 格式，使用 RTC 模式');
+						return 'RTC'; // FLV 需要使用 RTC 模式
+					} else if (this.liveStreamUrl.includes('rtmp://')) {
+						console.log('🎬 [播放器模式] RTMP 格式，使用 live 模式');
+						return 'live'; // RTMP 使用 live 模式
+					} else if (this.liveStreamUrl.includes('.m3u8')) {
+						console.log('🎬 [播放器模式] HLS 格式，使用 RTC 模式');
+						return 'RTC'; // HLS 使用 RTC 模式
+					}
+				}
+				return 'RTC'; // 默认使用 RTC 模式（更兼容）
+			},
 
 			/**
 			 * 根据流格式获取最小缓冲时间
@@ -970,7 +992,7 @@
 				if (this.liveStreamUrl && this.liveStreamUrl.includes('.flv')) {
 					return 1; // FLV 最小缓冲1秒
 				}
-				return 2; // HLS 最小缓冲2秒
+				return 2; // HLS/RTMP 最小缓冲2秒
 			},
 
 			/**
@@ -980,7 +1002,7 @@
 				if (this.liveStreamUrl && this.liveStreamUrl.includes('.flv')) {
 					return 3; // FLV 最大缓冲3秒
 				}
-				return 5; // HLS 最大缓冲5秒
+				return 5; // HLS/RTMP 最大缓冲5秒
 			},
 
 			// 初始化API服务
