@@ -640,6 +640,186 @@ class ApiService {
     // WebSocket 路径是 /ws（不是 /api/v1/ws）
     return `${wsProtocol}://${wsHost}/ws`;
   }
+
+  /**
+   * 获取RTMP转HLS播放地址
+   * @param {string} roomName - 房间名称/流名称
+   * @returns {Promise<Object>} HLS播放地址等信息
+   */
+  async getRtmpToHlsUrls(roomName) {
+    if (!roomName) {
+      throw new Error('房间名称不能为空');
+    }
+
+    try {
+      const response = await this.request({
+        url: `/api/admin/rtmp/urls?room_name=${encodeURIComponent(roomName)}`,
+        method: 'GET'
+      });
+
+      if (response && response.success && response.data) {
+        console.log('✅ [RTMP转HLS] API返回数据:', {
+          room_name: response.data.room_name,
+          push_url: response.data.push_url,
+          play_flv: response.data.play_flv,
+          play_hls: response.data.play_hls
+        });
+        return response.data; // { push_url, play_flv, play_hls }
+      }
+
+      console.warn('⚠️ [RTMP转HLS] API返回格式异常:', response);
+      return response;
+    } catch (error) {
+      console.error('获取RTMP转HLS地址失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 从流URL中提取房间名（用于RTMP转HLS）
+   * @param {string} streamUrl - 流地址
+   * @returns {string|null} 房间名
+   */
+  extractRoomNameFromUrl(streamUrl) {
+    if (!streamUrl) return null;
+
+    try {
+      // RTMP格式: rtmp://server:port/app/room_name
+      // HLS格式: http://server:port/app/room_name.m3u8
+      // FLV格式: http://server:port/app/room_name.flv
+      
+      // 移除协议前缀
+      let path = streamUrl.replace(/^[a-zA-Z]+:\/\//, '');
+      
+      // 移除服务器地址和端口
+      const parts = path.split('/');
+      if (parts.length < 3) return null;
+      
+      // 获取最后一部分（房间名）
+      let roomName = parts[parts.length - 1];
+      
+      // 移除文件扩展名
+      roomName = roomName.replace(/\.(m3u8|flv|mp4)$/, '');
+      
+      return roomName || null;
+    } catch (error) {
+      console.error('解析房间名失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 智能转换流地址为HLS格式（如果需要）
+   * @param {string} streamUrl - 原始流地址
+   * @param {string} streamName - 流名称（可选）
+   * @returns {Promise<string>} HLS播放地址
+   */
+  async convertToHlsIfNeeded(streamUrl, streamName = null) {
+    if (!streamUrl) {
+      throw new Error('流地址不能为空');
+    }
+
+    // 如果已经是HLS格式，直接返回
+    if (streamUrl.includes('.m3u8')) {
+      console.log('✅ 流地址已经是HLS格式，无需转换:', streamUrl);
+      return streamUrl;
+    }
+
+    // 如果是RTMP或FLV格式，需要转换为FLV（HTTP协议支持）
+    if (streamUrl.startsWith('rtmp://') || streamUrl.includes('.flv')) {
+      console.log('🔄 检测到RTMP/FLV格式流，正在获取FLV地址...');
+
+      // 提取房间名
+      const roomName = streamName || this.extractRoomNameFromUrl(streamUrl);
+
+      if (!roomName) {
+        console.error('❌ 无法从URL中提取房间名:', streamUrl);
+        throw new Error('无法解析流地址，请提供房间名');
+      }
+
+      try {
+        // 调用API获取播放地址
+        console.log('🔍 [FLV转换] 正在调用API，房间名:', roomName);
+        const urls = await this.getRtmpToHlsUrls(roomName);
+
+        console.log('📦 [FLV转换] API返回结果:', JSON.stringify(urls, null, 2));
+
+        // 优先使用FLV格式（HTTP协议支持，微信小程序推荐）
+        if (urls && urls.play_flv) {
+          console.log('✅ [FLV转换] 成功获取FLV地址:', urls.play_flv);
+
+          // 修正 localhost 为真实服务器 IP
+          let flvUrl = urls.play_flv;
+
+          // 1. 替换 localhost 为真实 IP
+          if (flvUrl.includes('localhost')) {
+            // 从当前 API_BASE_URL 提取服务器 IP
+            const apiBaseUrl = this.baseURL || API_BASE_URL;
+            const serverIpMatch = apiBaseUrl.match(/https?:\/\/([^:\/]+)/);
+            const serverIp = serverIpMatch ? serverIpMatch[1] : '192.168.31.189';
+
+            flvUrl = flvUrl.replace('localhost', serverIp);
+            console.log('🔄 [FLV转换] 已修正 localhost 为真实IP:', flvUrl);
+          }
+
+          // 2. 使用中间层代理地址（如果需要）
+          if (flvUrl.includes('192.168.31.189:8086')) {
+            const middlewareServerUrl = 'http://192.168.31.249:8081';
+            const originalUrl = flvUrl;
+            flvUrl = flvUrl.replace('http://192.168.31.189:8086', middlewareServerUrl);
+            console.log('🔄 [FLV转换] 已改为通过中间层代理:', {
+              原地址: originalUrl,
+              代理地址: flvUrl,
+              说明: '通过中间层服务器访问'
+            });
+          }
+
+          console.log('📺 [FLV转换] 最终FLV地址:', flvUrl);
+          console.log('📺 [转换完成] 流地址信息:', {
+            push_url: urls.push_url,
+            play_flv: flvUrl,
+            play_hls: urls.play_hls,
+            格式: 'FLV (HTTP协议，微信小程序推荐)'
+          });
+          return flvUrl;
+        } else if (urls && urls.play_hls) {
+          // 备选方案：如果没有FLV，使用HLS（需要HTTPS）
+          console.warn('⚠️ [FLV转换] 无法获取FLV地址，使用HLS作为备选');
+          let hlsUrl = urls.play_hls;
+
+          // 同样的修正逻辑
+          if (hlsUrl.includes('localhost')) {
+            const apiBaseUrl = this.baseURL || API_BASE_URL;
+            const serverIpMatch = apiBaseUrl.match(/https?:\/\/([^:\/]+)/);
+            const serverIp = serverIpMatch ? serverIpMatch[1] : '192.168.31.189';
+            hlsUrl = hlsUrl.replace('localhost', serverIp);
+          }
+
+          if (hlsUrl.includes('192.168.31.189:8086')) {
+            const middlewareServerUrl = 'http://192.168.31.249:8081';
+            hlsUrl = hlsUrl.replace('http://192.168.31.189:8086', middlewareServerUrl);
+          }
+
+          console.log('📺 [HLS备选] 最终HLS地址:', hlsUrl);
+          return hlsUrl;
+        } else {
+          console.error('❌ [FLV转换] API返回数据中没有FLV或HLS地址, 完整响应:', urls);
+          throw new Error('无法获取播放地址');
+        }
+      } catch (error) {
+        console.error('❌ [FLV转换] 转换失败:', {
+          error: error.message,
+          stack: error.stack,
+          roomName: roomName
+        });
+        throw new Error(`获取播放地址失败: ${error.message}`);
+      }
+    }
+
+    // 其他格式，尝试直接返回（可能是HTTP-FLV等）
+    console.log('⚠️ 未知格式的流地址，直接返回:', streamUrl);
+    return streamUrl;
+  }
 }
 
 // 创建单例实例

@@ -73,18 +73,18 @@
 				
 				<view class="live-video">
 					<!-- #ifdef MP-WEIXIN -->
-					<!-- 微信小程序直播播放器 - HLS 优化版 -->
+					<!-- 微信小程序直播播放器 - 支持 FLV/RTMP/HLS -->
 					<live-player
 						v-if="isLiveStarted && liveStreamUrl"
 						:key="liveStreamUrl"
 						:src="liveStreamUrl"
 						class="live-player"
-						mode="RTC"
+						mode="live"
 						autoplay
 						:muted="isMuted"
 						object-fit="contain"
-						:min-cache="hlsConfig.minCache"
-						:max-cache="hlsConfig.maxCache"
+						:min-cache="getPlayerMinCache()"
+						:max-cache="getPlayerMaxCache()"
 						:background-mute="false"
 						:enable-auto-rotation="false"
 						:orientation="hlsConfig.orientation"
@@ -823,53 +823,57 @@
 									const streams = await service.getStreamsList();
 									const targetStream = streams.find(s => s.id === this.streamId);
 									
-									if (targetStream) {
-										// ✅ 优先使用 playUrls.hls，如果没有则使用 url（向后兼容）
-										this.liveStreamUrl = targetStream.playUrls?.hls || targetStream.url;
-										console.log('🎬 从streams接口初始化直播流地址:', this.liveStreamUrl);
-										console.log('📺 直播间名称:', targetStream.name);
-										if (targetStream.playUrls?.hls) {
-											console.log('📺 使用 playUrls.hls 播放地址');
-										} else {
-											console.log('📺 使用 url 播放地址（兼容模式）');
-										}
+								if (targetStream) {
+									// ✅ 优先使用 playUrls.hls，如果没有则使用 url（向后兼容）
+									const streamUrl = targetStream.playUrls?.hls || targetStream.url;
+									// 使用智能转换方法设置HLS流地址
+									await this.setLiveStreamUrlWithHls(streamUrl, targetStream.name);
+									console.log('🎬 从streams接口初始化直播流地址:', this.liveStreamUrl);
+									console.log('📺 直播间名称:', targetStream.name);
+									if (targetStream.playUrls?.hls) {
+										console.log('📺 使用 playUrls.hls 播放地址');
 									} else {
-										console.warn('⚠️ 未找到指定的直播流:', this.streamId);
+										console.log('📺 使用 url 播放地址（兼容模式）');
 									}
+								} else {
+									console.warn('⚠️ 未找到指定的直播流:', this.streamId);
+								}
 								} catch (error) {
 									console.error('❌ 获取指定直播流失败:', error);
 								}
 							} else {
 								// 未指定 streamId，使用默认逻辑
 								// 优先使用 dashboard 接口
-								try {
-									const dashboardData = await service.getDashboard();
-									if (dashboardData) {
-										// 优先使用正在使用的流地址，否则使用启用的流地址
-										const streamUrl = dashboardData.liveStreamUrl || dashboardData.activeStreamUrl;
-										if (streamUrl) {
-											this.liveStreamUrl = streamUrl;
-											console.log('🎬 从dashboard初始化直播流地址:', this.liveStreamUrl);
-											if (dashboardData.activeStreamName) {
-												console.log('📺 流名称:', dashboardData.activeStreamName);
-											}
-										} else {
-											console.warn('⚠️ dashboard接口返回数据中未找到直播流地址');
+							try {
+								const dashboardData = await service.getDashboard();
+								if (dashboardData) {
+									// 优先使用正在使用的流地址，否则使用启用的流地址
+									const streamUrl = dashboardData.liveStreamUrl || dashboardData.activeStreamUrl;
+									if (streamUrl) {
+										// 使用智能转换方法设置HLS流地址
+										await this.setLiveStreamUrlWithHls(streamUrl, dashboardData.activeStreamName);
+										console.log('🎬 从dashboard初始化直播流地址:', this.liveStreamUrl);
+										if (dashboardData.activeStreamName) {
+											console.log('📺 流名称:', dashboardData.activeStreamName);
 										}
-									}
-								} catch (dashboardError) {
-									console.warn('⚠️ dashboard接口获取失败，尝试streams接口:', dashboardError.message);
-									// 最后尝试通过 streams 接口获取
-									try {
-										const streamUrl = await this.fetchActiveStreamFromServerAlternative();
-										if (streamUrl) {
-											this.liveStreamUrl = streamUrl;
-											console.log('🎬 从streams接口初始化直播流地址:', this.liveStreamUrl);
-										}
-									} catch (streamsError) {
-										console.warn('⚠️ 所有接口都获取失败，无法初始化直播流地址');
+									} else {
+										console.warn('⚠️ dashboard接口返回数据中未找到直播流地址');
 									}
 								}
+							} catch (dashboardError) {
+								console.warn('⚠️ dashboard接口获取失败，尝试streams接口:', dashboardError.message);
+								// 最后尝试通过 streams 接口获取
+								try {
+									const streamUrl = await this.fetchActiveStreamFromServerAlternative();
+									if (streamUrl) {
+										// 使用智能转换方法设置HLS流地址
+										await this.setLiveStreamUrlWithHls(streamUrl);
+										console.log('🎬 从streams接口初始化直播流地址:', this.liveStreamUrl);
+									}
+								} catch (streamsError) {
+									console.warn('⚠️ 所有接口都获取失败，无法初始化直播流地址');
+								}
+							}
 							}
 						}
 					} catch (error) {
@@ -955,6 +959,30 @@
 			}, 1500);
 		},
 		methods: {
+			// ==================== 播放器缓冲配置方法 ====================
+
+			/**
+			 * 根据流格式获取最小缓冲时间
+			 * FLV 格式延迟较小（推荐1-2秒）
+			 * HLS 格式延迟较大（推荐2-3秒）
+			 */
+			getPlayerMinCache() {
+				if (this.liveStreamUrl && this.liveStreamUrl.includes('.flv')) {
+					return 1; // FLV 最小缓冲1秒
+				}
+				return 2; // HLS 最小缓冲2秒
+			},
+
+			/**
+			 * 根据流格式获取最大缓冲时间
+			 */
+			getPlayerMaxCache() {
+				if (this.liveStreamUrl && this.liveStreamUrl.includes('.flv')) {
+					return 3; // FLV 最大缓冲3秒
+				}
+				return 5; // HLS 最大缓冲5秒
+			},
+
 			// 初始化API服务
 			async initApiService() {
 				try {
@@ -991,6 +1019,146 @@
 				}
 			},
 			
+			// ==================== HLS转换辅助方法 ====================
+			
+			/**
+			 * 智能设置流地址（自动转换为HLS格式）
+			 * @param {string} streamUrl - 原始流地址
+			 * @param {string} streamName - 流名称（可选，用于提取房间名）
+			 * @returns {Promise<boolean>} 是否成功设置流地址
+			 */
+			async setLiveStreamUrlWithHls(streamUrl, streamName = null) {
+				if (!streamUrl) {
+					console.warn('⚠️ 流地址为空，无法设置');
+					return false;
+				}
+				
+			try {
+				const service = this.apiService || apiService;
+				
+				// 如果已经是HLS格式，直接使用（但需要修正 localhost 和房间名）
+				if (streamUrl.includes('.m3u8')) {
+					let hlsUrl = streamUrl;
+					
+					// 1. 修正 localhost 为真实服务器 IP
+					if (hlsUrl.includes('localhost')) {
+						// 从当前 API_BASE_URL 提取服务器 IP
+						const apiBaseUrl = service.baseURL || API_BASE_URL;
+						const serverIpMatch = apiBaseUrl.match(/https?:\/\/([^:\/]+)/);
+						const serverIp = serverIpMatch ? serverIpMatch[1] : '192.168.31.189';
+						
+						// 替换 localhost 为真实 IP
+						hlsUrl = hlsUrl.replace('localhost', serverIp);
+						console.log('🔄 已修正 HLS 地址中的 localhost:', {
+							原地址: streamUrl,
+							新地址: hlsUrl
+						});
+					}
+					
+					// 2. 修正房间名（如果提供了 streamName 且与 URL 中的房间名不匹配）
+					if (streamName && hlsUrl.includes('.m3u8')) {
+						const urlParts = hlsUrl.split('/');
+						const currentFileName = urlParts[urlParts.length - 1]; // 例如: test.m3u8
+						const correctFileName = `${streamName}.m3u8`; // 例如: test2.m3u8
+						
+						// 如果文件名不一致，替换为正确的房间名
+						if (currentFileName !== correctFileName) {
+							const oldUrl = hlsUrl;
+							hlsUrl = hlsUrl.replace(currentFileName, correctFileName);
+							console.log('🔄 已修正 HLS 地址中的房间名:', {
+								原地址: oldUrl,
+								原文件名: currentFileName,
+								新文件名: correctFileName,
+								新地址: hlsUrl
+							});
+							
+							uni.showToast({
+								title: `已自动修正为 ${streamName} 流`,
+								icon: 'success',
+								duration: 2000
+							});
+						}
+					}
+					
+					// 3. 使用中间层代理地址（开发环境）
+					// 将 SRS 服务器地址改为通过中间层代理访问
+					if (hlsUrl.includes('192.168.31.189:8086')) {
+						const middlewareServerUrl = 'http://192.168.31.249:8081';
+						const originalUrl = hlsUrl;
+						hlsUrl = hlsUrl.replace('http://192.168.31.189:8086', middlewareServerUrl);
+						console.log('🔄 已改为通过中间层代理:', {
+							原地址: originalUrl,
+							代理地址: hlsUrl
+						});
+					}
+					
+					this.liveStreamUrl = hlsUrl;
+					console.log('✅ 流地址已设置为:', hlsUrl);
+					return true;
+				}
+					
+					// 如果是RTMP或FLV格式，需要转换为HLS
+					if (streamUrl.startsWith('rtmp://') || streamUrl.includes('.flv')) {
+						console.log('🔄 检测到非HLS格式流，正在转换为HLS...');
+						console.log('📺 原始流地址:', streamUrl);
+						
+						try {
+							// 使用API服务的智能转换方法
+							const hlsUrl = await service.convertToHlsIfNeeded(streamUrl, streamName);
+							
+						if (hlsUrl) {
+							this.liveStreamUrl = hlsUrl;
+							console.log('✅ 成功转换为HLS格式:', hlsUrl);
+							console.log('🎬 [播放器状态检查]', {
+								isLiveStarted: this.isLiveStarted,
+								liveStreamUrl: this.liveStreamUrl,
+								播放器条件: this.isLiveStarted && this.liveStreamUrl ? '✅ 满足' : '❌ 不满足'
+							});
+							
+							uni.showToast({
+								title: '已自动转换为HLS格式',
+								icon: 'success',
+								duration: 2000
+							});
+							
+							// 如果直播未开始，但已有流地址，尝试开始播放
+							if (!this.isLiveStarted && this.liveStreamUrl) {
+								console.log('💡 流地址已设置，但直播未开始，尝试开始播放...');
+								// 这里不自动开始，等待服务器通知或用户操作
+							}
+							
+							return true;
+							} else {
+								console.error('❌ HLS转换失败，使用原始地址');
+								this.liveStreamUrl = streamUrl;
+								return false;
+							}
+						} catch (conversionError) {
+							console.error('❌ HLS转换出错:', conversionError);
+							
+							uni.showToast({
+								title: 'HLS转换失败: ' + (conversionError.message || '未知错误'),
+								icon: 'none',
+								duration: 3000
+							});
+							
+							// 转换失败，仍然使用原始地址（虽然可能无法播放）
+							this.liveStreamUrl = streamUrl;
+							return false;
+						}
+					}
+					
+					// 其他格式，直接使用
+					this.liveStreamUrl = streamUrl;
+					console.log('📺 使用流地址:', streamUrl);
+					return true;
+					
+				} catch (error) {
+					console.error('❌ 设置流地址失败:', error);
+					return false;
+				}
+			},
+			
 			// 获取直播状态（通过 dashboard 接口）
 			async fetchLiveStatus() {
 				try {
@@ -1006,17 +1174,18 @@
 					if (dashboardData) {
 						console.log('📊 Dashboard数据:', dashboardData);
 						
-						// 更新直播状态
-						if (dashboardData.isLive !== undefined) {
-							const wasLive = this.isLiveStarted;
-							const nowLive = dashboardData.isLive;
-							
-						// 更新流地址（优先使用当前使用的流地址，否则使用启用的流地址）
-						const streamUrl = dashboardData.liveStreamUrl || dashboardData.activeStreamUrl;
-						if (streamUrl) {
-							this.liveStreamUrl = streamUrl;
-							console.log('📺 更新直播流地址（从dashboard）:', this.liveStreamUrl);
-						}
+					// 更新直播状态
+					if (dashboardData.isLive !== undefined) {
+						const wasLive = this.isLiveStarted;
+						const nowLive = dashboardData.isLive;
+						
+					// 更新流地址（优先使用当前使用的流地址，否则使用启用的流地址）
+					const streamUrl = dashboardData.liveStreamUrl || dashboardData.activeStreamUrl;
+					if (streamUrl) {
+						// 使用智能转换方法设置HLS流地址
+						await this.setLiveStreamUrlWithHls(streamUrl, dashboardData.activeStreamName);
+						console.log('📺 更新直播流地址（从dashboard）:', this.liveStreamUrl);
+					}
 						
 						// ⚠️ 重要：如果服务器显示直播已开始，但客户端状态未同步，强制同步
 						if (nowLive && !wasLive) {
@@ -1073,17 +1242,17 @@
 								}
 							});
 						} else if (nowLive && wasLive) {
-							// 直播已经在进行中，确保状态同步
-							console.log('🔄 直播进行中，确保状态同步');
-							if (!this.isLiveStarted) {
-								this.isLiveStarted = true;
-								console.log('✅ 同步直播状态为"已开始"');
-							}
-							// 确保流地址存在
-							if (!this.liveStreamUrl && streamUrl) {
-								this.liveStreamUrl = streamUrl;
-								console.log('📺 更新直播流地址:', this.liveStreamUrl);
-							}
+						// 直播已经在进行中，确保状态同步
+						console.log('🔄 直播进行中，确保状态同步');
+						if (!this.isLiveStarted) {
+							this.isLiveStarted = true;
+							console.log('✅ 同步直播状态为"已开始"');
+						}
+						// 确保流地址存在
+						if (!this.liveStreamUrl && streamUrl) {
+							await this.setLiveStreamUrlWithHls(streamUrl, dashboardData.activeStreamName);
+							console.log('📺 更新直播流地址:', this.liveStreamUrl);
+						}
 						} else if (!nowLive && wasLive) {
 								// 直播从开始变为停止
 								console.log('🛑 Dashboard显示直播已停止，更新UI');
@@ -1170,12 +1339,13 @@
 							// 优先使用正在使用的流地址，否则使用启用的流地址
 							const streamUrl = dashboardData.liveStreamUrl || dashboardData.activeStreamUrl;
 							if (streamUrl) {
-								this.liveStreamUrl = streamUrl;
-								console.log('🎬 从dashboard获取到直播流:', streamUrl);
+								// 使用智能转换方法设置HLS流地址
+								await this.setLiveStreamUrlWithHls(streamUrl, dashboardData.activeStreamName);
+								console.log('🎬 从dashboard获取到直播流:', this.liveStreamUrl);
 								if (dashboardData.activeStreamName) {
 									console.log('📺 流名称:', dashboardData.activeStreamName);
 								}
-								return streamUrl;
+								return this.liveStreamUrl;
 							}
 						}
 					} catch (dashboardError) {
@@ -1185,12 +1355,13 @@
 						if (statusResponse) {
 							const streamUrl = statusResponse.streamUrl || statusResponse.activeStreamUrl;
 							if (streamUrl) {
-								this.liveStreamUrl = streamUrl;
-								console.log('🎬 从status接口获取到启用直播流:', streamUrl);
+								// 使用智能转换方法设置HLS流地址
+								await this.setLiveStreamUrlWithHls(streamUrl, statusResponse.activeStreamName);
+								console.log('🎬 从status接口获取到启用直播流:', this.liveStreamUrl);
 								if (statusResponse.activeStreamName) {
 									console.log('📺 流名称:', statusResponse.activeStreamName);
 								}
-								return streamUrl;
+								return this.liveStreamUrl;
 							}
 						}
 					}
@@ -1235,25 +1406,26 @@
 						return null;
 					}
 					
-					// 查找启用的直播流
-					const activeStream = streams.find(s => s.enabled === true);
-					if (activeStream) {
-						// ✅ 优先使用 playUrls.hls，如果没有则使用 url（向后兼容）
-						const streamUrl = activeStream.playUrls?.hls || activeStream.url;
-						if (streamUrl) {
-							this.liveStreamUrl = streamUrl;
-							console.log('✅ 通过备用接口获取到启用直播流:', streamUrl);
-							if (activeStream.playUrls?.hls) {
-								console.log('📺 使用 playUrls.hls 播放地址');
-							} else {
-								console.log('📺 使用 url 播放地址（兼容模式）');
-							}
-							console.log('📺 流名称:', activeStream.name || '未知');
-							return streamUrl;
+				// 查找启用的直播流
+				const activeStream = streams.find(s => s.enabled === true);
+				if (activeStream) {
+					// ✅ 优先使用 playUrls.hls，如果没有则使用 url（向后兼容）
+					const streamUrl = activeStream.playUrls?.hls || activeStream.url;
+					if (streamUrl) {
+						// 使用智能转换方法设置HLS流地址
+						await this.setLiveStreamUrlWithHls(streamUrl, activeStream.name);
+						console.log('✅ 通过备用接口获取到启用直播流:', this.liveStreamUrl);
+						if (activeStream.playUrls?.hls) {
+							console.log('📺 使用 playUrls.hls 播放地址');
+						} else {
+							console.log('📺 使用 url 播放地址（兼容模式）');
 						}
-					} else {
-						console.warn('⚠️ 没有找到启用的直播流');
+						console.log('📺 流名称:', activeStream.name || '未知');
+						return this.liveStreamUrl;
 					}
+				} else {
+					console.warn('⚠️ 没有找到启用的直播流');
+				}
 					
 					return null;
 				} catch (error) {
@@ -1311,6 +1483,7 @@
 			const message = e.detail.message || '';
 			
 			console.log(`📺 [HLS状态] Code: ${code}, Message: ${message}`);
+			console.log(`📺 [播放器状态] 当前流地址: ${this.liveStreamUrl}, 播放状态: ${this.isLiveStarted}`);
 			
 			// 微信小程序 live-player 状态码说明：
 			// 连接阶段
@@ -1448,18 +1621,73 @@
 			
 			// 检查是否是权限错误
 			if (errMsg && errMsg.includes('jsapi has no permission')) {
-				console.error('❌ [权限错误] live-player 组件需要小程序后台配置合法域名');
-				console.error('❌ 解决方法：');
-				console.error('   1. 登录微信公众平台');
-				console.error('   2. 进入"开发" -> "开发管理" -> "开发设置"');
-				console.error('   3. 在"服务器域名"中添加直播流域名（如: test-streams.mux.dev）');
-				console.error('   4. 或者在"本地设置"中勾选"不校验合法域名"');
+				// 检测是否在真机上运行
+				// #ifdef MP-WEIXIN
+				try {
+					const systemInfo = uni.getSystemInfoSync();
+					// 如果在真机上（非开发者工具），说明是真正的权限问题
+					const isRealDevice = systemInfo.platform !== 'devtools';
+					
+					if (isRealDevice) {
+						// 真机上的权限错误：需要配置微信公众平台
+						console.error('❌ [权限错误] live-player 组件在真机上仍然无法使用');
+						console.error('❌ 这是微信公众平台的权限配置问题！');
+						console.error('✅ 解决方法（配置微信公众平台）：');
+						console.error('   1. 登录微信公众平台 (https://mp.weixin.qq.com)');
+						console.error('   2. 进入"开发" -> "开发管理" -> "开发设置"');
+						console.error('   3. 在"服务器域名"中添加直播流域名：');
+						console.error('      - request合法域名: http://192.168.31.249:8081');
+						console.error('      - downloadFile合法域名: http://192.168.31.249:8081');
+						console.error('   4. 检查"服务类目"是否包含"视频"或"直播"类目');
+						console.error('   5. 确保小程序主体类型支持直播功能');
+						
+						uni.showModal({
+							title: '⚠️ 权限配置问题',
+							content: 'live-player 组件需要配置微信公众平台权限。\n\n✅ 请登录微信公众平台：\n1. 开发 -> 开发管理 -> 开发设置\n2. 添加服务器域名：http://192.168.31.249:8081\n3. 检查服务类目是否包含"视频"或"直播"\n\n如果仍然无法使用，可能需要升级小程序主体类型（个人 -> 企业）。',
+							showCancel: false,
+							confirmText: '我知道了'
+						});
+					} else {
+						// 开发者工具中的权限错误：这是已知限制
+						console.error('❌ [权限错误] live-player 组件在开发者工具中无法正常工作');
+						console.error('❌ 这是微信开发者工具的已知限制，不是代码问题！');
+						console.error('✅ 解决方法（必须使用真机）：');
+						console.error('   1. 点击微信开发者工具的"预览"按钮');
+						console.error('   2. 用微信扫码在真机上测试');
+						console.error('   3. 真机上的 live-player 组件可以正常工作');
+						console.error('   注意：开发者工具中的 live-player 组件经常无法正常工作，这是正常现象');
+						
+						uni.showModal({
+							title: '⚠️ 开发者工具限制',
+							content: 'live-player 组件在开发者工具中无法正常工作，这是微信的已知限制。\n\n✅ 请使用"预览"功能，用微信扫码在真机上测试，真机上的播放器可以正常工作。',
+							showCancel: false,
+							confirmText: '我知道了'
+						});
+					}
+				} catch (error) {
+					// 如果无法获取系统信息，默认认为是开发者工具
+					console.error('❌ [权限错误] live-player 组件权限问题');
+					console.error('❌ 无法确定运行环境，建议使用真机测试');
+					
+					uni.showModal({
+						title: '⚠️ 权限问题',
+						content: 'live-player 组件出现权限错误。\n\n✅ 请使用"预览"功能在真机上测试，并确保在微信公众平台配置了正确的服务器域名和服务类目。',
+						showCancel: false,
+						confirmText: '我知道了'
+					});
+				}
+				// #endif
 				
+				// #ifndef MP-WEIXIN
+				// 非微信小程序环境
+				console.error('❌ [权限错误] live-player 组件权限问题');
 				uni.showModal({
-					title: '播放器权限错误',
-					content: 'live-player 组件需要配置合法域名。请在小程序后台配置直播流域名，或在开发工具中关闭域名校验。',
-					showCancel: false
+					title: '⚠️ 权限问题',
+					content: 'live-player 组件出现权限错误，请检查配置。',
+					showCancel: false,
+					confirmText: '我知道了'
 				});
+				// #endif
 				
 				// 权限错误不进行重连
 				return;
@@ -3762,13 +3990,14 @@
 		async handleLiveStatusUpdate(data) {
 			console.log('🎬 直播状态更新（WebSocket）:', data);
 			
-			// ✅ 优先接收并设置直播流URL
+			// ✅ 优先接收并设置直播流URL（使用智能转换方法）
 			if (data.streamUrl) {
-				this.liveStreamUrl = data.streamUrl;
-				console.log('📺 更新直播流地址（从WebSocket）:', data.streamUrl);
+				// 使用智能转换方法设置HLS流地址
+				await this.setLiveStreamUrlWithHls(data.streamUrl, data.streamName);
+				console.log('📺 更新直播流地址（从WebSocket）:', this.liveStreamUrl);
 			} else if (!this.liveStreamUrl) {
 				// 如果没有流地址，尝试从服务器获取启用的直播流
-				this.fetchActiveStreamFromServer();
+				await this.fetchActiveStreamFromServer();
 			}
 			
 			// 更新直播状态
@@ -3854,7 +4083,8 @@
 				// 如果没有 isLive 字段，但有流地址，可能只是更新流地址
 				if (data.streamUrl) {
 					console.log('📺 更新直播流地址:', data.streamUrl);
-					this.liveStreamUrl = data.streamUrl;
+					// 使用智能转换方法设置HLS流地址
+					await this.setLiveStreamUrlWithHls(data.streamUrl, data.streamName);
 					// 如果当前没有开始直播，但收到了流地址，可以考虑自动开始（用于测试）
 					if (!this.isLiveStarted) {
 						console.log('💡 收到流地址但直播未开始，可以通过点击播放按钮观看测试流');
