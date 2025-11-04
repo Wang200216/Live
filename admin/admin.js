@@ -163,6 +163,9 @@ function handleWebSocketMessage(message) {
 			updateLiveStatus({ status: 'started', streamUrl: message.data.streamUrl });
 			showNotification('直播已开始', 'success');
 			loadDashboard();
+			// 实时更新所有流状态列表（支持多流）
+			loadAllStreamsStatus();
+			loadLiveSetup();
 			break;
 		case 'live-stopped':
 			// 直播停止
@@ -171,6 +174,9 @@ function handleWebSocketMessage(message) {
 			updateLiveStatus({ status: 'stopped' });
 			showNotification('直播已停止', 'info');
 			loadDashboard();
+			// 实时更新所有流状态列表（支持多流）
+			loadAllStreamsStatus();
+			loadLiveSetup();
 			break;
 		case 'votes-updated':
 			// 投票数据更新
@@ -222,8 +228,14 @@ function handleWebSocketMessage(message) {
 			}
 			break;
 		case 'live-status-changed':
+		case 'liveStatus':
 			// 直播状态变化（兼容旧格式）
 			updateLiveStatus(message.data);
+			// 实时更新所有流状态列表
+			if (document.getElementById('live-setup') && document.getElementById('live-setup').classList.contains('active')) {
+				loadAllStreamsStatus();
+			}
+			loadLiveSetup();
 			break;
 		case 'debate-updated':
 			// 辩论设置更新
@@ -397,6 +409,12 @@ function initNavigation() {
 
 // 加载页面数据
 function loadPageData(page) {
+	// 清理流状态刷新定时器（切换到其他页面时）
+	if (page !== 'live-setup' && window.streamsStatusRefreshTimer) {
+		clearInterval(window.streamsStatusRefreshTimer);
+		window.streamsStatusRefreshTimer = null;
+	}
+	
 	switch(page) {
 		case 'dashboard':
 				if (currentLiveStatus) {
@@ -405,8 +423,8 @@ function loadPageData(page) {
 					document.getElementById('dashboard-container') && (document.getElementById('dashboard-container').innerHTML = '<div style="color: #FF9800; padding: 40px 0; text-align: center;">直播未开始，无需实时监控～</div>');
 				}
 			break;
-			case 'live-setup':
-				loadLiveSetup();
+		case 'live-setup':
+			loadLiveSetup(); // 这个函数会调用 loadStreamsToSelect() 和启动定时刷新
 			break;
 		case 'users':
 			loadUsers();
@@ -725,7 +743,10 @@ function updateLiveControlButton(isLive) {
 // ==================== 直播设置整合页 ====================
 async function loadLiveSetup() {
 	try {
-		// 加载当前直播状态
+		// 1. 先加载直播流列表到选择框
+		await loadStreamsToSelect();
+		
+		// 2. 加载当前直播状态
 		const data = await fetchDashboard();
 		if (data) {
 			// 更新直播状态显示
@@ -768,6 +789,20 @@ async function loadLiveSetup() {
 				}
 			}
 		}
+		
+		// 3. 加载所有流的直播状态
+		await loadAllStreamsStatus();
+		
+		// 4. 启动定时刷新流状态列表（每5秒刷新一次）
+		if (window.streamsStatusRefreshTimer) {
+			clearInterval(window.streamsStatusRefreshTimer);
+		}
+		window.streamsStatusRefreshTimer = setInterval(() => {
+			// 只有在直播控制页面激活时才刷新
+			if (document.getElementById('live-setup') && document.getElementById('live-setup').classList.contains('active')) {
+				loadAllStreamsStatus();
+			}
+		}, 5000); // 每5秒刷新一次
 		
 		// 如果有其他旧的表单元素，尝试加载（但这些元素可能不存在）
 		const streamSelect = document.getElementById('setup-stream-id');
@@ -1035,6 +1070,353 @@ document.getElementById('setup-schedule-btn')?.addEventListener('click', async (
 		showNotification('设置失败: ' + error.message, 'error');
 	}
 });
+
+// 加载直播流列表到选择框
+async function loadStreamsToSelect() {
+	try {
+		const streamSelect = document.getElementById('stream-select');
+		if (!streamSelect) return;
+		
+		// 先显示加载中
+		streamSelect.innerHTML = '<option value="">加载中...</option>';
+		
+		const result = await getStreamsList();
+		
+		// 处理返回数据，可能是数组或者包含data字段的对象
+		let streams = [];
+		if (Array.isArray(result)) {
+			streams = result;
+		} else if (result && Array.isArray(result.data)) {
+			streams = result.data;
+		} else if (result && typeof result === 'object') {
+			streams = result.streams || result.items || result.list || [];
+		}
+		
+		// 清空选择框
+		streamSelect.innerHTML = '<option value="">使用默认启用的直播流</option>';
+		
+		if (streams.length === 0) {
+			streamSelect.innerHTML += '<option value="" disabled>暂无可用的直播流</option>';
+			return;
+		}
+		
+		// 填充直播流选项
+		streams.forEach(stream => {
+			const option = document.createElement('option');
+			option.value = stream.id;
+			option.textContent = `${stream.name} (${stream.type?.toUpperCase() || 'HLS'})${stream.enabled ? ' [已启用]' : ''}`;
+			streamSelect.appendChild(option);
+		});
+		
+		// 如果有启用的流，默认选中第一个启用的流
+		const activeStream = streams.find(s => s.enabled === true);
+		if (activeStream && streamSelect) {
+			streamSelect.value = activeStream.id;
+			updateSelectedStreamInfo(activeStream);
+		}
+		
+		// 移除旧的监听器，避免重复绑定
+		const oldStreamSelect = document.getElementById('stream-select');
+		if (oldStreamSelect && oldStreamSelect === streamSelect) {
+			// 克隆节点并替换，这样可以移除所有旧的事件监听器
+			const newStreamSelect = oldStreamSelect.cloneNode(true);
+			
+			// 如果有启用的流，确保新选择框也选中
+			if (activeStream) {
+				newStreamSelect.value = activeStream.id;
+			}
+			
+			oldStreamSelect.parentNode.replaceChild(newStreamSelect, oldStreamSelect);
+			
+			// 监听选择变化
+			newStreamSelect.addEventListener('change', (e) => {
+				const selectedId = e.target.value;
+				if (selectedId) {
+					const selectedStream = streams.find(s => s.id === selectedId);
+					if (selectedStream) {
+						updateSelectedStreamInfo(selectedStream);
+					} else {
+						hideSelectedStreamInfo();
+					}
+				} else {
+					hideSelectedStreamInfo();
+				}
+			});
+		}
+		
+		// 保存 streams 到全局变量，方便后续使用
+		window.liveSetupStreams = streams;
+		
+		console.log('✅ 直播流列表已加载到选择框');
+	} catch (error) {
+		console.error('❌ 加载直播流列表失败:', error);
+		const streamSelect = document.getElementById('stream-select');
+		if (streamSelect) {
+			streamSelect.innerHTML = '<option value="">加载失败，请刷新重试</option>';
+		}
+	}
+}
+
+// 更新选中的直播流信息显示
+function updateSelectedStreamInfo(stream) {
+	const infoEl = document.getElementById('selected-stream-info');
+	const nameEl = document.getElementById('selected-stream-name');
+	const urlEl = document.getElementById('selected-stream-url');
+	const typeEl = document.getElementById('selected-stream-type');
+	
+	if (infoEl) infoEl.style.display = 'block';
+	if (nameEl) nameEl.textContent = stream.name || '-';
+	if (urlEl) urlEl.textContent = stream.url || '-';
+	if (typeEl) typeEl.textContent = (stream.type?.toUpperCase() || 'HLS');
+}
+
+// 隐藏选中的直播流信息
+function hideSelectedStreamInfo() {
+	const infoEl = document.getElementById('selected-stream-info');
+	if (infoEl) infoEl.style.display = 'none';
+}
+
+// 加载所有流的直播状态
+async function loadAllStreamsStatus() {
+	try {
+		const response = await fetch(`${API_BASE}/streams`);
+		const result = await response.json();
+
+		// 处理响应格式
+		let streams = [];
+		if (result.success && result.data) {
+			if (result.data.streams) {
+				streams = result.data.streams;
+			} else if (Array.isArray(result.data)) {
+				streams = result.data;
+			}
+		} else if (Array.isArray(result)) {
+			streams = result;
+		}
+
+		const container = document.getElementById('all-streams-status');
+		if (!container) return;
+
+		if (streams.length === 0) {
+			container.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">暂无直播流</div>';
+			return;
+		}
+
+		// 找出当前正在直播的流
+		const liveStream = streams.find(s => s.liveStatus && s.liveStatus.isLive);
+
+		// 生成状态列表HTML - 增强版本，支持流的独立状态管理
+		container.innerHTML = streams.map(stream => {
+			const status = stream.liveStatus || {};
+			const isLive = status.isLive || false;
+			const startTime = status.startTime ? new Date(status.startTime).toLocaleString('zh-CN') : '-';
+			const duration = status.startTime ? calculateDuration(status.startTime) : '-';
+
+			// 状态徽章样式
+			const statusBadgeColor = isLive ? '#4CAF50' : '#999';
+			const statusBadgeText = isLive ? '🟢 正在直播' : '⚪ 未开播';
+			const statusBgColor = isLive ? '#f0f9ff' : '#fafafa';
+			const statusBorderColor = isLive ? '#e3f2fd' : '#e0e0e0';
+
+			// 流启用状态指示器
+			const enabledIndicator = stream.enabled ? '✅' : '❌';
+			const enabledText = stream.enabled ? '已启用' : '已禁用';
+
+			// 当前选中的流显示特殊样式
+			const isSelected = document.getElementById('stream-select')?.value === stream.id;
+			const selectedStyle = isSelected ? 'border: 2px solid #667eea; box-shadow: 0 2px 12px rgba(102, 126, 234, 0.15);' : '';
+
+			return `
+				<div style="border: 1px solid ${statusBorderColor}; border-radius: 8px; padding: 18px; background: ${statusBgColor}; ${selectedStyle} transition: all 0.3s ease;">
+					<div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px;">
+						<!-- 左侧流信息 -->
+						<div style="flex: 1; min-width: 0;">
+							<!-- 流名称与启用状态 -->
+							<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+								<span style="font-size: 16px;">${enabledIndicator}</span>
+								<span style="font-weight: bold; color: #333; font-size: 15px;">${stream.name || '未命名'}</span>
+								<span style="font-size: 12px; color: #999; background: #f5f5f5; padding: 2px 8px; border-radius: 4px;">${enabledText}</span>
+								<span style="font-size: 12px; color: #999; background: #f5f5f5; padding: 2px 8px; border-radius: 4px;">ID: ${stream.id.substring(0, 8)}</span>
+							</div>
+
+							<!-- 流配置信息 -->
+							<div style="font-size: 12px; color: #666; margin-bottom: 8px; line-height: 1.6;">
+								<div><strong>类型:</strong> ${(stream.type || 'HLS').toUpperCase()}</div>
+								<div style="word-break: break-all;"><strong>地址:</strong> ${stream.url ? (stream.url.length > 60 ? stream.url.substring(0, 60) + '...' : stream.url) : '-'}</div>
+							</div>
+
+							<!-- 直播状态 -->
+							<div style="display: flex; align-items: center; gap: 15px; font-size: 13px;">
+								<div>
+									<strong>状态:</strong>
+									<span style="color: ${statusBadgeColor}; font-weight: bold; margin-left: 4px;">
+										${statusBadgeText}
+									</span>
+								</div>
+								${isLive ? `
+									<div style="color: #666;">
+										<strong>开始:</strong> <span style="color: #999;">${startTime}</span>
+									</div>
+									<div style="color: #666;">
+										<strong>时长:</strong> <span style="color: #999;">${duration}</span>
+									</div>
+								` : ''}
+							</div>
+						</div>
+
+						<!-- 右侧操作按钮 -->
+						<div style="display: flex; gap: 10px; flex-direction: column; min-width: max-content;">
+							${stream.enabled ? `
+								<button
+									class="btn ${isLive ? 'btn-danger' : 'btn-success'}"
+									style="padding: 10px 18px; font-size: 14px; font-weight: 600; white-space: nowrap; min-width: 100px; transition: all 0.3s ease;"
+									onclick="controlStreamLive('${stream.id}', ${!isLive})"
+								>
+									${isLive ? '⏹️ 停止直播' : '🚀 开始直播'}
+								</button>
+								${isLive ? `
+									<div style="font-size: 11px; color: #666; text-align: center; background: #fff8e1; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #FF9800;">
+										💡 只有一个流可同时直播
+									</div>
+								` : ''}
+							` : `
+								<button
+									class="btn btn-secondary"
+									style="padding: 10px 18px; font-size: 14px; font-weight: 600; white-space: nowrap; min-width: 100px;"
+									disabled
+									title="请先启用此流"
+								>
+									❌ 已禁用
+								</button>
+							`}
+						</div>
+					</div>
+				</div>
+			`;
+		}).join('');
+
+		console.log('✅ 所有流状态已加载');
+	} catch (error) {
+		console.error('❌ 加载所有流状态失败:', error);
+		const container = document.getElementById('all-streams-status');
+		if (container) {
+			container.innerHTML = '<div style="text-align: center; padding: 20px; color: #f44336;">加载失败: ' + error.message + '</div>';
+		}
+	}
+}
+
+// 计算直播时长（格式化显示）
+function calculateDuration(startTime) {
+	const start = new Date(startTime);
+	const now = new Date();
+	const diff = Math.floor((now - start) / 1000); // 秒
+	
+	const hours = Math.floor(diff / 3600);
+	const minutes = Math.floor((diff % 3600) / 60);
+	const seconds = diff % 60;
+	
+	if (hours > 0) {
+		return `${hours}时${minutes}分${seconds}秒`;
+	} else if (minutes > 0) {
+		return `${minutes}分${seconds}秒`;
+	} else {
+		return `${seconds}秒`;
+	}
+}
+
+// 控制单个流的直播状态 - 支持多直播流的独立管理和自动排斥
+async function controlStreamLive(streamId, start) {
+	const streamName = window.liveSetupStreams?.find(s => s.id === streamId)?.name || streamId;
+
+	if (!confirm(start ?
+		`确定要开始直播流 "${streamName}" 吗？\n\n注意：这将自动停止其他正在直播的流。` :
+		`确定要停止直播流 "${streamName}" 吗？`
+	)) {
+		return;
+	}
+
+	try {
+		// 直接使用admin-api.js中的函数（已在页面中加载）
+		if (typeof startLive === 'undefined' || typeof stopLive === 'undefined') {
+			console.error('❌ startLive 或 stopLive 函数未定义，请确保 admin-api.js 已加载');
+			alert('系统错误：API函数未加载');
+			return;
+		}
+
+		if (start) {
+			// 开始直播某个流
+			console.log(`🚀 正在启动直播流: ${streamId}`);
+			const autoStartAI = document.getElementById('auto-start-ai-checkbox')?.checked || false;
+
+			// 调用 API 开始直播（后端会自动停止其他流）
+			const result = await startLive(streamId, autoStartAI, true);
+
+			if (result && (result.success || result.streamUrl || result.status === 'started' || result.data?.status === 'started')) {
+				console.log('✅ 开始直播成功:', result);
+				showNotification(`✅ 直播流 "${streamName}" 已开始！`, 'success');
+
+				// 立即刷新状态列表（不等待WebSocket）
+				setTimeout(() => {
+					console.log('🔄 刷新流状态列表...');
+					loadAllStreamsStatus();
+					loadLiveSetup();
+				}, 300);
+
+				// 延迟再次刷新，确保后端状态已完全更新
+				setTimeout(() => {
+					console.log('🔄 再次刷新流状态列表...');
+					loadAllStreamsStatus();
+					loadLiveSetup();
+				}, 1500);
+			} else {
+				console.error('❌ 开始直播失败:', result);
+				const errorMsg = result?.message || result?.error || '未知错误';
+				showNotification('❌ 开始直播失败: ' + errorMsg, 'error');
+			}
+		} else {
+			// 停止直播某个流
+			console.log(`⏹️ 正在停止直播流: ${streamId}`);
+
+			const result = await stopLive(streamId, true, true);
+
+			if (result && (result.success || result.status === 'stopped' || result.data?.status === 'stopped' || (!result.error && !result.message))) {
+				console.log('✅ 停止直播成功:', result);
+				showNotification(`✅ 直播流 "${streamName}" 已停止！`, 'success');
+
+				// 立即刷新状态列表（不等待WebSocket）
+				setTimeout(() => {
+					console.log('🔄 刷新流状态列表...');
+					loadAllStreamsStatus();
+					loadLiveSetup();
+				}, 300);
+
+				// 延迟再次刷新，确保后端状态已完全更新
+				setTimeout(() => {
+					console.log('🔄 再次刷新流状态列表...');
+					loadAllStreamsStatus();
+					loadLiveSetup();
+				}, 1500);
+
+				// 清理AI内容刷新定时器（如果停止直播）
+				if (window.aiContentRefreshTimer) {
+					clearInterval(window.aiContentRefreshTimer);
+					window.aiContentRefreshTimer = null;
+					console.log('🧹 已清理AI内容刷新定时器');
+				}
+			} else {
+				console.error('❌ 停止直播失败:', result);
+				const errorMsg = result?.message || result?.error || '未知错误';
+				showNotification('❌ 停止直播失败: ' + errorMsg, 'error');
+			}
+		}
+	} catch (error) {
+		console.error('❌ 控制直播失败:', error);
+		showNotification('❌ 操作失败: ' + error.message, 'error');
+	}
+}
+
+// 将函数挂载到全局，供HTML onclick调用
+window.controlStreamLive = controlStreamLive;
 
 // ==================== 直播计划管理 ====================
 let scheduleUpdateTimer = null;

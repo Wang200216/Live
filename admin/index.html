@@ -124,21 +124,37 @@
 							</div>
 						</div>
 						
-						<!-- 直播流信息 -->
-						<div id="live-stream-info" style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: none;">
-							<h4 style="margin: 0 0 15px 0; color: #333;">📺 直播流信息</h4>
-							<div style="display: grid; grid-template-columns: auto 1fr; gap: 10px 20px; font-size: 14px;">
-								<div style="color: #666;">直播ID:</div>
-								<div id="live-stream-id" style="color: #333; font-family: monospace;">-</div>
-								<div style="color: #666;">流地址:</div>
-								<div id="live-stream-url" style="color: #333; font-family: monospace; word-break: break-all;">-</div>
-								<div style="color: #666;">开始时间:</div>
-								<div id="live-start-time" style="color: #333;">-</div>
+					<!-- 直播流选择 -->
+					<div style="background: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+						<h4 style="margin: 0 0 15px 0; color: #333;">📡 选择直播流</h4>
+						<div style="display: flex; flex-direction: column; gap: 10px;">
+							<label style="font-size: 14px; color: #666; margin-bottom: 5px;">直播流:</label>
+							<select id="stream-select" style="padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: white; cursor: pointer;">
+								<option value="">加载中...</option>
+							</select>
+							<div id="selected-stream-info" style="margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 13px; color: #666; display: none;">
+								<div><strong>流名称:</strong> <span id="selected-stream-name">-</span></div>
+								<div style="margin-top: 5px;"><strong>流地址:</strong> <span id="selected-stream-url" style="font-family: monospace; word-break: break-all;">-</span></div>
+								<div style="margin-top: 5px;"><strong>类型:</strong> <span id="selected-stream-type">-</span></div>
 							</div>
 						</div>
-						
-						<!-- 控制按钮 -->
-						<div style="display: flex; gap: 15px; justify-content: center;">
+					</div>
+					
+					<!-- 直播流信息 -->
+					<div id="live-stream-info" style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px; display: none;">
+						<h4 style="margin: 0 0 15px 0; color: #333;">📺 当前直播信息</h4>
+						<div style="display: grid; grid-template-columns: auto 1fr; gap: 10px 20px; font-size: 14px;">
+							<div style="color: #666;">直播ID:</div>
+							<div id="live-stream-id" style="color: #333; font-family: monospace;">-</div>
+							<div style="color: #666;">流地址:</div>
+							<div id="live-stream-url" style="color: #333; font-family: monospace; word-break: break-all;">-</div>
+							<div style="color: #666;">开始时间:</div>
+							<div id="live-start-time" style="color: #333;">-</div>
+						</div>
+					</div>
+					
+					<!-- 控制按钮 -->
+					<div style="display: flex; gap: 15px; justify-content: center;">
 							<button class="btn btn-success" id="admin-start-live-btn" style="padding: 15px 40px; font-size: 18px; font-weight: bold;">
 								🚀 开始直播
 							</button>
@@ -155,17 +171,15 @@
 							</label>
 						</div>
 					</div>
-					
-					<!-- 说明 -->
-					<div style="background: #fff8e1; padding: 20px; border-radius: 8px; border-left: 4px solid #ffc107;">
-						<h4 style="margin: 0 0 10px 0; color: #f57c00;">💡 使用说明</h4>
-						<ul style="margin: 0; padding-left: 20px; color: #666; font-size: 14px;">
-							<li style="margin-bottom: 8px;">点击"开始直播"按钮后，小程序用户将立即看到直播画面</li>
-							<li style="margin-bottom: 8px;">点击"停止直播"按钮后，直播将结束，小程序停止播放</li>
-							<li style="margin-bottom: 8px;">勾选"自动启动AI识别"，直播开始时会同时启动AI内容识别</li>
-							<li style="margin-bottom: 8px;">所有操作都会通过WebSocket实时推送到小程序</li>
-							<li>如需配置直播流地址，请前往"直播流管理"页面</li>
-						</ul>
+
+					<!-- 所有直播流状态列表 - 显示每个直播流的开始与停止情况 -->
+					<div id="streams-status-container" style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-top: 20px;">
+						<h4 style="margin: 0 0 20px 0; color: #333;">📊 所有直播流状态</h4>
+						<div id="all-streams-status" style="display: flex; flex-direction: column; gap: 15px;">
+							<div style="text-align: center; padding: 20px; color: #999;">
+								<text>加载中...</text>
+							</div>
+						</div>
 					</div>
 				</div>
 
