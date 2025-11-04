@@ -3093,15 +3093,103 @@ app.get('/api/admin/votes/statistics', (req, res) => {
 // ==================== 直播流管理接口 ====================
 
 // 获取所有直播流列表
+/**
+ * 生成播放地址（playUrls）
+ * 根据流类型自动生成 HLS、FLV、RTMP 播放地址
+ */
+function generatePlayUrls(stream) {
+	const playUrls = {
+		hls: null,
+		flv: null,
+		rtmp: null
+	};
+	
+	try {
+		// 获取服务器IP地址（用于生成转换后的播放地址）
+		const serverIP = process.env.SERVER_IP || '192.168.31.249';
+		const hlsServerPort = process.env.HLS_SERVER_PORT || '8086';
+		const rtmpServerPort = process.env.RTMP_SERVER_PORT || '1935';
+		
+		// 从原URL中提取流名称（用于RTMP转HLS）
+		const getStreamName = (url) => {
+			try {
+				const urlObj = new URL(url);
+				const path = urlObj.pathname;
+				// 提取路径的最后一部分作为流名称
+				// 例如: rtmp://localhost/live/stream1 -> stream1
+				const parts = path.split('/').filter(p => p);
+				return parts[parts.length - 1] || 'stream';
+			} catch (e) {
+				// 如果URL解析失败，尝试从字符串中提取
+				const match = url.match(/([^\/]+)(?:\.[^\.]+)?$/);
+				return match ? match[1] : 'stream';
+			}
+		};
+		
+		switch (stream.type) {
+			case 'hls':
+				// HLS流直接使用原地址
+				playUrls.hls = stream.url;
+				// 尝试从HLS地址生成FLV地址（如果可能）
+				if (stream.url.includes('.m3u8')) {
+					playUrls.flv = stream.url.replace('.m3u8', '.flv');
+				}
+				break;
+				
+			case 'rtmp':
+				// RTMP流需要转换为HLS
+				const streamName = getStreamName(stream.url);
+				// 生成HLS播放地址（通过流媒体服务器转换）
+				playUrls.hls = `http://${serverIP}:${hlsServerPort}/live/${streamName}.m3u8`;
+				playUrls.flv = `http://${serverIP}:${hlsServerPort}/live/${streamName}.flv`;
+				playUrls.rtmp = stream.url.replace('localhost', serverIP).replace(/^rtmp:\/\//, `rtmp://${serverIP}:${rtmpServerPort}/`);
+				break;
+				
+			case 'flv':
+				// FLV流
+				playUrls.flv = stream.url;
+				// 尝试从FLV地址生成HLS地址
+				if (stream.url.includes('.flv')) {
+					const streamName = getStreamName(stream.url);
+					playUrls.hls = `http://${serverIP}:${hlsServerPort}/live/${streamName}.m3u8`;
+				}
+				break;
+				
+			default:
+				// 未知类型，尝试使用原地址
+				playUrls.hls = stream.url;
+				break;
+		}
+		
+		// 确保至少有一个播放地址
+		if (!playUrls.hls && stream.url) {
+			playUrls.hls = stream.url;
+		}
+		
+	} catch (error) {
+		console.error('生成播放地址失败:', error);
+		// 如果生成失败，至少使用原URL作为HLS地址
+		playUrls.hls = stream.url;
+	}
+	
+	return playUrls;
+}
+
 app.get('/api/admin/streams', (req, res) => {
 	try {
 		const streams = db.streams.getAll();
 		
-		// 为每个流添加直播状态
+		// 为每个流添加直播状态和播放地址
 		const streamsWithStatus = streams.map(stream => {
 			const status = streamLiveStatuses[stream.id] || { isLive: false };
+			
+			// 生成播放地址（playUrls）
+			const playUrls = generatePlayUrls(stream);
+			
 			return {
 				...stream,
+				// ✅ 新增：播放地址字段
+				playUrls: playUrls,
 				liveStatus: {
 					isLive: status.isLive || false,
 					liveId: status.liveId || null,

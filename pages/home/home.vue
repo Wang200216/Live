@@ -824,9 +824,15 @@
 									const targetStream = streams.find(s => s.id === this.streamId);
 									
 									if (targetStream) {
-										this.liveStreamUrl = targetStream.url;
+										// ✅ 优先使用 playUrls.hls，如果没有则使用 url（向后兼容）
+										this.liveStreamUrl = targetStream.playUrls?.hls || targetStream.url;
 										console.log('🎬 从streams接口初始化直播流地址:', this.liveStreamUrl);
 										console.log('📺 直播间名称:', targetStream.name);
+										if (targetStream.playUrls?.hls) {
+											console.log('📺 使用 playUrls.hls 播放地址');
+										} else {
+											console.log('📺 使用 url 播放地址（兼容模式）');
+										}
 									} else {
 										console.warn('⚠️ 未找到指定的直播流:', this.streamId);
 									}
@@ -1214,12 +1220,16 @@
 						method: 'GET' 
 					});
 					
-					// 处理返回数据：可能是数组，也可能是包装格式 {success: true, data: [...]}
+					// 处理返回数据：可能是数组，也可能是包装格式 {success: true, data: {streams: [...]}}
 					let streams = [];
-					if (Array.isArray(streamsResponse)) {
+					if (streamsResponse && streamsResponse.success && streamsResponse.data) {
+						if (Array.isArray(streamsResponse.data.streams)) {
+							streams = streamsResponse.data.streams;
+						} else if (Array.isArray(streamsResponse.data)) {
+							streams = streamsResponse.data;
+						}
+					} else if (Array.isArray(streamsResponse)) {
 						streams = streamsResponse;
-					} else if (streamsResponse && streamsResponse.success && Array.isArray(streamsResponse.data)) {
-						streams = streamsResponse.data;
 					} else {
 						console.warn('⚠️ 直播流列表接口返回格式不正确:', streamsResponse);
 						return null;
@@ -1227,11 +1237,20 @@
 					
 					// 查找启用的直播流
 					const activeStream = streams.find(s => s.enabled === true);
-					if (activeStream && activeStream.url) {
-						this.liveStreamUrl = activeStream.url;
-						console.log('✅ 通过备用接口获取到启用直播流:', activeStream.url);
-						console.log('📺 流名称:', activeStream.name || '未知');
-						return activeStream.url;
+					if (activeStream) {
+						// ✅ 优先使用 playUrls.hls，如果没有则使用 url（向后兼容）
+						const streamUrl = activeStream.playUrls?.hls || activeStream.url;
+						if (streamUrl) {
+							this.liveStreamUrl = streamUrl;
+							console.log('✅ 通过备用接口获取到启用直播流:', streamUrl);
+							if (activeStream.playUrls?.hls) {
+								console.log('📺 使用 playUrls.hls 播放地址');
+							} else {
+								console.log('📺 使用 url 播放地址（兼容模式）');
+							}
+							console.log('📺 流名称:', activeStream.name || '未知');
+							return streamUrl;
+						}
 					} else {
 						console.warn('⚠️ 没有找到启用的直播流');
 					}
