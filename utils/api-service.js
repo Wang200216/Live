@@ -762,15 +762,12 @@ class ApiService {
             console.log('🔄 [FLV转换] 已修正 localhost 为真实IP:', flvUrl);
           }
 
-          // 2. 使用中间层代理地址（如果需要）
+          // 2. 直接使用原始SRS地址（避免代理兼容性问题）
+          // 暂时移除代理，直接使用原始SRS地址测试
           if (flvUrl.includes('192.168.31.189:8086')) {
-            const middlewareServerUrl = 'http://192.168.31.249:8081';
-            const originalUrl = flvUrl;
-            flvUrl = flvUrl.replace('http://192.168.31.189:8086', middlewareServerUrl);
-            console.log('🔄 [FLV转换] 已改为通过中间层代理:', {
-              原地址: originalUrl,
-              代理地址: flvUrl,
-              说明: '通过中间层服务器访问'
+            console.log('🔄 [FLV转换] 使用原始SRS地址（不使用代理）:', {
+              原始地址: flvUrl,
+              说明: '直接使用SRS服务器，避免代理转发的兼容性问题'
             });
           }
 
@@ -796,8 +793,7 @@ class ApiService {
           }
 
           if (hlsUrl.includes('192.168.31.189:8086')) {
-            const middlewareServerUrl = 'http://192.168.31.249:8081';
-            hlsUrl = hlsUrl.replace('http://192.168.31.189:8086', middlewareServerUrl);
+            console.log('🔄 [HLS备选] 使用原始SRS地址（不使用代理）:', hlsUrl);
           }
 
           console.log('📺 [HLS备选] 最终HLS地址:', hlsUrl);
