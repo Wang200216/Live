@@ -122,6 +122,12 @@
 						<view class="debug-btn" @click="verifyStreamAccessibility()">
 							<text>🔍 测试流访问</text>
 						</view>
+						<view class="debug-btn" @click="forceRestartPlayer()">
+							<text>🔄 强制重启播放器</text>
+						</view>
+						<view class="debug-btn" @click="logPlayerStatus()">
+							<text>📊 输出播放器状态</text>
+						</view>
 					</view>
 					<!-- HLS 连接状态指示器 -->
 					<view class="hls-status-indicator" v-if="hlsStatus.show">
@@ -1047,6 +1053,45 @@
 				}
 
 				return true; // 其他格式暂不验证
+			},
+
+			/**
+			 * 强制重启播放器
+			 */
+			forceRestartPlayer() {
+				console.log('🔄 [强制重启] 开始重启播放器...');
+
+				// 1. 停止播放
+				this.isLiveStarted = false;
+
+				// 2. 清空流地址
+				const oldUrl = this.liveStreamUrl;
+				this.liveStreamUrl = '';
+
+				// 3. 等待DOM更新
+				setTimeout(() => {
+					// 4. 重新设置流地址
+					this.liveStreamUrl = oldUrl;
+					this.isLiveStarted = true;
+					console.log('✅ [强制重启] 播放器重启完成');
+					console.log('📺 [流地址]', this.liveStreamUrl);
+				}, 1000);
+			},
+
+			/**
+			 * 输出播放器状态
+			 */
+			logPlayerStatus() {
+				console.log('📊 [播放器状态检查]');
+				console.log('====================');
+				console.log('流地址:', this.liveStreamUrl);
+				console.log('播放模式:', this.getPlayerMode());
+				console.log('是否已开始:', this.isLiveStarted);
+				console.log('是否静音:', this.isMuted);
+				console.log('缓冲最小时间:', this.getPlayerMinCache());
+				console.log('缓冲最大时间:', this.getPlayerMaxCache());
+				console.log('播放器条件:', this.isLiveStarted && this.liveStreamUrl ? '✅ 满足' : '❌ 不满足');
+				console.log('====================');
 			},
 
 			/**
