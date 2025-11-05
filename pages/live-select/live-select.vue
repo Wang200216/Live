@@ -191,59 +191,18 @@ export default {
 			try {
 				console.log(`📊 获取直播流 "${stream.name}" (ID: ${stream.id}) 的详细信息...`);
 				
-				// 获取 dashboard 数据，检查当前直播状态
-				const dashboard = await apiService.getDashboard();
-				console.log(`📊 Dashboard 数据:`, {
+				// 🔧 修复：为每个流单独调用Dashboard API，传递streamId参数
+				// 这样可以获取每个流的独立状态，支持多流并发直播
+				const dashboard = await apiService.getDashboard(stream.id);
+				console.log(`📊 流 "${stream.name}" 的 Dashboard 数据:`, {
 					isLive: dashboard?.isLive,
-					activeStreamId: dashboard?.activeStreamId,
 					streamId: dashboard?.streamId,
 					liveStreamUrl: dashboard?.liveStreamUrl,
-					activeStreamUrl: dashboard?.activeStreamUrl,
 					activeUsers: dashboard?.activeUsers
 				});
 				
-				// 判断当前流是否正在直播
-				// 方式1: 通过 streamId 匹配（最准确）
-				let isCurrentlyLive = false;
-				if (dashboard?.isLive) {
-					// 优先使用 streamId 或 activeStreamId
-					if (dashboard?.streamId === stream.id || dashboard?.activeStreamId === stream.id) {
-						isCurrentlyLive = true;
-					}
-					// 后备方案：如果 streamId 不存在，通过 liveStreamUrl 匹配
-					else if (dashboard?.liveStreamUrl && stream.url) {
-						// 比较 URL（支持部分匹配，因为可能有协议或参数差异）
-						const normalizeUrl = (url) => {
-							if (!url) return '';
-							// 移除协议前缀，只比较路径部分
-							return url.replace(/^[a-zA-Z]+:\/\//, '').replace(/\/$/, '');
-						};
-						const dashboardUrl = normalizeUrl(dashboard.liveStreamUrl);
-						const streamUrl = normalizeUrl(stream.url);
-						// 如果 URL 匹配，或者 dashboard 的 URL 包含流的 URL（或反之）
-						if (dashboardUrl === streamUrl || 
-							dashboardUrl.includes(streamUrl) || 
-							streamUrl.includes(dashboardUrl)) {
-							isCurrentlyLive = true;
-							console.log(`✅ 通过 URL 匹配判断直播状态: ${dashboard.liveStreamUrl} === ${stream.url}`);
-						}
-					}
-					// 后备方案2：通过 activeStreamUrl 匹配
-					else if (dashboard?.activeStreamUrl && stream.url) {
-						const normalizeUrl = (url) => {
-							if (!url) return '';
-							return url.replace(/^[a-zA-Z]+:\/\//, '').replace(/\/$/, '');
-						};
-						const dashboardUrl = normalizeUrl(dashboard.activeStreamUrl);
-						const streamUrl = normalizeUrl(stream.url);
-						if (dashboardUrl === streamUrl || 
-							dashboardUrl.includes(streamUrl) || 
-							streamUrl.includes(dashboardUrl)) {
-							isCurrentlyLive = true;
-							console.log(`✅ 通过 activeStreamUrl 匹配判断直播状态`);
-						}
-					}
-				}
+				// 直接使用Dashboard返回的isLive状态，确保每个流的状态独立
+				const isCurrentlyLive = dashboard?.isLive === true;
 				
 				console.log(`${isCurrentlyLive ? '🟢' : '⚪'} 直播流 "${stream.name}" 状态: ${isCurrentlyLive ? '正在直播' : '未开播'}`);
 				
@@ -266,7 +225,7 @@ export default {
 				
 				return {
 					...stream,
-					isLive: isCurrentlyLive, // 从 dashboard 获取实时状态
+					isLive: isCurrentlyLive, // 从该流的Dashboard获取独立状态
 					activeUsers: isCurrentlyLive ? (dashboard?.activeUsers || 0) : 0,
 					totalVotes: votes?.totalVotes || 0,
 					leftPercentage: votes?.leftPercentage || 50,
@@ -393,18 +352,38 @@ export default {
 		
 		// 处理 WebSocket 消息
 		handleWebSocketMessage(message) {
-			const { type, streamId, data } = message;
+			const { type, streamId, liveId, data } = message;
 			
-			console.log('📩 收到 WebSocket 消息:', type, streamId);
+			// 🔧 支持多种streamId字段名（兼容性处理）
+			const currentStreamId = streamId || liveId || data?.streamId || data?.liveId;
+			
+			console.log('📩 收到 WebSocket 消息:', type, '流ID:', currentStreamId);
 			
 			switch (type) {
 				case 'liveStatus':
-					this.updateLiveStatus(streamId, data);
+				case 'live-status-changed':
+					// 处理直播状态更新，支持多流
+					if (currentStreamId && data) {
+						this.updateLiveStatus(currentStreamId, data);
+					} else if (data) {
+						// 如果没有streamId，尝试从data中获取
+						const streamIdFromData = data.streamId || data.liveId;
+						if (streamIdFromData) {
+							this.updateLiveStatus(streamIdFromData, data);
+						} else {
+							console.warn('⚠️ WebSocket消息缺少streamId，无法更新特定流状态');
+						}
+					}
 					break;
 				case 'votesUpdate':
-					this.updateVotes(streamId, data);
+				case 'votes-updated':
+					// 处理投票更新，支持多流
+					if (currentStreamId && data) {
+						this.updateVotes(currentStreamId, data);
+					}
 					break;
 				default:
+					console.log('📨 未知消息类型:', type);
 					break;
 			}
 		},
@@ -413,8 +392,23 @@ export default {
 		updateLiveStatus(streamId, data) {
 			const stream = this.liveStreams.find(s => s.id === streamId);
 			if (stream) {
-				stream.isLive = data.isLive;
-				console.log(`✅ 直播间 ${stream.name} 状态更新:`, data.isLive ? '直播中' : '未直播');
+				// 🔧 支持多种状态字段格式
+				const isLive = data.isLive !== undefined 
+					? data.isLive 
+					: (data.status === 'started' || data.status === 'running');
+				
+				stream.isLive = isLive;
+				// 如果提供了activeUsers，也更新
+				if (data.activeUsers !== undefined) {
+					stream.activeUsers = data.activeUsers;
+				}
+				
+				console.log(`✅ 直播间 "${stream.name}" 状态更新: ${isLive ? '🟢 直播中' : '⚪ 未开播'}`);
+				
+				// 强制更新视图
+				this.$forceUpdate();
+			} else {
+				console.warn(`⚠️ 未找到流ID为 ${streamId} 的直播流，无法更新状态`);
 			}
 		},
 		
@@ -440,6 +434,8 @@ export default {
 	flex-direction: column;
 	position: relative;
 	overflow: hidden;
+	box-sizing: border-box; /* 确保宽度计算正确 */
+	max-width: 100vw; /* 防止超出视口宽度 */
 }
 
 /* 背景 - 与 home.vue 相同的渐变背景 */
@@ -497,6 +493,7 @@ export default {
 	z-index: 10;
 	padding: 0 30rpx 30rpx;
 	overflow-y: auto;
+	box-sizing: border-box; /* 确保padding包含在宽度内 */
 }
 
 .live-cards-container {
@@ -504,6 +501,8 @@ export default {
 	flex-direction: column;
 	gap: 30rpx;
 	padding-bottom: 120rpx; /* 为底部按钮留出空间 */
+	width: 100%;
+	box-sizing: border-box; /* 确保宽度计算正确 */
 }
 
 /* ==================== 直播卡片 ==================== */
@@ -523,6 +522,9 @@ export default {
 	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 	position: relative;
 	overflow: hidden;
+	width: 100%;
+	box-sizing: border-box; /* 确保padding包含在宽度内 */
+	max-width: 100%; /* 防止超出容器 */
 }
 
 .live-card::before {
@@ -620,6 +622,8 @@ export default {
 	display: flex;
 	flex-direction: column;
 	gap: 20rpx;
+	width: 100%;
+	box-sizing: border-box; /* 确保宽度计算正确 */
 }
 
 .stream-name {
@@ -660,6 +664,8 @@ export default {
 	align-items: center;
 	justify-content: space-between;
 	gap: 10rpx;
+	width: 100%;
+	box-sizing: border-box; /* 确保宽度计算正确 */
 }
 
 .side {
@@ -668,6 +674,11 @@ export default {
 	padding: 8rpx 12rpx;
 	border-radius: 8rpx;
 	text-align: center;
+	min-width: 0; /* 防止flex子元素溢出 */
+	box-sizing: border-box; /* 确保padding包含在宽度内 */
+	overflow: hidden; /* 防止文本溢出 */
+	text-overflow: ellipsis; /* 文本溢出显示省略号 */
+	white-space: nowrap; /* 不换行 */
 }
 
 .left-side {
@@ -722,6 +733,8 @@ export default {
 /* ==================== 投票进度条 ==================== */
 .vote-progress {
 	margin-top: 8rpx;
+	width: 100%;
+	box-sizing: border-box; /* 确保宽度计算正确 */
 }
 
 .progress-bar-container {
@@ -731,6 +744,9 @@ export default {
 	overflow: hidden;
 	background: rgba(0, 0, 0, 0.3);
 	border: 1rpx solid rgba(255, 255, 255, 0.1);
+	width: 100%;
+	box-sizing: border-box; /* 确保宽度计算正确 */
+	max-width: 100%; /* 防止超出容器 */
 }
 
 .progress-left,
@@ -780,6 +796,9 @@ export default {
 		inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
 	transition: all 0.3s;
 	margin-top: 12rpx;
+	width: 100%;
+	box-sizing: border-box; /* 确保padding包含在宽度内 */
+	max-width: 100%; /* 防止超出容器 */
 }
 
 .enter-btn.disabled {

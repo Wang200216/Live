@@ -201,11 +201,14 @@ if (PRIORITIZE_BACKEND_SERVER && BACKEND_SERVER_URL) {
 	console.log('🔗 启用后端服务器优先模式：所有 API 请求将优先代理到后端服务器');
 	console.log(`🔗 后端服务器地址: ${BACKEND_SERVER_URL}`);
 	
-	// 创建代理中间件 - v3.x 使用 pathFilter 参数
+	// 创建代理中间件 - 代理所有 /api 开头的路径到后端服务器
 	const backendProxy = createProxyMiddleware({
 		target: BACKEND_SERVER_URL,
 		changeOrigin: true,
-		pathFilter: '/api', // 只代理 /api 路径
+		pathRewrite: {
+			// 保持路径不变，直接转发
+			'^/api': '/api'
+		},
 		logger: console,
 		onProxyReq: (proxyReq, req, res) => {
 			console.log(`🔄 [代理] ${req.method} ${req.path} -> ${BACKEND_SERVER_URL}${req.path}`);
@@ -228,8 +231,8 @@ if (PRIORITIZE_BACKEND_SERVER && BACKEND_SERVER_URL) {
 	});
 	
 	// 在所有本地路由之前，添加代理中间件
-	// 这样所有 API 请求会先尝试代理到后端服务器
-	app.use(backendProxy);
+	// 使用 app.use('/api', ...) 确保所有 /api 开头的请求都被代理（包括 /api/v1/*）
+	app.use('/api', backendProxy);
 	console.log('✅ 代理中间件已成功配置');
 }
 
@@ -378,6 +381,7 @@ let globalAIStatus = {
 
 // 定时检查直播计划
 let liveScheduleTimer = null;
+let lastStopTime = 0; // 记录上次停止直播的时间，防止误触发自动重启
 
 function checkLiveSchedule() {
 	const db = require('./admin/db.js');
@@ -387,9 +391,21 @@ function checkLiveSchedule() {
 	if (schedule.isScheduled && schedule.scheduledStartTime) {
 		const startTime = new Date(schedule.scheduledStartTime).getTime();
 		
-		// 如果到了开始时间且还未开始
+		// 🔧 修复：如果到了开始时间且还未开始
 		if (now >= startTime && !globalLiveStatus.isLive) {
-			console.log('⏰ 定时开始直播');
+			// 检查是否刚刚停止直播（2分钟内）
+			const timeSinceStop = now - lastStopTime;
+			if (timeSinceStop < 120000) { // 2分钟内
+				console.log(`⚠️ [定时检查] 检测到计划开始时间已到，但在${Math.floor(timeSinceStop/1000)}秒前刚停止直播，跳过自动启动，防止误触发`);
+				// 清除这个过期的计划
+				db.liveSchedule.clear();
+				globalLiveStatus.isScheduled = false;
+				globalLiveStatus.scheduledStartTime = null;
+				globalLiveStatus.scheduledEndTime = null;
+				return;
+			}
+			
+			console.log('⏰ [定时检查] 定时开始直播');
 			startScheduledLive(schedule);
 		}
 		
@@ -397,7 +413,8 @@ function checkLiveSchedule() {
 		if (schedule.scheduledEndTime && globalLiveStatus.isLive) {
 			const endTime = new Date(schedule.scheduledEndTime).getTime();
 			if (now >= endTime) {
-				console.log('⏰ 定时结束直播');
+				console.log('⏰ [定时检查] 定时结束直播');
+				lastStopTime = Date.now(); // 记录停止时间
 				stopLive();
 			}
 		}
@@ -2298,8 +2315,11 @@ app.post('/api/user-vote', (req, res) => {
 
 // 1.1 开始直播
 // 支持 /api/admin/live/start 和 /api/v1/admin/live/start 两种路径
-app.post('/api/admin/live/start', handleStartLive);
-app.post('/api/v1/admin/live/start', handleStartLive);
+// 注意：如果 PRIORITIZE_BACKEND_SERVER = true，这些路由会被代理替代，不会执行
+if (!PRIORITIZE_BACKEND_SERVER) {
+	app.post('/api/admin/live/start', handleStartLive);
+	app.post('/api/v1/admin/live/start', handleStartLive);
+}
 
 function handleStartLive(req, res) {
 	try {
@@ -2346,6 +2366,7 @@ function handleStartLive(req, res) {
 				broadcast('liveStatus', {
 					streamId: otherStreamId,
 					isLive: false,
+					status: 'stopped', // 添加 status 字段
 					stopTime: streamLiveStatuses[otherStreamId].stopTime
 				});
 			}
@@ -2388,9 +2409,16 @@ function handleStartLive(req, res) {
 		if (notifyUsers) {
 			broadcast('liveStatus', {
 				isLive: true,
+				status: 'started', // 添加 status 字段
 				liveId: liveId,
 				streamUrl: stream.url,
 				startTime: startTime
+			});
+			// 同时广播 live-status-changed 消息（兼容旧版前端）
+			broadcast('live-status-changed', {
+				status: 'started',
+				streamUrl: stream.url,
+				timestamp: Date.now()
 			});
 		}
 		
@@ -2420,15 +2448,26 @@ function handleStartLive(req, res) {
 
 // 1.2 停止直播
 // 支持 /api/admin/live/stop 和 /api/v1/admin/live/stop 两种路径
-app.post('/api/admin/live/stop', handleStopLive);
-app.post('/api/v1/admin/live/stop', handleStopLive);
+// 注意：如果 PRIORITIZE_BACKEND_SERVER = true，这些路由会被代理替代，不会执行
+if (!PRIORITIZE_BACKEND_SERVER) {
+	app.post('/api/admin/live/stop', handleStopLive);
+	app.post('/api/v1/admin/live/stop', handleStopLive);
+}
 
 function handleStopLive(req, res) {
 	try {
+		console.log('📥 [停止直播] 收到请求:', {
+			streamId: req.body.streamId,
+			saveStatistics: req.body.saveStatistics,
+			notifyUsers: req.body.notifyUsers,
+			body: req.body
+		});
+		
 		const { streamId, saveStatistics = true, notifyUsers = true } = req.body;
 		
 		// 确定要停止的流ID
 		const targetStreamId = streamId || globalLiveStatus.streamId;
+		console.log('📥 [停止直播] 目标流ID:', targetStreamId);
 		
 		// 如果指定了streamId，检查该流是否在直播
 		if (targetStreamId && streamLiveStatuses[targetStreamId] && !streamLiveStatuses[targetStreamId].isLive) {
@@ -2481,12 +2520,55 @@ function handleStopLive(req, res) {
 		}
 		
 		// 如果停止的是当前活跃的流，重置全局状态
+		// 修复：只要停止了任何流，都应该检查并更新全局状态
 		if (targetStreamId === globalLiveStatus.streamId || !targetStreamId) {
+			console.log('🔄 [停止直播] 重置全局状态（流ID匹配）');
 			globalLiveStatus.isLive = false;
 			globalLiveStatus.streamUrl = null;
 			globalLiveStatus.streamId = null;
 			globalLiveStatus.liveId = null;
 			globalLiveStatus.startTime = null;
+			
+			// 🔧 修复：清除直播计划，防止自动重启
+			try {
+				const db = require('./admin/db.js');
+				db.liveSchedule.clear();
+				globalLiveStatus.isScheduled = false;
+				globalLiveStatus.scheduledStartTime = null;
+				globalLiveStatus.scheduledEndTime = null;
+				lastStopTime = Date.now(); // 记录停止时间，防止定时检查器误触发
+				console.log('🔄 [停止直播] 已清除直播计划');
+			} catch (error) {
+				console.error('❌ [停止直播] 清除直播计划失败:', error);
+			}
+		} else if (targetStreamId && streamLiveStatuses[targetStreamId]) {
+			// 如果停止的流不是全局活跃流，但该流确实在直播，也需要检查是否需要更新全局状态
+			console.log('🔄 [停止直播] 停止的流与全局流不匹配，但该流在直播，也重置全局状态');
+			// 检查是否有其他流在直播
+			const otherLiveStream = Object.entries(streamLiveStatuses).find(
+				([id, status]) => id !== targetStreamId && status.isLive
+			);
+			if (!otherLiveStream) {
+				// 没有其他流在直播，重置全局状态
+				globalLiveStatus.isLive = false;
+				globalLiveStatus.streamUrl = null;
+				globalLiveStatus.streamId = null;
+				globalLiveStatus.liveId = null;
+				globalLiveStatus.startTime = null;
+				
+				// 🔧 修复：清除直播计划，防止自动重启
+				try {
+					const db = require('./admin/db.js');
+					db.liveSchedule.clear();
+					globalLiveStatus.isScheduled = false;
+					globalLiveStatus.scheduledStartTime = null;
+					globalLiveStatus.scheduledEndTime = null;
+					lastStopTime = Date.now(); // 记录停止时间，防止定时检查器误触发
+					console.log('🔄 [停止直播] 已清除直播计划');
+				} catch (error) {
+					console.error('❌ [停止直播] 清除直播计划失败:', error);
+				}
+			}
 		}
 		
 		// 统计数据
@@ -2500,27 +2582,49 @@ function handleStopLive(req, res) {
 		
 		// 保存统计数据到数据库
 		if (saveStatistics && duration > 0) {
-			const db = require('./admin/db.js');
-			db.statistics.updateDashboard({
-				totalVotes: summary.totalVotes,
-				lastLiveTime: stopTime,
-				liveDuration: duration
-			});
+			try {
+				console.log('💾 [停止直播] 保存统计数据...');
+				const db = require('./admin/db.js');
+				db.statistics.updateDashboard({
+					totalVotes: summary.totalVotes,
+					lastLiveTime: stopTime,
+					liveDuration: duration
+				});
+				console.log('✅ [停止直播] 统计数据已保存');
+			} catch (dbError) {
+				console.error('❌ [停止直播] 保存统计数据失败:', dbError);
+				// 不阻塞响应，继续执行
+			}
 		}
 		
 		// 推送直播停止消息
 		if (notifyUsers) {
-			broadcast('liveStatus', {
-				streamId: targetStreamId,
-				isLive: false,
-				liveId: liveId,
-				stopTime: stopTime
-			});
+			try {
+				console.log('📢 [停止直播] 推送停止消息...');
+				// 修复：添加 status 字段，确保前端能正确处理
+				broadcast('liveStatus', {
+					streamId: targetStreamId,
+					isLive: false,
+					status: 'stopped', // 添加 status 字段
+					liveId: liveId,
+					stopTime: stopTime
+				});
+				// 同时广播 live-status-changed 消息（兼容旧版前端）
+				broadcast('live-status-changed', {
+					status: 'stopped',
+					streamId: targetStreamId,
+					timestamp: Date.now()
+				});
+				console.log('✅ [停止直播] 消息已推送');
+			} catch (broadcastError) {
+				console.error('❌ [停止直播] 推送消息失败:', broadcastError);
+				// 不阻塞响应，继续执行
+			}
 		}
 		
-		console.log(`⏹️  直播已停止: ${liveId}`);
+		console.log(`⏹️  [停止直播] 直播已停止: ${liveId}, duration: ${duration}秒`);
 		
-		res.json({
+		const responseData = {
 			success: true,
 			data: {
 				liveId: liveId,
@@ -2532,7 +2636,11 @@ function handleStopLive(req, res) {
 			},
 			message: '直播已停止',
 			timestamp: Date.now()
-		});
+		};
+		
+		console.log('📤 [停止直播] 发送响应:', responseData);
+		res.json(responseData);
+		console.log('✅ [停止直播] 响应已发送');
 		
 	} catch (error) {
 		console.error('停止直播失败:', error);
@@ -2670,7 +2778,9 @@ app.post('/api/admin/live/reset-votes', (req, res) => {
 // 二、AI控制接口
 
 // 2.1 启动AI识别
-app.post('/api/admin/ai/start', (req, res) => {
+// 注意：如果 PRIORITIZE_BACKEND_SERVER = true，这些路由会被代理替代，不会执行
+if (!PRIORITIZE_BACKEND_SERVER) {
+	app.post('/api/admin/ai/start', (req, res) => {
 	try {
 		const { settings, notifyUsers = true } = req.body;
 		
@@ -2728,10 +2838,13 @@ app.post('/api/admin/ai/start', (req, res) => {
 			message: '启动AI识别失败: ' + error.message
 		});
 	}
-});
+	});
+}
 
 // 2.2 停止AI识别
-app.post('/api/admin/ai/stop', (req, res) => {
+// 注意：如果 PRIORITIZE_BACKEND_SERVER = true，这些路由会被代理替代，不会执行
+if (!PRIORITIZE_BACKEND_SERVER) {
+	app.post('/api/admin/ai/stop', (req, res) => {
 	try {
 		const { saveHistory = true, notifyUsers = true } = req.body;
 		
@@ -2784,10 +2897,13 @@ app.post('/api/admin/ai/stop', (req, res) => {
 			message: '停止AI识别失败: ' + error.message
 		});
 	}
-});
+	});
+}
 
 // 2.3 暂停/恢复AI识别
-app.post('/api/admin/ai/toggle', (req, res) => {
+// 注意：如果 PRIORITIZE_BACKEND_SERVER = true，这些路由会被代理替代，不会执行
+if (!PRIORITIZE_BACKEND_SERVER) {
+	app.post('/api/admin/ai/toggle', (req, res) => {
 	try {
 		const { action, notifyUsers = true } = req.body;
 		
@@ -2843,7 +2959,8 @@ app.post('/api/admin/ai/toggle', (req, res) => {
 			message: '切换AI状态失败: ' + error.message
 		});
 	}
-});
+	});
+}
 
 // 2.4 删除AI内容
 app.delete('/api/admin/ai/content/:contentId', (req, res) => {
@@ -3413,6 +3530,7 @@ server.listen(port, '0.0.0.0', () => {
 // 注意：Express 路由是按顺序匹配的，如果本地路由已经匹配并处理了请求，就不会到达这里
 // 所以这个代理只会处理本地路由没有匹配的请求
 if (BACKEND_SERVER_URL && !PRIORITIZE_BACKEND_SERVER) {
+	console.log(`🔧 配置后端代理: /api/* -> ${BACKEND_SERVER_URL}`);
 	// 配置代理中间件
 	const proxyOptions = {
 		target: BACKEND_SERVER_URL,
@@ -3449,7 +3567,17 @@ if (BACKEND_SERVER_URL && !PRIORITIZE_BACKEND_SERVER) {
 	
 	// 在所有本地路由之后，404处理器之前，添加代理中间件
 	// 这样，如果本地路由没有匹配，就会尝试代理到后端服务器
+	
+	// 🔍 调试：添加测试中间件，看看请求是否到达这里
+	app.use('/api', (req, res, next) => {
+		console.log(`🔍 [调试] API请求到达代理位置: ${req.method} ${req.path}`);
+		next(); // 继续到代理中间件
+	});
+	
 	app.use('/api', backendProxy);
+	console.log('✅ 后端代理中间件已添加到路由栈');
+} else {
+	console.log('⚠️  后端代理未配置（BACKEND_SERVER_URL 或 PRIORITIZE_BACKEND_SERVER 不满足条件）');
 }
 
 // ==================== 404处理器（必须在所有路由之后） ====================

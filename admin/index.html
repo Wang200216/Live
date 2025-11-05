@@ -70,9 +70,26 @@
 
 			<!-- 页面内容 -->
 			<div class="page-content">
-				<!-- 数据概览页 -->
-				<div id="dashboard" class="page active">
-					<div class="stats-grid">
+			<!-- 数据概览页 -->
+			<div id="dashboard" class="page active">
+				<!-- 🔧 新增：多直播总览 -->
+				<div class="multi-live-overview" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);">
+					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+						<h3 style="margin: 0; color: white; font-size: 20px; font-weight: 600;">
+							🎬 多直播流总览
+						</h3>
+						<button class="btn btn-sm" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);" onclick="refreshMultiLiveOverview()">
+							🔄 刷新
+						</button>
+					</div>
+					<div id="multi-live-streams-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 15px;">
+						<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.7); grid-column: 1 / -1;">
+							加载中...
+						</div>
+					</div>
+				</div>
+				
+				<div class="stats-grid">
 						<div class="stat-card">
 							<div class="stat-icon">👥</div>
 							<div class="stat-info">
@@ -132,6 +149,9 @@
 							<select id="stream-select" style="padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background: white; cursor: pointer;">
 								<option value="">加载中...</option>
 							</select>
+							<div style="margin-top: 8px; padding: 10px; background: #e8f5e9; border-radius: 6px; font-size: 13px; color: #4CAF50; border-left: 3px solid #4CAF50;">
+								💡 提示：可以选择不同的直播流进行管理，支持同时开启多个直播流
+							</div>
 							<div id="selected-stream-info" style="margin-top: 10px; padding: 10px; background: #f5f5f5; border-radius: 6px; font-size: 13px; color: #666; display: none;">
 								<div><strong>流名称:</strong> <span id="selected-stream-name">-</span></div>
 								<div style="margin-top: 5px;"><strong>流地址:</strong> <span id="selected-stream-url" style="font-family: monospace; word-break: break-all;">-</span></div>
@@ -274,6 +294,34 @@
 						<h2>票数管理</h2>
 					</div>
 					
+					<!-- 🔧 新增：直播流选择器 -->
+					<div style="background: #f0f7ff; padding: 20px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-left: 4px solid #1890ff;">
+						<div class="form-group" style="margin: 0;">
+							<label style="display: block; margin-bottom: 10px; color: #333; font-weight: 600; font-size: 16px;">
+								📡 选择直播流
+								<span style="color: #ff4d4f; margin-left: 5px;">*</span>
+							</label>
+							<div style="display: flex; gap: 10px; align-items: center;">
+								<select id="votes-stream-select" class="form-select" style="flex: 1; padding: 12px; font-size: 14px;">
+									<option value="">请选择要管理的直播流</option>
+								</select>
+								<button class="btn btn-secondary btn-sm" id="votes-refresh-streams-btn" style="padding: 12px 20px;">
+									🔄 刷新列表
+								</button>
+							</div>
+							<div id="votes-current-stream-info" style="margin-top: 12px; padding: 10px; background: rgba(24, 144, 255, 0.1); border-radius: 6px; font-size: 13px; color: #1890ff; display: none;">
+								<span style="font-weight: 600;">当前管理：</span>
+								<span id="votes-current-stream-name">-</span>
+								<span style="color: #999; margin-left: 10px;">|</span>
+								<span style="color: #999; margin-left: 10px;">状态：</span>
+								<span id="votes-current-stream-status">-</span>
+							</div>
+							<div style="margin-top: 8px; font-size: 13px; color: #666;">
+								💡 提示：票数管理将作用于选中的直播流，每个流有独立的投票数据
+							</div>
+						</div>
+					</div>
+					
 					<!-- 当前票数显示 -->
 					<div style="margin-bottom: 30px;">
 						<h3 style="margin-bottom: 20px;">📊 当前票数</h3>
@@ -363,32 +411,57 @@
 						<h2>AI 内容管理</h2>
 					</div>
 					
-					<!-- AI识别控制 -->
-					<div style="background: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-						<h3 style="margin: 0 0 20px 0;">🤖 AI 识别控制</h3>
-						<div style="display: flex; gap: 20px; align-items: center; margin-bottom: 20px;">
-							<div style="flex: 1;">
-								<div style="font-size: 14px; color: #666; margin-bottom: 5px;">当前状态</div>
-								<div id="ai-status-display" style="font-size: 24px; font-weight: bold; color: #666;">
-									<span id="ai-status-icon">⚪</span>
-									<span id="ai-status-text">未启动</span>
-								</div>
+				<!-- AI识别控制 -->
+				<div style="background: white; padding: 25px; border-radius: 12px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+					<h3 style="margin: 0 0 20px 0;">🤖 AI 识别控制</h3>
+					
+					<!-- 🔧 新增：直播流选择器 -->
+					<div style="background: #f0f7ff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #1890ff;">
+						<div class="form-group" style="margin: 0;">
+							<label style="display: block; margin-bottom: 10px; color: #333; font-weight: 500;">
+								📡 选择直播流（必选）
+								<span style="color: #ff4d4f; margin-left: 5px;">*</span>
+							</label>
+							<div style="display: flex; gap: 10px; align-items: center;">
+								<select id="ai-stream-select" class="form-select" style="flex: 1; padding: 10px; font-size: 14px;">
+									<option value="">请选择要操作的直播流</option>
+								</select>
+								<button class="btn btn-secondary btn-sm" id="ai-refresh-streams-btn" style="padding: 10px 15px;">
+									🔄 刷新列表
+								</button>
 							</div>
-							<div style="flex: 2; display: flex; gap: 10px; flex-wrap: wrap;">
-								<button class="btn btn-success" id="start-ai-btn" style="padding: 12px 25px;">
-									🚀 启动 AI 识别
-								</button>
-								<button class="btn btn-danger" id="stop-ai-btn" style="padding: 12px 25px;" disabled>
-									⏹️ 停止 AI 识别
-								</button>
-								<button class="btn btn-warning" id="pause-ai-btn" style="padding: 12px 25px;" disabled>
-									⏸️ 暂停 AI 识别
-								</button>
-								<button class="btn btn-info" id="resume-ai-btn" style="padding: 12px 25px; display: none;">
-									▶️ 恢复 AI 识别
-								</button>
+							<div style="margin-top: 8px; font-size: 13px; color: #666;">
+								💡 提示：启动和停止AI识别时将作用于选中的直播流
 							</div>
 						</div>
+					</div>
+					
+					<div style="display: flex; gap: 20px; align-items: center; margin-bottom: 20px;">
+						<div style="flex: 1;">
+							<div style="font-size: 14px; color: #666; margin-bottom: 5px;">当前状态</div>
+							<div id="ai-status-display" style="font-size: 24px; font-weight: bold; color: #666;">
+								<span id="ai-status-icon">⚪</span>
+								<span id="ai-status-text">未启动</span>
+							</div>
+							<div id="ai-current-stream-info" style="font-size: 13px; color: #999; margin-top: 5px; display: none;">
+								运行中的流：<span id="ai-running-stream-name">-</span>
+							</div>
+						</div>
+						<div style="flex: 2; display: flex; gap: 10px; flex-wrap: wrap;">
+							<button class="btn btn-success" id="start-ai-btn" style="padding: 12px 25px;">
+								🚀 启动 AI 识别
+							</button>
+							<button class="btn btn-danger" id="stop-ai-btn" style="padding: 12px 25px;" disabled>
+								⏹️ 停止 AI 识别
+							</button>
+							<button class="btn btn-warning" id="pause-ai-btn" style="padding: 12px 25px;" disabled>
+								⏸️ 暂停 AI 识别
+							</button>
+							<button class="btn btn-info" id="resume-ai-btn" style="padding: 12px 25px; display: none;">
+								▶️ 恢复 AI 识别
+							</button>
+						</div>
+					</div>
 						
 						<!-- AI设置（可选） -->
 						<details style="margin-top: 20px;">
@@ -426,7 +499,15 @@
 					<!-- AI内容列表 -->
 					<div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
 						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-							<h3 style="margin: 0;">📋 AI 生成内容列表</h3>
+							<div style="flex: 1;">
+								<h3 style="margin: 0 0 8px 0;">📋 AI 生成内容列表</h3>
+								<div id="ai-content-stream-info" style="font-size: 13px; color: #666; padding: 8px 12px; background: #f0f7ff; border-radius: 6px; display: none;">
+									<span style="font-weight: 600;">当前显示：</span>
+									<span id="ai-content-current-stream-name">-</span>
+									<span style="color: #999; margin-left: 10px;">|</span>
+									<span style="color: #999; margin-left: 10px;">提示：选择不同直播流可查看对应的AI内容</span>
+								</div>
+							</div>
 							<div style="display: flex; gap: 10px; align-items: center;">
 								<select id="ai-content-filter" class="form-select" style="width: auto;">
 									<option value="all">全部内容</option>

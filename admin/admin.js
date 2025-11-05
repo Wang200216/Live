@@ -2,18 +2,29 @@
 // 服务器配置
 const SERVER_CONFIG = {
 	// 本地开发时使用
-	LOCAL_URL: 'http://localhost:8080',
-	// 真实服务器地址（中间层网关，直接连接 server.js）
-	REAL_URL: 'http://192.168.31.249:8081',
+	LOCAL_URL: 'http://localhost:8081',
+	// 中间层服务器地址（支持 WebSocket 和状态同步）
+	MIDDLEWARE_URL: 'http://192.168.31.249:8081',
+	// 后端服务器地址（真实服务器，直接访问）
+	BACKEND_URL: 'http://192.168.31.189:8000',
+	// WebSocket 服务器地址（如果后端服务器没有WebSocket，使用中间层）
+	WS_URL: 'http://192.168.31.249:8081', // WebSocket 连接到中间层
 	// 当前使用的地址（修改这里切换服务器）
 	get BASE_URL() {
-		return this.REAL_URL; // 切换到 REAL_URL 使用真实服务器
+		// 🔧 配置：直接访问真实后端服务器（获取真实数据）
+		// 注意：后端修复完成前，直播控制可能有问题（会自动重启）
+		return this.BACKEND_URL; // 使用真实后端服务器
+	},
+	get WEB_SOCKET_URL() {
+		// WebSocket 使用中间层（因为中间层管理WebSocket连接）
+		return this.WS_URL || this.MIDDLEWARE_URL;
 	}
 };
 
 // 将配置挂载到 window 对象，供其他脚本使用
 window.SERVER_CONFIG = SERVER_CONFIG;
 
+// API_BASE只保留基础URL，具体路径在各个API函数中定义
 const API_BASE = `${SERVER_CONFIG.BASE_URL}/api/admin`;
 
 // 全局状态（如果admin-api.js已经创建了简单的版本，这里会覆盖它）
@@ -56,7 +67,9 @@ document.addEventListener('DOMContentLoaded', () => {
 function initWebSocket() {
 	// 从服务器配置获取WebSocket地址
 	try {
-	const baseUrl = new URL(SERVER_CONFIG.BASE_URL);
+	// 使用专门的 WebSocket URL（如果配置了），否则使用 BASE_URL
+	const wsBaseUrl = SERVER_CONFIG.WEB_SOCKET_URL || SERVER_CONFIG.BASE_URL;
+	const baseUrl = new URL(wsBaseUrl);
 	const protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
 	const wsUrl = `${protocol}//${baseUrl.host}/ws`;
 	
@@ -158,6 +171,13 @@ function handleWebSocketMessage(message) {
 			break;
 		case 'live-started':
 			// 直播开始
+			// 检查是否刚刚停止直播，如果是，忽略开始消息（防止误触发）
+			const lastStopTime2 = window.lastStopLiveTime || 0;
+			const timeSinceStop2 = Date.now() - lastStopTime2;
+			if (timeSinceStop2 < 3000) { // 3秒内忽略开始消息
+				console.log('⚠️ 刚刚停止直播，忽略 live-started 消息，防止误触发');
+				break;
+			}
 			globalState.isLive = true;
 			globalState.liveId = message.data.liveId;
 			updateLiveStatus({ status: 'started', streamUrl: message.data.streamUrl });
@@ -230,6 +250,13 @@ function handleWebSocketMessage(message) {
 		case 'live-status-changed':
 		case 'liveStatus':
 			// 直播状态变化（兼容旧格式）
+			// 检查是否刚刚停止直播，如果是，忽略状态更新（防止误触发）
+			const lastStopTime = window.lastStopLiveTime || 0;
+			const timeSinceStop = Date.now() - lastStopTime;
+			if (timeSinceStop < 3000) { // 3秒内忽略状态更新
+				console.log('⚠️ 刚刚停止直播，忽略状态更新消息，防止误触发');
+				break;
+			}
 			updateLiveStatus(message.data);
 			// 实时更新所有流状态列表
 			if (document.getElementById('live-setup') && document.getElementById('live-setup').classList.contains('active')) {
@@ -312,18 +339,86 @@ function updateLiveStatus(data) {
 	const statusText = document.getElementById('live-status-text');
 	const liveStatusEl = document.getElementById('live-status');
 	
-	if (data.status === 'started') {
+	// 支持两种格式：
+	// 1. { status: 'started' | 'stopped' }
+	// 2. { isLive: true | false }
+	let isStarted = false;
+	if (data.status === 'started' || data.isLive === true) {
+		isStarted = true;
+	} else if (data.status === 'stopped' || data.isLive === false) {
+		isStarted = false;
+	}
+	
+	if (isStarted) {
 		currentLiveStatus = true;
+		globalState.isLive = true; // 同时更新全局状态
 		if (statusText) statusText.textContent = '🟢 直播中';
 		if (liveStatusEl) liveStatusEl.textContent = '🟢 直播中';
 		updateLiveControlButton(true);
 		showNotification('直播已开始', 'success');
-	} else if (data.status === 'stopped') {
+		console.log('✅ [状态更新] 直播已开始');
+	} else {
 		currentLiveStatus = false;
+		globalState.isLive = false; // 同时更新全局状态
 		if (statusText) statusText.textContent = '⚪ 未开播';
 		if (liveStatusEl) liveStatusEl.textContent = '⚪ 未开播';
 		updateLiveControlButton(false);
 		showNotification('直播已停止', 'info');
+		console.log('✅ [状态更新] 直播已停止');
+	}
+	
+	// 更新多直播状态缓存
+	if (data.streamId || data.liveId) {
+		const streamId = data.streamId || data.liveId;
+		
+		if (!window.multiLiveState) {
+			window.multiLiveState = { streams: {}, activeStreams: [], lastUpdate: Date.now() };
+		}
+		
+		// 更新流状态
+		if (!window.multiLiveState.streams[streamId]) {
+			window.multiLiveState.streams[streamId] = {};
+		}
+		window.multiLiveState.streams[streamId].isLive = isStarted;
+		window.multiLiveState.streams[streamId].lastUpdate = Date.now();
+		
+		// 更新活跃流列表
+		if (isStarted) {
+			if (!window.multiLiveState.activeStreams.includes(streamId)) {
+				window.multiLiveState.activeStreams.push(streamId);
+			}
+		} else {
+			window.multiLiveState.activeStreams = window.multiLiveState.activeStreams.filter(id => id !== streamId);
+		}
+		
+		console.log(`🔄 多流状态更新: 流 ${streamId} -> ${isStarted ? '直播中' : '已停止'}`);
+		console.log(`📊 当前活跃流: ${window.multiLiveState.activeStreams.length} 个`, window.multiLiveState.activeStreams);
+		
+		// 如果在Dashboard页面，刷新多直播总览
+		const dashboardPage = document.getElementById('dashboard');
+		if (dashboardPage && dashboardPage.classList.contains('active')) {
+			setTimeout(() => {
+				console.log('🔄 WebSocket状态变更，刷新多直播总览');
+				if (typeof renderMultiLiveOverview === 'function') {
+					renderMultiLiveOverview();
+				}
+			}, 500); // 延迟500ms，等待后端状态完全同步
+		}
+		
+		// 如果在直播控制页面，也刷新流状态列表
+		const liveSetupPage = document.getElementById('live-setup');
+		if (liveSetupPage && liveSetupPage.classList.contains('active')) {
+			setTimeout(() => {
+				if (typeof loadAllStreamsStatus === 'function') {
+					loadAllStreamsStatus();
+				}
+			}, 500);
+		}
+	}
+	
+	// 如果有提供 updateLiveStatusUI 函数，也调用它
+	if (typeof updateLiveStatusUI === 'function') {
+		updateLiveStatusUI(isStarted);
 	}
 }
 
@@ -749,16 +844,35 @@ async function loadLiveSetup() {
 		// 2. 加载当前直播状态
 		const data = await fetchDashboard();
 		if (data) {
-			// 更新直播状态显示
+			// 优先使用全局状态（如果存在且不一致，说明可能是刚操作后的状态）
+			// 如果全局状态明确为 false，即使 dashboard 返回 true，也使用全局状态
+			let isLive = data.isLive || false;
+			
+			// 检查是否刚刚停止直播，如果是，忽略 dashboard 返回的 true 状态
+			const lastStopTime = window.lastStopLiveTime || 0;
+			const timeSinceStop = Date.now() - lastStopTime;
+			if (timeSinceStop < 5000) { // 5秒内，如果刚刚停止，强制使用 false
+				if (window.globalState && window.globalState.isLive === false) {
+					console.log('⚠️ 刚刚停止直播（' + Math.floor(timeSinceStop / 1000) + '秒前），强制使用 false 状态，忽略 dashboard 返回的 true');
+					isLive = false;
+				}
+			} else if (window.globalState && window.globalState.isLive === false && data.isLive === true) {
+				// 如果全局状态是 false，但 dashboard 返回 true，可能是后端还没更新
+				// 延迟一下再检查，或者使用全局状态
+				console.log('⚠️ 状态不一致：全局状态为 false，但 dashboard 返回 true，使用全局状态');
+				isLive = false;
+			}
+			
+			// 使用统一的UI更新函数，确保按钮状态正确
+			if (typeof updateLiveStatusUI === 'function') {
+				updateLiveStatusUI(isLive);
+			}
+			
+			// 更新直播状态显示（使用修正后的 isLive 状态）
 			const statusEl = document.getElementById('live-control-status');
 			if (statusEl) {
-				if (data.isLive) {
+				if (isLive) {
 					statusEl.innerHTML = '<span style="color: #4CAF50;">🟢 直播中</span>';
-					// 启用/禁用按钮
-					const startBtn = document.getElementById('admin-start-live-btn');
-					const stopBtn = document.getElementById('admin-stop-live-btn');
-					if (startBtn) startBtn.disabled = true;
-					if (stopBtn) stopBtn.disabled = false;
 					
 					// 显示直播流信息
 					if (data.liveStreamUrl) {
@@ -773,13 +887,8 @@ async function loadLiveSetup() {
 							if (startTimeEl) startTimeEl.textContent = data.liveStartTime || '-';
 						}
 					}
-		} else {
+				} else {
 					statusEl.innerHTML = '<span style="color: #999;">⚪ 未开播</span>';
-					// 启用/禁用按钮
-					const startBtn = document.getElementById('admin-start-live-btn');
-					const stopBtn = document.getElementById('admin-stop-live-btn');
-					if (startBtn) startBtn.disabled = false;
-					if (stopBtn) stopBtn.disabled = true;
 					
 					// 隐藏直播流信息
 					const streamInfoEl = document.getElementById('live-stream-info');
@@ -787,6 +896,11 @@ async function loadLiveSetup() {
 						streamInfoEl.style.display = 'none';
 					}
 				}
+			}
+		} else {
+			// 如果没有数据，默认显示未开播状态
+			if (typeof updateLiveStatusUI === 'function') {
+				updateLiveStatusUI(false);
 			}
 		}
 		
@@ -1275,8 +1389,8 @@ async function loadAllStreamsStatus() {
 									${isLive ? '⏹️ 停止直播' : '🚀 开始直播'}
 								</button>
 								${isLive ? `
-									<div style="font-size: 11px; color: #666; text-align: center; background: #fff8e1; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #FF9800;">
-										💡 只有一个流可同时直播
+									<div style="font-size: 11px; color: #4CAF50; text-align: center; background: #e8f5e9; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #4CAF50;">
+										✅ 直播进行中
 									</div>
 								` : ''}
 							` : `
@@ -1324,12 +1438,12 @@ function calculateDuration(startTime) {
 	}
 }
 
-// 控制单个流的直播状态 - 支持多直播流的独立管理和自动排斥
+// 控制单个流的直播状态 - 支持多直播流的独立管理
 async function controlStreamLive(streamId, start) {
 	const streamName = window.liveSetupStreams?.find(s => s.id === streamId)?.name || streamId;
 
 	if (!confirm(start ?
-		`确定要开始直播流 "${streamName}" 吗？\n\n注意：这将自动停止其他正在直播的流。` :
+		`确定要开始直播流 "${streamName}" 吗？\n\n💡 提示：可以同时开启多个直播流。` :
 		`确定要停止直播流 "${streamName}" 吗？`
 	)) {
 		return;
@@ -1348,25 +1462,41 @@ async function controlStreamLive(streamId, start) {
 			console.log(`🚀 正在启动直播流: ${streamId}`);
 			const autoStartAI = document.getElementById('auto-start-ai-checkbox')?.checked || false;
 
-			// 调用 API 开始直播（后端会自动停止其他流）
+			// 调用 API 开始直播（支持多流并发）
 			const result = await startLive(streamId, autoStartAI, true);
 
 			if (result && (result.success || result.streamUrl || result.status === 'started' || result.data?.status === 'started')) {
 				console.log('✅ 开始直播成功:', result);
 				showNotification(`✅ 直播流 "${streamName}" 已开始！`, 'success');
 
+				// 立即刷新多直播总览
+				if (typeof renderMultiLiveOverview === 'function') {
+					setTimeout(() => renderMultiLiveOverview(), 300);
+				}
+
 				// 立即刷新状态列表（不等待WebSocket）
 				setTimeout(() => {
 					console.log('🔄 刷新流状态列表...');
-					loadAllStreamsStatus();
-					loadLiveSetup();
+					if (typeof loadAllStreamsStatus === 'function') {
+						loadAllStreamsStatus();
+					}
+					if (typeof loadLiveSetup === 'function') {
+						loadLiveSetup();
+					}
 				}, 300);
 
 				// 延迟再次刷新，确保后端状态已完全更新
 				setTimeout(() => {
 					console.log('🔄 再次刷新流状态列表...');
-					loadAllStreamsStatus();
-					loadLiveSetup();
+					if (typeof renderMultiLiveOverview === 'function') {
+						renderMultiLiveOverview();
+					}
+					if (typeof loadAllStreamsStatus === 'function') {
+						loadAllStreamsStatus();
+					}
+					if (typeof loadLiveSetup === 'function') {
+						loadLiveSetup();
+					}
 				}, 1500);
 			} else {
 				console.error('❌ 开始直播失败:', result);
@@ -1383,18 +1513,34 @@ async function controlStreamLive(streamId, start) {
 				console.log('✅ 停止直播成功:', result);
 				showNotification(`✅ 直播流 "${streamName}" 已停止！`, 'success');
 
+				// 立即刷新多直播总览
+				if (typeof renderMultiLiveOverview === 'function') {
+					setTimeout(() => renderMultiLiveOverview(), 300);
+				}
+
 				// 立即刷新状态列表（不等待WebSocket）
 				setTimeout(() => {
 					console.log('🔄 刷新流状态列表...');
-					loadAllStreamsStatus();
-					loadLiveSetup();
+					if (typeof loadAllStreamsStatus === 'function') {
+						loadAllStreamsStatus();
+					}
+					if (typeof loadLiveSetup === 'function') {
+						loadLiveSetup();
+					}
 				}, 300);
 
 				// 延迟再次刷新，确保后端状态已完全更新
 				setTimeout(() => {
 					console.log('🔄 再次刷新流状态列表...');
-					loadAllStreamsStatus();
-					loadLiveSetup();
+					if (typeof renderMultiLiveOverview === 'function') {
+						renderMultiLiveOverview();
+					}
+					if (typeof loadAllStreamsStatus === 'function') {
+						loadAllStreamsStatus();
+					}
+					if (typeof loadLiveSetup === 'function') {
+						loadLiveSetup();
+					}
 				}, 1500);
 
 				// 清理AI内容刷新定时器（如果停止直播）
@@ -2044,3 +2190,164 @@ function showNotification(message, type = 'info') {
     // type可以为 'success' | 'error' | 'warning' | 'info'，可扩展美化
     alert(message);
 }
+
+// ==================== 多直播管理功能 ====================
+
+/**
+ * 渲染多直播总览
+ */
+async function renderMultiLiveOverview() {
+	const container = document.getElementById('multi-live-streams-grid');
+	if (!container) return;
+	
+	try {
+		console.log('📡 加载多直播总览...');
+		
+		// 获取所有流的状态
+		const streams = await fetchAllStreamsStatus();
+		
+		if (!streams || streams.length === 0) {
+			container.innerHTML = `
+				<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.8); grid-column: 1 / -1;">
+					<div style="font-size: 48px; margin-bottom: 15px;">📭</div>
+					<div style="font-size: 16px;">暂无直播流</div>
+					<div style="font-size: 13px; margin-top: 8px; opacity: 0.7;">请先在"直播流管理"中添加直播流</div>
+				</div>
+			`;
+			return;
+		}
+		
+		// 渲染流卡片
+		container.innerHTML = streams.map(stream => {
+			const dashboard = stream.dashboardData?.data || {};
+			const isLive = dashboard.isLive || false;
+			const activeUsers = dashboard.activeUsers || 0;
+			const totalVotes = dashboard.totalVotes || 0;
+			const aiStatus = dashboard.aiStatus || 'stopped';
+			
+			// 状态颜色
+			const statusColor = isLive ? '#4CAF50' : '#999';
+			const cardBg = isLive ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.85)';
+			const borderColor = isLive ? '#4CAF50' : '#e0e0e0';
+			
+			return `
+				<div class="stream-card" style="
+					background: ${cardBg};
+					border-radius: 8px;
+					padding: 20px;
+					border-left: 4px solid ${borderColor};
+					transition: all 0.3s ease;
+					cursor: pointer;
+				" onclick="viewStreamDetail('${stream.id}')">
+					<!-- 头部：流名称和状态 -->
+					<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
+						<div style="flex: 1;">
+							<h4 style="margin: 0 0 5px 0; color: #333; font-size: 16px; font-weight: 600;">
+								${stream.name || 'Unnamed Stream'}
+							</h4>
+							<div style="font-size: 12px; color: #666;">
+								${stream.type ? stream.type.toUpperCase() : 'UNKNOWN'}
+							</div>
+						</div>
+						<div style="background: ${statusColor}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap;">
+							${isLive ? '🟢 直播中' : '⚪ 未开播'}
+						</div>
+					</div>
+					
+					<!-- 数据统计 -->
+					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px;">
+						<div style="text-align: center; padding: 10px; background: #f5f5f5; border-radius: 6px;">
+							<div style="font-size: 24px; font-weight: 700; color: #2196F3;">👥 ${activeUsers}</div>
+							<div style="font-size: 11px; color: #666; margin-top: 4px;">在线用户</div>
+						</div>
+						<div style="text-align: center; padding: 10px; background: #f5f5f5; border-radius: 6px;">
+							<div style="font-size: 24px; font-weight: 700; color: #FF9800;">🗳️ ${totalVotes}</div>
+							<div style="font-size: 11px; color: #666; margin-top: 4px;">总投票</div>
+						</div>
+					</div>
+					
+					<!-- AI状态 -->
+					<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: ${aiStatus === 'running' ? '#e8f5e9' : '#fafafa'}; border-radius: 6px; margin-bottom: 12px;">
+						<span style="font-size: 12px;">${aiStatus === 'running' ? '🤖' : '⚪'}</span>
+						<span style="font-size: 12px; color: ${aiStatus === 'running' ? '#4CAF50' : '#999'}; flex: 1;">
+							AI: ${aiStatus === 'running' ? '运行中' : '未启动'}
+						</span>
+					</div>
+					
+					<!-- 操作按钮 -->
+					<div style="display: flex; gap: 8px;">
+						<button 
+							class="btn btn-sm ${isLive ? 'btn-danger' : 'btn-success'}"
+							style="flex: 1; padding: 8px; font-size: 13px;"
+							onclick="event.stopPropagation(); controlStreamLive('${stream.id}', ${!isLive})"
+						>
+							${isLive ? '⏹️ 停止' : '🚀 开始'}
+						</button>
+						<button 
+							class="btn btn-sm btn-secondary"
+							style="padding: 8px 16px; font-size: 13px;"
+							onclick="event.stopPropagation(); viewStreamDetail('${stream.id}')"
+						>
+							📊 详情
+						</button>
+					</div>
+				</div>
+			`;
+		}).join('');
+		
+		console.log(`✅ 多直播总览已加载（${streams.length} 个流）`);
+		
+	} catch (error) {
+		console.error('❌ 加载多直播总览失败:', error);
+		container.innerHTML = `
+			<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.8); grid-column: 1 / -1;">
+				<div style="font-size: 48px; margin-bottom: 15px;">⚠️</div>
+				<div style="font-size: 16px;">加载失败</div>
+				<div style="font-size: 13px; margin-top: 8px; opacity: 0.7;">${error.message}</div>
+				<button class="btn btn-sm" style="margin-top: 15px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);" onclick="refreshMultiLiveOverview()">
+					重试
+				</button>
+			</div>
+		`;
+	}
+}
+
+/**
+ * 刷新多直播总览
+ */
+function refreshMultiLiveOverview() {
+	renderMultiLiveOverview();
+}
+
+/**
+ * 查看流详情（占位函数，将来实现详情页）
+ */
+function viewStreamDetail(streamId) {
+	console.log('📊 查看流详情:', streamId);
+	// TODO: 实现流详情页面
+	alert(`流详情功能开发中...\n流ID: ${streamId}\n\n提示：此功能将在下一阶段实现，届时会显示：\n- 实时投票详情\n- 在线用户列表\n- AI识别内容\n- 直播数据图表`);
+}
+
+/**
+ * 初始化多直播功能
+ */
+function initMultiLiveFeatures() {
+	// 加载多直播总览
+	renderMultiLiveOverview();
+	
+	// 定时刷新（每10秒）
+	setInterval(() => {
+		const dashboardPage = document.getElementById('dashboard');
+		if (dashboardPage && dashboardPage.classList.contains('active')) {
+			renderMultiLiveOverview();
+		}
+	}, 10000);
+}
+
+// 页面加载时初始化
+document.addEventListener('DOMContentLoaded', () => {
+	// 延迟初始化，等待其他组件加载完成
+	setTimeout(() => {
+		initMultiLiveFeatures();
+	}, 1000);
+});

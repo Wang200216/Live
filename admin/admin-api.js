@@ -7,9 +7,79 @@ const getAPIBase = () => {
 	if (window.SERVER_CONFIG && window.SERVER_CONFIG.BASE_URL) {
 		return window.SERVER_CONFIG.BASE_URL;
 	}
-	// 默认使用真实服务器（如果admin.js未加载，使用中间层网关地址）
-	return 'http://192.168.31.249:8081';
+	// 默认使用真实后端服务器（如果admin.js未加载）
+	return 'http://192.168.31.189:8000';
 };
+
+// 📋 说明：当前配置
+// - 直接访问真实后端服务器 (http://192.168.31.189:8000)
+// - 使用 /api/v1/admin/* 路径获取真实数据
+// - WebSocket 仍连接到中间层 (http://192.168.31.249:8081)
+
+// ==================== 多直播管理API ====================
+
+/**
+ * 获取指定流的 Dashboard 数据
+ * @param {string} streamId - 直播流ID
+ * @returns {Promise<Object>}
+ */
+async function fetchDashboardByStream(streamId) {
+	if (!streamId) {
+		console.warn('⚠️ fetchDashboardByStream: streamId 为空，使用默认Dashboard');
+		return await fetchDashboard();
+	}
+	
+	return await apiRequest(`/api/v1/admin/dashboard?stream_id=${streamId}`, {
+		method: 'GET'
+	});
+}
+
+/**
+ * 批量获取多个流的 Dashboard 数据
+ * @param {string[]} streamIds - 直播流ID数组
+ * @returns {Promise<Object[]>}
+ */
+async function fetchMultiStreamsDashboard(streamIds) {
+	if (!Array.isArray(streamIds) || streamIds.length === 0) {
+		console.warn('⚠️ fetchMultiStreamsDashboard: streamIds 无效');
+		return [];
+	}
+	
+	// 并行请求所有流的数据
+	const promises = streamIds.map(id => fetchDashboardByStream(id));
+	const results = await Promise.allSettled(promises);
+	
+	return results.map((result, index) => ({
+		streamId: streamIds[index],
+		success: result.status === 'fulfilled',
+		data: result.status === 'fulfilled' ? result.value : null,
+		error: result.status === 'rejected' ? result.reason : null
+	}));
+}
+
+/**
+ * 获取所有流的实时状态（增强版）
+ * @returns {Promise<Object[]>}
+ */
+async function fetchAllStreamsStatus() {
+	const streamsResult = await getStreamsList();
+	
+	if (!streamsResult || !streamsResult.streams) {
+		return [];
+	}
+	
+	const streams = streamsResult.streams;
+	
+	// 为每个流获取详细状态
+	const streamIds = streams.map(s => s.id);
+	const dashboardData = await fetchMultiStreamsDashboard(streamIds);
+	
+	// 合并流信息和Dashboard数据
+	return streams.map((stream, index) => ({
+		...stream,
+		dashboardData: dashboardData[index]
+	}));
+}
 
 // ==================== 通用请求函数 ====================
 
@@ -44,19 +114,36 @@ async function apiRequest(endpoint, options = {}) {
 		console.log(`📡 API 请求: ${options.method || 'GET'} ${endpoint}`, options.body ? JSON.parse(options.body) : '');
 		console.log(`📡 完整URL: ${url}`);
 		
+		// 添加超时控制（30秒）
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => controller.abort(), 30000);
+		
 		const response = await fetch(url, {
 			...options,
 			headers,
 			mode: 'cors', // 明确指定 CORS 模式
-			credentials: 'omit' // 不发送 credentials，避免 CORS 问题
+			credentials: 'omit', // 不发送 credentials，避免 CORS 问题
+			signal: controller.signal
+		}).finally(() => {
+			clearTimeout(timeoutId);
 		});
+		
+		console.log(`📥 收到响应: ${response.status} ${response.statusText}`);
 		
 		// 检查响应类型
 		const contentType = response.headers.get('content-type');
 		let data;
 		
 		if (contentType && contentType.includes('application/json')) {
-			data = await response.json();
+			try {
+				data = await response.json();
+				console.log('📦 JSON 数据解析成功');
+			} catch (parseError) {
+				console.error('❌ JSON 解析失败:', parseError);
+				const text = await response.text();
+				console.error('❌ 响应内容:', text.substring(0, 500));
+				throw new Error(`JSON解析失败: ${parseError.message}`);
+			}
 		} else {
 			// 如果不是 JSON，可能是 HTML 错误页面（如 nginx 404）
 			const text = await response.text();
@@ -103,9 +190,15 @@ async function apiRequest(endpoint, options = {}) {
 		
 	} catch (error) {
 		console.error(`❌ API 错误 (${endpoint}):`, error);
+		console.error('❌ 错误类型:', error.name);
+		console.error('❌ 错误消息:', error.message);
+		console.error('❌ 错误堆栈:', error.stack);
 		
 		// 详细的错误信息
-		if (error.name === 'TypeError' && error.message.includes('fetch')) {
+		if (error.name === 'AbortError') {
+			console.error('❌ 请求超时: 服务器在30秒内没有响应');
+			console.error('   请检查服务器是否正常运行');
+		} else if (error.name === 'TypeError' && error.message.includes('fetch')) {
 			console.error('❌ 网络错误: 无法连接到服务器，请检查：');
 			console.error('   1. 服务器是否已启动');
 			console.error('   2. 服务器地址是否正确:', getAPIBase());
@@ -124,46 +217,56 @@ async function apiRequest(endpoint, options = {}) {
 
 /**
  * 开始直播
- * @param {string|null} streamId - 直播流ID（多直播模式下必填）
+ * @param {string|null} streamId - 直播流ID（多直播模式下必填，根据接口文档要求）
  * @param {boolean} autoStartAI - 是否自动启动AI识别
  * @param {boolean} notifyUsers - 是否推送通知给用户
  * @returns {Promise<Object|null>}
  */
 async function startLive(streamId = null, autoStartAI = false, notifyUsers = true) {
-	// 多直播支持：如果未指定 streamId，尝试获取默认的启用流
-	if (!streamId) {
-		console.warn('⚠️ 未指定 streamId，将使用后端默认的启用流');
+	// 根据接口文档，streamId 是必填的
+	if (!streamId || streamId.trim() === '') {
+		console.error('❌ startLive: streamId 是必填参数，不能为空');
+		return {
+			success: false,
+			error: 'streamId 是必填参数，请先选择直播流',
+			message: 'streamId 是必填参数，请先选择直播流'
+		};
 	}
 	
 	return await apiRequest('/api/v1/admin/live/start', {
 		method: 'POST',
 		body: JSON.stringify({
-			streamId,
-			autoStartAI,
-			notifyUsers
+			streamId: streamId.trim(), // 确保 streamId 存在且不为空
+			autoStartAI: autoStartAI || false,
+			notifyUsers: notifyUsers !== false // 默认true
 		})
 	});
 }
 
 /**
  * 停止直播
- * @param {string|null} streamId - 直播流ID（多直播模式下必填，如果为null则停止当前直播）
+ * @param {string|null} streamId - 直播流ID（多直播模式下必填，根据接口文档要求）
  * @param {boolean} saveStatistics - 是否保存统计数据
  * @param {boolean} notifyUsers - 是否推送通知给用户
  * @returns {Promise<Object|null>}
  */
 async function stopLive(streamId = null, saveStatistics = true, notifyUsers = true) {
-	// 多直播支持：streamId 参数
-	if (!streamId) {
-		console.warn('⚠️ 未指定 streamId，将停止当前正在进行的直播');
+	// 根据接口文档，streamId 是必填的
+	if (!streamId || streamId.trim() === '') {
+		console.error('❌ stopLive: streamId 是必填参数，不能为空');
+		return {
+			success: false,
+			error: 'streamId 是必填参数，请先选择直播流',
+			message: 'streamId 是必填参数，请先选择直播流'
+		};
 	}
 	
 	return await apiRequest('/api/v1/admin/live/stop', {
 		method: 'POST',
 		body: JSON.stringify({
-			streamId,
-			saveStatistics,
-			notifyUsers
+			streamId: streamId.trim(), // 确保 streamId 存在且不为空
+			saveStatistics: saveStatistics !== false, // 默认true
+			notifyUsers: notifyUsers !== false // 默认true
 		})
 	});
 }
@@ -177,16 +280,23 @@ async function stopLive(streamId = null, saveStatistics = true, notifyUsers = tr
  * @param {boolean} notifyUsers - 是否推送通知给用户
  * @returns {Promise<Object|null>}
  */
-async function updateVotes(action, leftVotes, rightVotes, reason = '', notifyUsers = true) {
-	return await apiRequest('/api/admin/live/update-votes', {
+async function updateVotes(action, leftVotes, rightVotes, reason = '', notifyUsers = true, streamId = null) {
+	const body = {
+		action,
+		leftVotes,
+		rightVotes,
+		reason,
+		notifyUsers
+	};
+	
+	// 如果提供了streamId，添加到请求中
+	if (streamId) {
+		body.streamId = streamId;
+	}
+	
+	return await apiRequest('/api/v1/admin/live/update-votes', {
 		method: 'POST',
-		body: JSON.stringify({
-			action,
-			leftVotes,
-			rightVotes,
-			reason,
-			notifyUsers
-		})
+		body: JSON.stringify(body)
 	});
 }
 
@@ -198,17 +308,24 @@ async function updateVotes(action, leftVotes, rightVotes, reason = '', notifyUse
  * @param {boolean} notifyUsers - 是否推送通知给用户
  * @returns {Promise<Object|null>}
  */
-async function resetVotes(leftVotes = 0, rightVotes = 0, saveBackup = true, notifyUsers = true) {
-	return await apiRequest('/api/admin/live/reset-votes', {
+async function resetVotes(leftVotes = 0, rightVotes = 0, saveBackup = true, notifyUsers = true, streamId = null) {
+	const body = {
+		resetTo: {
+			leftVotes,
+			rightVotes
+		},
+		saveBackup,
+		notifyUsers
+	};
+	
+	// 如果提供了streamId，添加到请求中
+	if (streamId) {
+		body.streamId = streamId;
+	}
+	
+	return await apiRequest('/api/v1/admin/live/reset-votes', {
 		method: 'POST',
-		body: JSON.stringify({
-			resetTo: {
-				leftVotes,
-				rightVotes
-			},
-			saveBackup,
-			notifyUsers
-		})
+		body: JSON.stringify(body)
 	});
 }
 
@@ -217,37 +334,52 @@ async function resetVotes(leftVotes = 0, rightVotes = 0, saveBackup = true, noti
 /**
  * 启动AI识别
  * @param {Object} settings - AI设置
+ * @param {string|null} streamId - 直播流ID（可选，绑定后会自动启动音频提取）
  * @param {boolean} notifyUsers - 是否推送通知给用户
  * @returns {Promise<Object|null>}
  */
-async function startAI(settings = {}, notifyUsers = true) {
-	return await apiRequest('/api/admin/ai/start', {
+async function startAI(settings = {}, streamId = null, notifyUsers = true) {
+	const requestBody = {
+		settings: {
+			mode: settings.mode || 'realtime',
+			sensitivity: settings.sensitivity || 'high',
+			minConfidence: settings.minConfidence || 0.7
+		},
+		notifyUsers
+	};
+	
+	// 如果提供了 streamId，添加到请求体中
+	if (streamId) {
+		requestBody.streamId = streamId;
+	}
+	
+	return await apiRequest('/api/v1/admin/ai/start', {
 		method: 'POST',
-		body: JSON.stringify({
-			settings: {
-				mode: settings.mode || 'realtime',
-				interval: settings.interval || 5000,
-				sensitivity: settings.sensitivity || 'high',
-				minConfidence: settings.minConfidence || 0.7
-			},
-			notifyUsers
-		})
+		body: JSON.stringify(requestBody)
 	});
 }
 
 /**
  * 停止AI识别
+ * @param {string|null} streamId - 直播流ID（可选，若传入会确保对应音频提取器停止）
  * @param {boolean} saveHistory - 是否保存历史
  * @param {boolean} notifyUsers - 是否推送通知给用户
  * @returns {Promise<Object|null>}
  */
-async function stopAI(saveHistory = true, notifyUsers = true) {
-	return await apiRequest('/api/admin/ai/stop', {
+async function stopAI(streamId = null, saveHistory = true, notifyUsers = true) {
+	const requestBody = {
+		saveHistory,
+		notifyUsers
+	};
+	
+	// 如果提供了 streamId，添加到请求体中
+	if (streamId) {
+		requestBody.streamId = streamId;
+	}
+	
+	return await apiRequest('/api/v1/admin/ai/stop', {
 		method: 'POST',
-		body: JSON.stringify({
-			saveHistory,
-			notifyUsers
-		})
+		body: JSON.stringify(requestBody)
 	});
 }
 
@@ -258,7 +390,7 @@ async function stopAI(saveHistory = true, notifyUsers = true) {
  * @returns {Promise<Object|null>}
  */
 async function toggleAI(action, notifyUsers = true) {
-	return await apiRequest('/api/admin/ai/toggle', {
+	return await apiRequest('/api/v1/admin/ai/toggle', {
 		method: 'POST',
 		body: JSON.stringify({
 			action,
@@ -291,7 +423,7 @@ async function deleteAIContent(contentId, reason = '管理员删除', notifyUser
  * @returns {Promise<Object|null>}
  */
 async function fetchDashboard() {
-	return await apiRequest('/api/admin/dashboard', {
+	return await apiRequest('/api/v1/admin/dashboard', {
 		method: 'GET'
 	});
 }
@@ -334,7 +466,7 @@ async function fetchVotesStatistics(timeRange = '1h') {
  * @param {string|null} endTime - 结束时间（可选，ISO格式：2024-01-01T23:59:59）
  * @returns {Promise<Object|null>}
  */
-async function fetchAIContentList(page = 1, pageSize = 20, startTime = null, endTime = null) {
+async function fetchAIContentList(page = 1, pageSize = 20, startTime = null, endTime = null, streamId = null) {
 	const queryParams = new URLSearchParams({
 		page: page.toString(),
 		pageSize: pageSize.toString()
@@ -342,6 +474,11 @@ async function fetchAIContentList(page = 1, pageSize = 20, startTime = null, end
 	
 	if (startTime) queryParams.append('startTime', startTime);
 	if (endTime) queryParams.append('endTime', endTime);
+	
+	// 如果提供了streamId，添加到查询参数中
+	if (streamId) {
+		queryParams.append('stream_id', streamId);
+	}
 	
 	// 使用新的API路径 /api/v1/admin/ai-content/list
 	return await apiRequest(`/api/v1/admin/ai-content/list?${queryParams}`, {
@@ -394,7 +531,7 @@ async function deleteAIContentComment(contentId, commentId, reason = '', notifyU
  * @returns {Promise<Array|null>}
  */
 async function getStreamsList() {
-	return await apiRequest('/api/admin/streams', {
+	return await apiRequest('/api/v1/admin/streams', {
 		method: 'GET'
 	});
 }
@@ -405,7 +542,7 @@ async function getStreamsList() {
  * @returns {Promise<Object|null>}
  */
 async function addStream(streamData) {
-	return await apiRequest('/api/admin/streams', {
+	return await apiRequest('/api/v1/admin/streams', {
 		method: 'POST',
 		body: JSON.stringify(streamData)
 	});

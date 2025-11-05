@@ -141,10 +141,24 @@ class ApiService {
     const requestConfig = {
       url: fullUrl,
       method: method.toUpperCase(),
-      data,
       header: defaultHeaders,
-      timeout
+      timeout,
+      dataType: 'json' // 明确指定数据类型
     };
+
+    // 🔧 对于POST请求，确保数据正确序列化
+    if (method.toUpperCase() === 'POST' && data) {
+      // 在微信小程序中，uni.request 会自动序列化对象为 JSON
+      // 但为了确保一致性，我们显式处理
+      requestConfig.data = data;
+      
+      // 调试：记录POST请求的完整数据
+      console.log('📤 [POST请求] 发送的数据:', JSON.stringify(data, null, 2));
+      console.log('📤 [POST请求] 数据类型:', typeof data);
+      console.log('📤 [POST请求] Content-Type:', defaultHeaders['Content-Type']);
+    } else {
+      requestConfig.data = data;
+    }
 
     // 使用拦截器处理请求
     return await apiInterceptor.requestWithRetry(async (config) => {
@@ -228,12 +242,17 @@ class ApiService {
    * 用户投票
    * @param {string} side - 投票方 ('left' 或 'right')
    * @param {number} votes - 投票数量，默认10
-   * @param {string} streamId - 直播流ID（可选，不传则使用全局辩题）
+   * @param {string} streamId - 直播流ID（必需，用于指定投票所属的直播流）
    * @returns {Promise<Object>} 投票结果
    */
   async userVote(side, votes = 10, streamId = null) {
     if (!side || !['left', 'right'].includes(side)) {
       throw new Error('投票方必须是 "left" 或 "right"');
+    }
+
+    // 🔧 验证 streamId 是否提供（投票必须指定直播流）
+    if (!streamId) {
+      throw new Error('投票必须指定直播流ID (streamId)');
     }
 
     // 确保 votes 是整数且在有效范围内
@@ -299,19 +318,26 @@ class ApiService {
       requestData.userId = String(userId);
     }
 
-    // 如果指定了 streamId，添加到请求中
-    if (streamId) {
-      requestData.streamId = streamId;
-    }
+    // 🔧 streamId 是必需的，必须添加到请求中
+    // 注意：如果 streamId 为空，上面的验证应该已经抛出错误
+    requestData.streamId = streamId;
 
     console.log('📤 投票请求数据 (服务器格式):', JSON.stringify(requestData, null, 2));
     console.log('📤 原始参数:', { side, votes: voteCount });
 
     try {
+      // 🔧 后端API期望数据包装在 request 字段中
+      // 根据错误信息 "body -> request: Field required"，后端明确需要 request 字段
+      const requestBody = {
+        request: requestData
+      };
+      
+      console.log('📤 最终发送的请求体:', JSON.stringify(requestBody, null, 2));
+      
       const response = await this.request({
         url: '/api/v1/user-vote',
         method: 'POST',
-        data: requestData
+        data: requestBody
       });
       return response;
     } catch (error) {
@@ -574,10 +600,15 @@ class ApiService {
 
   /**
    * 获取数据概览（包含直播状态）
+   * @param {string|null} streamId - 可选，指定要查询的直播流ID。如果提供，则查询该流的Dashboard；否则查询默认Dashboard
    * @returns {Promise<Object>} { isLive, liveStreamUrl, totalUsers, activeUsers, ... }
    */
-  async getDashboard() {
-    const response = await this.request({ url: '/api/admin/dashboard', method: 'GET' });
+  async getDashboard(streamId = null) {
+    // 如果提供了 streamId，使用带参数的API查询特定流的Dashboard
+    const url = streamId 
+      ? `/api/v1/admin/dashboard?stream_id=${streamId}`
+      : '/api/admin/dashboard';
+    const response = await this.request({ url, method: 'GET' });
     // 如果返回的是包装格式 { success: true, data: {...} }，提取 data 字段
     if (response && response.success && response.data) {
       return response.data;

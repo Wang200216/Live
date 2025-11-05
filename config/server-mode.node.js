@@ -7,7 +7,8 @@ const REAL_SERVER_PORT = 8081; // 中间层服务器端口（避免与 nginx 冲
 const BACKEND_SERVER_URL = 'http://192.168.31.189:8000'; // 后端服务器地址
 // 是否优先使用后端服务器（设为 true 时，所有 API 请求会优先代理到后端服务器）
 // 注意：后台管理系统通过中间层代理访问后端服务器
-const PRIORITIZE_BACKEND_SERVER = true; // 设为 true 优先使用后端服务器，false 优先使用本地路由
+// 🔧 修复：改为 false，让中间层直接处理请求，避免状态不同步
+const PRIORITIZE_BACKEND_SERVER = false; // 设为 true 优先使用后端服务器，false 优先使用本地路由
 const REAL_WECHAT_CONFIG = {
     appid: 'wx94289b0d2ca7a802',
     secret: '10409c1193a326a7b328f675b1776195'

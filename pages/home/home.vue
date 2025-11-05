@@ -182,16 +182,23 @@
 					<view class="message-item" v-for="message in aiMessages" :key="message.id"
 						  :class="{'left': message.side === 'left', 'right': message.side === 'right'}"
 						  @click="handleMessageClick(message)">
-						<view class="message-bubble">
-							<text class="message-text">{{ message.text }}</text>
-							<view class="message-actions">
-								<view class="action-item" @click.stop="handleMessageComment(message)">
-									<text class="action-icon">💬</text>
-									<text class="action-count">{{ message.comments.length }}</text>
-								</view>
-								<view class="action-item" @click.stop="handleMessageLike(message)" :class="{'liked': message.isLiked}">
-									<text class="action-icon">👍</text>
-									<text class="action-count">{{ message.likes }}</text>
+						<view class="message-bubble-wrapper">
+							<!-- 正方/反方标识 -->
+							<view class="side-badge" :class="{'left-badge': message.side === 'left', 'right-badge': message.side === 'right'}">
+								<text class="badge-icon">{{ message.side === 'left' ? '⚔️' : '🛡️' }}</text>
+								<text class="badge-text">{{ message.side === 'left' ? '正方' : '反方' }}</text>
+							</view>
+							<view class="message-bubble">
+								<text class="message-text">{{ message.text }}</text>
+								<view class="message-actions">
+									<view class="action-item" @click.stop="handleMessageComment(message)">
+										<text class="action-icon">💬</text>
+										<text class="action-count">{{ message.comments.length }}</text>
+									</view>
+									<view class="action-item" @click.stop="handleMessageLike(message)" :class="{'liked': message.isLiked}">
+										<text class="action-icon">👍</text>
+										<text class="action-count">{{ message.likes }}</text>
+									</view>
 								</view>
 							</view>
 						</view>
@@ -1179,13 +1186,21 @@
 						return;
 					}
 					
-					console.log('📡 正在获取直播状态（dashboard接口）...');
-					const dashboardData = await service.getDashboard();
+				console.log('📡 正在获取直播状态（dashboard接口）...');
+				// 🔧 如果指定了 streamId，获取该流的Dashboard状态
+				const dashboardData = await service.getDashboard(this.streamId);
 					
 					if (dashboardData) {
 						console.log('📊 Dashboard数据:', dashboardData);
 						
-					// 更新直播状态
+						// 🔍 多直播支持：检查返回的数据是否属于当前直播间
+						const responseStreamId = dashboardData.streamId || dashboardData.liveId;
+						if (this.streamId && responseStreamId && responseStreamId !== this.streamId) {
+							console.log('⏩ Dashboard数据不属于当前直播间，忽略:', responseStreamId, '当前直播间:', this.streamId);
+							return;
+						}
+						
+						// 更新直播状态
 					if (dashboardData.isLive !== undefined) {
 						const wasLive = this.isLiveStarted;
 						const nowLive = dashboardData.isLive;
@@ -1264,17 +1279,42 @@
 							await this.setLiveStreamUrlWithHls(streamUrl, dashboardData.activeStreamName);
 							console.log('📺 更新直播流地址:', this.liveStreamUrl);
 						}
-						} else if (!nowLive && wasLive) {
-								// 直播从开始变为停止
-								console.log('🛑 Dashboard显示直播已停止，更新UI');
-								this.isLiveStarted = false;
-								
-								uni.showToast({
-									title: '直播已结束',
-									icon: 'none',
-									duration: 2000
-								});
-							} else {
+					} else if (!nowLive && wasLive) {
+						// 🔧 直播从开始变为停止 - 强制退出并返回直播选择页面
+						console.log('🛑 Dashboard显示直播已停止（轮询检测），当前直播间:', this.streamId);
+						this.isLiveStarted = false;
+						
+						uni.showToast({
+							title: '直播已结束，即将返回',
+							icon: 'none',
+							duration: 2000
+						});
+						
+						// 🔧 延迟1.5秒后自动返回直播选择页面
+						setTimeout(() => {
+							console.log('🔄 自动返回直播选择页面（轮询触发）');
+							// 使用 redirectTo 替换当前页面，避免用户通过返回按钮回到已停止的直播页面
+							uni.redirectTo({
+								url: '/pages/live-select/live-select',
+								success: () => {
+									console.log('✅ 已返回直播选择页面');
+								},
+								fail: (err) => {
+									console.error('❌ 返回直播选择页面失败:', err);
+									// 如果 redirectTo 失败，尝试使用 navigateBack
+									uni.navigateBack({
+										delta: 1,
+										fail: () => {
+											// 如果 navigateBack 也失败，尝试使用 navigateTo
+											uni.navigateTo({
+												url: '/pages/live-select/live-select'
+											});
+										}
+									});
+								}
+							});
+						}, 1500);
+					} else {
 								// 状态没有变化，但确保状态同步
 								if (nowLive !== wasLive) {
 									this.isLiveStarted = nowLive;
@@ -2027,10 +2067,21 @@
 				const startTime = Date.now();
 				
 				try {
+					// 🔧 验证 streamId 是否存在（投票必须指定直播流）
+					if (!this.streamId) {
+						console.error('❌ 投票失败: 缺少直播流ID (streamId)');
+						uni.showToast({
+							title: '❌ 投票失败: 未指定直播间',
+							icon: 'error',
+							duration: 3000
+						});
+						throw new Error('投票必须指定直播流ID (streamId)');
+					}
+					
 					console.log('📤 发送投票请求:', { side, votes, streamId: this.streamId });
 					console.log('📡 API服务器地址:', this.apiService?.baseURL || '未设置');
 					
-					// 传递 streamId 参数（如果存在）
+					// 传递 streamId 参数（必需）
 					const response = await apiService.userVote(side, votes, this.streamId);
 					
 					// 详细记录响应信息
@@ -4029,6 +4080,13 @@
 		async handleLiveStatusUpdate(data) {
 			console.log('🎬 直播状态更新（WebSocket）:', data);
 			
+			// 🔍 多直播支持：检查消息是否属于当前直播间
+			const messageStreamId = data.streamId || data.liveId;
+			if (this.streamId && messageStreamId && messageStreamId !== this.streamId) {
+				console.log('⏩ 消息不属于当前直播间，忽略:', messageStreamId, '当前直播间:', this.streamId);
+				return;
+			}
+			
 			// ✅ 优先接收并设置直播流URL（使用智能转换方法）
 			if (data.streamUrl) {
 				// 使用智能转换方法设置HLS流地址
@@ -4102,16 +4160,41 @@
 						}
 					});
 				} else if (!data.isLive && wasLive) {
-					// 直播从开始变为停止
-					console.log('🛑 服务器停止直播');
+					// 🔧 直播从开始变为停止 - 强制退出并返回直播选择页面
+					console.log('🛑 服务器停止直播，当前直播间:', this.streamId);
 					this.isLiveStarted = false;
 					
 					// 显示提示
 					uni.showToast({
-						title: '直播已结束',
+						title: '直播已结束，即将返回',
 						icon: 'none',
 						duration: 2000
 					});
+					
+					// 🔧 延迟1.5秒后自动返回直播选择页面
+					setTimeout(() => {
+						console.log('🔄 自动返回直播选择页面');
+						// 使用 redirectTo 替换当前页面，避免用户通过返回按钮回到已停止的直播页面
+						uni.redirectTo({
+							url: '/pages/live-select/live-select',
+							success: () => {
+								console.log('✅ 已返回直播选择页面');
+							},
+							fail: (err) => {
+								console.error('❌ 返回直播选择页面失败:', err);
+								// 如果 redirectTo 失败，尝试使用 navigateBack
+								uni.navigateBack({
+									delta: 1,
+									fail: () => {
+										// 如果 navigateBack 也失败，尝试使用 navigateTo
+										uni.navigateTo({
+											url: '/pages/live-select/live-select'
+										});
+									}
+								});
+							}
+						});
+					}, 1500);
 					
 					// 保留liveStreamUrl，下次可以继续使用
 				} else if (data.isLive === wasLive) {
@@ -4392,10 +4475,7 @@
 		right: 0;
 		bottom: 0;
 		/* 波普风格光线层效果 */
-		background:
-			radial-gradient(ellipse 600rpx 400rpx at 60% 15%, rgba(255, 217, 61, 0.1) 0%, transparent 35%),
-			radial-gradient(ellipse 500rpx 500rpx at 20% 70%, rgba(255, 107, 157, 0.08) 0%, transparent 45%),
-			linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 50%, rgba(78, 205, 196, 0.05) 100%);
+		background: radial-gradient(ellipse 600rpx 400rpx at 60% 15%, rgba(255, 217, 61, 0.1) 0%, transparent 35%), radial-gradient(ellipse 500rpx 500rpx at 20% 70%, rgba(255, 107, 157, 0.08) 0%, transparent 45%), linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 50%, rgba(78, 205, 196, 0.05) 100%);
 		pointer-events: none;
 		z-index: 0;
 		animation: lightShimmer 8s ease-in-out infinite;
@@ -4418,10 +4498,7 @@
 		border-radius: 24rpx;
 		padding: 24rpx;
 		margin-bottom: 20rpx;
-		box-shadow:
-			0 0 40rpx rgba(0, 180, 220, 0.2),
-			0 8rpx 32rpx rgba(0, 0, 0, 0.3),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
+		box-shadow: 0 0 40rpx rgba(0, 180, 220, 0.2), 0 8rpx 32rpx rgba(0, 0, 0, 0.3), inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
 		position: relative;
 		z-index: 1;
 		transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -4438,10 +4515,7 @@
 	}
 
 	.vote-progress-container:hover {
-		box-shadow:
-			0 0 50rpx rgba(0, 180, 220, 0.3),
-			0 12rpx 40rpx rgba(0, 0, 0, 0.35),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+		box-shadow: 0 0 50rpx rgba(0, 180, 220, 0.3), 0 12rpx 40rpx rgba(0, 0, 0, 0.35), inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
 		backdrop-filter: blur(25rpx);
 	}
 
@@ -4464,10 +4538,7 @@
 		margin-bottom: 20rpx;
 		overflow: hidden;
 		transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-		box-shadow:
-			0 0 50rpx rgba(255, 100, 150, 0.15),
-			0 10rpx 40rpx rgba(0, 0, 0, 0.35),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.18);
+		box-shadow: 0 0 50rpx rgba(255, 100, 150, 0.15), 0 10rpx 40rpx rgba(0, 0, 0, 0.35), inset 0 1rpx 0 rgba(255, 255, 255, 0.18);
 		position: relative;
 		z-index: 1;
 		animation: cardGlow 8s ease-in-out infinite;
@@ -4475,25 +4546,16 @@
 
 	@keyframes cardGlow {
 		0%, 100% {
-			box-shadow:
-				0 0 50rpx rgba(255, 100, 150, 0.15),
-				0 10rpx 40rpx rgba(0, 0, 0, 0.35),
-				inset 0 1rpx 0 rgba(255, 255, 255, 0.18);
+			box-shadow: 0 0 50rpx rgba(255, 100, 150, 0.15), 0 10rpx 40rpx rgba(0, 0, 0, 0.35), inset 0 1rpx 0 rgba(255, 255, 255, 0.18);
 		}
 		50% {
-			box-shadow:
-				0 0 60rpx rgba(0, 180, 220, 0.2),
-				0 12rpx 48rpx rgba(0, 0, 0, 0.4),
-				inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
+			box-shadow: 0 0 60rpx rgba(0, 180, 220, 0.2), 0 12rpx 48rpx rgba(0, 0, 0, 0.4), inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
 		}
 	}
 
 	.live-section:hover {
 		backdrop-filter: blur(22rpx);
-		box-shadow:
-			0 0 70rpx rgba(255, 100, 150, 0.25),
-			0 15rpx 50rpx rgba(0, 0, 0, 0.4),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.25);
+		box-shadow: 0 0 70rpx rgba(255, 100, 150, 0.25), 0 15rpx 50rpx rgba(0, 0, 0, 0.4), inset 0 1rpx 0 rgba(255, 255, 255, 0.25);
 		transform: translateY(-6rpx);
 	}
 
@@ -4557,8 +4619,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		box-shadow: 0 4rpx 15rpx rgba(0, 0, 0, 0.3),
-		            0 0 0 1rpx rgba(255, 255, 255, 0.2);
+		box-shadow: 0 4rpx 15rpx rgba(0, 0, 0, 0.3), 0 0 0 1rpx rgba(255, 255, 255, 0.2);
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 		cursor: pointer;
 		backdrop-filter: blur(10rpx);
@@ -4567,14 +4628,12 @@
 	
 	.play-button:active {
 		transform: scale(0.95);
-		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.4),
-		            0 0 0 1rpx rgba(255, 255, 255, 0.3);
+		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.4), 0 0 0 1rpx rgba(255, 255, 255, 0.3);
 	}
 	
 	.play-button:hover {
 		transform: scale(1.05);
-		box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.4),
-		            0 0 0 2rpx rgba(255, 255, 255, 0.3);
+		box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.4), 0 0 0 2rpx rgba(255, 255, 255, 0.3);
 	}
 	
 	.play-icon-img {
@@ -4748,18 +4807,11 @@
 		justify-content: center;
 		height: 100%;
 		color: #333333;
-		background: 
-			linear-gradient(135deg, 
-				#FFD4E5 0%, 
-				#E5D4FF 35%, 
-				#D4E5FF 70%, 
-				#D4FFF5 100%);
+		background: linear-gradient(135deg, #FFD4E5 0%, #E5D4FF 35%, #D4E5FF 70%, #D4FFF5 100%);
 		position: relative;
 		overflow: hidden;
 		border: 3rpx solid #999999;
-		box-shadow: 
-			0 6rpx 16rpx rgba(0, 0, 0, 0.08),
-			inset 0 2rpx 0 rgba(255, 255, 255, 0.5);
+		box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.08), inset 0 2rpx 0 rgba(255, 255, 255, 0.5);
 	}
 	
 	.video-placeholder::before {
@@ -4769,9 +4821,7 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		background: 
-			radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.15) 0%, transparent 40%),
-			radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
+		background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.15) 0%, transparent 40%), radial-gradient(circle at 70% 70%, rgba(255, 255, 255, 0.1) 0%, transparent 50%);
 		pointer-events: none;
 		animation: shimmer 3s ease-in-out infinite;
 	}
@@ -4780,9 +4830,7 @@
 		font-size: 80rpx;
 		margin-bottom: 20rpx;
 		opacity: 0.85;
-		text-shadow: 
-			2rpx 2rpx 4rpx rgba(0, 0, 0, 0.1),
-			0 0 20rpx rgba(255, 255, 255, 0.3);
+		text-shadow: 2rpx 2rpx 4rpx rgba(0, 0, 0, 0.1), 0 0 20rpx rgba(255, 255, 255, 0.3);
 		position: relative;
 		z-index: 1;
 		animation: popBounce 2s ease-in-out infinite;
@@ -4793,9 +4841,7 @@
 		font-weight: bold;
 		opacity: 0.9;
 		color: #666666;
-		text-shadow: 
-			1rpx 1rpx 2rpx rgba(0, 0, 0, 0.1),
-			0 0 10rpx rgba(255, 255, 255, 0.5);
+		text-shadow: 1rpx 1rpx 2rpx rgba(0, 0, 0, 0.1), 0 0 10rpx rgba(255, 255, 255, 0.5);
 		position: relative;
 		z-index: 1;
 		letter-spacing: 3rpx;
@@ -4830,18 +4876,13 @@
 		right: 15rpx;
 		width: 60rpx;
 		height: 60rpx;
-		background: 
-			radial-gradient(circle at 30% 30%, rgba(120, 119, 198, 0.9) 0%, transparent 50%),
-			linear-gradient(135deg, rgba(120, 119, 198, 0.7), rgba(255, 119, 198, 0.5));
+		background: radial-gradient(circle at 30% 30%, rgba(120, 119, 198, 0.9) 0%, transparent 50%), linear-gradient(135deg, rgba(120, 119, 198, 0.7), rgba(255, 119, 198, 0.5));
 		border: 2rpx solid rgba(255, 255, 255, 0.3);
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		box-shadow: 
-			0 8rpx 24rpx rgba(0, 0, 0, 0.3),
-			0 0 0 1rpx rgba(255, 255, 255, 0.2),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+		box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.3), 0 0 0 1rpx rgba(255, 255, 255, 0.2), inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 		cursor: pointer;
 		backdrop-filter: blur(10rpx);
@@ -4855,18 +4896,13 @@
 		right: 15rpx;
 		width: 60rpx;
 		height: 60rpx;
-		background: 
-			radial-gradient(circle at 70% 30%, rgba(120, 219, 255, 0.9) 0%, transparent 50%),
-			linear-gradient(135deg, rgba(255, 119, 198, 0.7), rgba(120, 219, 255, 0.5));
+		background: radial-gradient(circle at 70% 30%, rgba(120, 219, 255, 0.9) 0%, transparent 50%), linear-gradient(135deg, rgba(255, 119, 198, 0.7), rgba(120, 219, 255, 0.5));
 		border: 2rpx solid rgba(255, 255, 255, 0.3);
 		border-radius: 50%;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		box-shadow: 
-			0 8rpx 24rpx rgba(0, 0, 0, 0.3),
-			0 0 0 1rpx rgba(255, 255, 255, 0.2),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+		box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.3), 0 0 0 1rpx rgba(255, 255, 255, 0.2), inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 		cursor: pointer;
 		backdrop-filter: blur(10rpx);
@@ -4875,14 +4911,12 @@
 
 	.switch-video-btn:active {
 		transform: scale(0.95);
-		box-shadow: 0 2rpx 8rpx rgba(255, 20, 147, 0.3),
-		            0 0 0 1rpx rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2rpx 8rpx rgba(255, 20, 147, 0.3), 0 0 0 1rpx rgba(255, 255, 255, 0.2);
 	}
 
 	.switch-video-btn:hover {
 		transform: scale(1.05);
-		box-shadow: 0 6rpx 20rpx rgba(255, 20, 147, 0.5),
-		            0 0 0 2rpx rgba(255, 255, 255, 0.2);
+		box-shadow: 0 6rpx 20rpx rgba(255, 20, 147, 0.5), 0 0 0 2rpx rgba(255, 255, 255, 0.2);
 	}
 
 	.switch-icon {
@@ -4898,14 +4932,12 @@
 
 	.collapse-btn-floating:active {
 		transform: scale(0.95);
-		box-shadow: 0 2rpx 8rpx rgba(102, 126, 234, 0.3),
-		            0 0 0 1rpx rgba(255, 255, 255, 0.2);
+		box-shadow: 0 2rpx 8rpx rgba(102, 126, 234, 0.3), 0 0 0 1rpx rgba(255, 255, 255, 0.2);
 	}
 
 	.collapse-btn-floating:hover {
 		transform: scale(1.05);
-		box-shadow: 0 6rpx 20rpx rgba(102, 126, 234, 0.5),
-		            0 0 0 2rpx rgba(255, 255, 255, 0.2);
+		box-shadow: 0 6rpx 20rpx rgba(102, 126, 234, 0.5), 0 0 0 2rpx rgba(255, 255, 255, 0.2);
 	}
 
 	.collapse-icon-img {
@@ -4921,13 +4953,7 @@
 	/* 票数进度条样式 */
 	.progress-bar {
 		height: 35rpx;
-		background: 
-			linear-gradient(90deg, 
-				#FF1493 0%, 
-				#FF8C00 25%, 
-				#32CD32 50%, 
-				#FF8C00 75%, 
-				#FF1493 100%);
+		background: linear-gradient(90deg, #FF1493 0%, #FF8C00 25%, #32CD32 50%, #FF8C00 75%, #FF1493 100%);
 		background-size: 200% 200%;
 		border: 3rpx solid #000;
 		border-radius: 18rpx;
@@ -4935,9 +4961,7 @@
 		overflow: hidden;
 		display: flex;
 		animation: gradientShift 4s ease infinite;
-		box-shadow: 
-			0 6rpx 20rpx rgba(0, 0, 0, 0.3),
-			inset 0 2rpx 0 rgba(255, 255, 255, 0.4);
+		box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.3), inset 0 2rpx 0 rgba(255, 255, 255, 0.4);
 	}
 
 	@keyframes gradientShift {
@@ -4957,18 +4981,10 @@
 
 	/* 浮动覆盖层的进度条样式 */
 	.vote-progress-overlay .progress-bar {
-		background: 
-			linear-gradient(90deg, 
-				#FF1493 0%, 
-				#FF8C00 25%, 
-				#32CD32 50%, 
-				#FF8C00 75%, 
-				#FF1493 100%);
+		background: linear-gradient(90deg, #FF1493 0%, #FF8C00 25%, #32CD32 50%, #FF8C00 75%, #FF1493 100%);
 		background-size: 200% 200%;
 		backdrop-filter: blur(20rpx);
-		box-shadow: 
-			0 6rpx 20rpx rgba(0, 0, 0, 0.3),
-			inset 0 2rpx 0 rgba(255, 255, 255, 0.4);
+		box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.3), inset 0 2rpx 0 rgba(255, 255, 255, 0.4);
 	}
 
 	.progress-fill {
@@ -4982,27 +4998,17 @@
 	}
 
 	.left-fill {
-		background: 
-			radial-gradient(circle at 30% 30%, rgba(120, 119, 198, 0.9) 0%, transparent 50%),
-			linear-gradient(135deg, rgba(120, 119, 198, 0.8), rgba(255, 119, 198, 0.6));
+		background: radial-gradient(circle at 30% 30%, rgba(120, 119, 198, 0.9) 0%, transparent 50%), linear-gradient(135deg, rgba(120, 119, 198, 0.8), rgba(255, 119, 198, 0.6));
 		background-size: 300% 300%, 100% 100%;
 		animation: leftPopBounce 2.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
-		box-shadow: 
-			inset 0 0 20rpx rgba(255, 255, 255, 0.4),
-			0 0 20rpx rgba(120, 119, 198, 0.6),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+		box-shadow: inset 0 0 20rpx rgba(255, 255, 255, 0.4), 0 0 20rpx rgba(120, 119, 198, 0.6), inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
 	}
 
 	.right-fill {
-		background: 
-			radial-gradient(circle at 70% 30%, rgba(120, 219, 255, 0.9) 0%, transparent 50%),
-			linear-gradient(135deg, rgba(255, 119, 198, 0.8), rgba(120, 219, 255, 0.6));
+		background: radial-gradient(circle at 70% 30%, rgba(120, 219, 255, 0.9) 0%, transparent 50%), linear-gradient(135deg, rgba(255, 119, 198, 0.8), rgba(120, 219, 255, 0.6));
 		background-size: 300% 300%, 100% 100%;
 		animation: rightPopBounce 2.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
-		box-shadow: 
-			inset 0 0 20rpx rgba(255, 255, 255, 0.4),
-			0 0 20rpx rgba(120, 219, 255, 0.6),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+		box-shadow: inset 0 0 20rpx rgba(255, 255, 255, 0.4), 0 0 20rpx rgba(120, 219, 255, 0.6), inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
 	}
 
 	@keyframes leftPopBounce {
@@ -5820,9 +5826,33 @@
 	.message-item {
 		margin-bottom: 20rpx;
 		display: flex;
+		flex-direction: column;
 		width: 100%;
 		box-sizing: border-box;
 		animation: messageSlideIn 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+		position: relative;
+	}
+
+	.message-item.left {
+		align-items: flex-start;
+	}
+
+	.message-item.right {
+		align-items: flex-end;
+	}
+
+	.message-item.left .message-bubble-wrapper {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		max-width: 85%;
+	}
+
+	.message-item.right .message-bubble-wrapper {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		max-width: 85%;
 	}
 
 	@keyframes messageSlideIn {
@@ -5837,22 +5867,81 @@
 	}
 
 	.message-item.left {
-		justify-content: flex-start;
+		align-items: flex-start;
 	}
 
 	.message-item.right {
-		justify-content: flex-end;
+		align-items: flex-end;
+	}
+
+	/* 消息气泡包装器 */
+	.message-bubble-wrapper {
+		display: flex;
+		flex-direction: column;
+		width: 100%;
+		max-width: 85%;
+	}
+
+	.message-item.left .message-bubble-wrapper {
+		align-items: flex-start;
+	}
+
+	.message-item.right .message-bubble-wrapper {
+		align-items: flex-end;
+	}
+
+	/* 正方/反方标识 */
+	.side-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 6rpx;
+		padding: 6rpx 14rpx;
+		border-radius: 16rpx;
+		font-size: 22rpx;
+		font-weight: 600;
+		margin-bottom: 8rpx;
+		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
+		backdrop-filter: blur(8rpx);
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		white-space: nowrap;
+	}
+
+	.message-item.left .side-badge {
+		background: linear-gradient(135deg, rgba(255, 100, 150, 0.95), rgba(255, 120, 160, 0.95));
+		color: #ffffff;
+		border: 2rpx solid rgba(255, 100, 150, 0.6);
+		align-self: flex-start;
+	}
+
+	.message-item.right .side-badge {
+		background: linear-gradient(135deg, rgba(100, 150, 255, 0.95), rgba(120, 170, 255, 0.95));
+		color: #ffffff;
+		border: 2rpx solid rgba(100, 150, 255, 0.6);
+		align-self: flex-end;
+	}
+
+	.badge-icon {
+		font-size: 24rpx;
+		line-height: 1;
+	}
+
+	.badge-text {
+		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+		font-size: 22rpx;
+		font-weight: 600;
+		letter-spacing: 0.5rpx;
+		text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.2);
 	}
 
 	.message-bubble {
-		max-width: 85%;
+		width: 100%;
+		max-width: 100%;
 		padding: 24rpx 28rpx;
 		border-radius: 28rpx;
 		border: 2rpx solid rgba(0, 0, 0, 0.08);
 		position: relative;
 		transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		box-sizing: border-box;
-		width: fit-content;
 		box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
 		backdrop-filter: blur(10rpx);
 	}
@@ -8754,5 +8843,4 @@
 		}
 	}
 
-	}
 </style>
