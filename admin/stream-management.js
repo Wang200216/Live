@@ -56,19 +56,23 @@ async function loadStreamsList() {
 	try {
 		console.log('📡 加载直播流列表...');
 		
-		const result = await getStreamsList();
-		console.log('📦 API返回数据:', result);
-		
-		// 处理返回数据，可能是数组或者包含data字段的对象
-		let streams = [];
-		if (Array.isArray(result)) {
-			streams = result;
-		} else if (result && Array.isArray(result.data)) {
-			streams = result.data;
-		} else if (result && typeof result === 'object') {
-			// 如果是对象但不是数组，尝试提取可能的数组字段
-			streams = result.streams || result.items || result.list || [];
-		}
+	const result = await getStreamsList();
+	console.log('📦 API返回数据:', result);
+	
+	// 处理返回数据，API 返回格式: {streams: Array, total: 6} 或 {data: {streams: Array, total: 6}}
+	let streams = [];
+	if (Array.isArray(result)) {
+		streams = result;
+	} else if (result?.data?.streams) {
+		streams = result.data.streams;
+	} else if (result?.streams) {
+		streams = result.streams;
+	} else if (result?.data && Array.isArray(result.data)) {
+		streams = result.data;
+	} else if (result && typeof result === 'object') {
+		// 兼容其他格式
+		streams = result.items || result.list || [];
+	}
 		
 		// 确保 streams 是数组
 		if (!Array.isArray(streams)) {
@@ -191,10 +195,21 @@ async function openEditStreamModal(streamId) {
 		// 设置标题
 		title.textContent = '编辑直播流';
 		
-		// 获取流列表，找到对应的流
-		const result = await getStreamsList();
-		const streams = Array.isArray(result) ? result : (result?.data || result || []);
-		const stream = streams.find(s => s.id === streamId);
+	// 获取流列表，找到对应的流
+	const result = await getStreamsList();
+	// API 返回格式: {streams: Array, total: 6} 或 {data: {streams: Array, total: 6}}
+	let streams = [];
+	if (Array.isArray(result)) {
+		streams = result;
+	} else if (result?.data?.streams) {
+		streams = result.data.streams;
+	} else if (result?.streams) {
+		streams = result.streams;
+	} else if (result?.data) {
+		streams = Array.isArray(result.data) ? result.data : [];
+	}
+	
+	const stream = streams.find(s => s.id === streamId);
 		
 		if (!stream) {
 			showToast('找不到指定的直播流', 'error');

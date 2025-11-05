@@ -744,60 +744,60 @@ class ApiService {
 
         console.log('📦 [FLV转换] API返回结果:', JSON.stringify(urls, null, 2));
 
-        // 优先使用FLV格式（HTTP协议支持，微信小程序推荐）
-        if (urls && urls.play_flv) {
-          console.log('✅ [FLV转换] 成功获取FLV地址:', urls.play_flv);
+        // 优先使用HLS格式（虽然需要HTTPS，但原生video组件支持好）
+        if (urls && urls.play_hls) {
+          console.log('✅ [HLS转换] 成功获取HLS地址:', urls.play_hls);
 
           // 修正 localhost 为真实服务器 IP
-          let flvUrl = urls.play_flv;
+          let hlsUrl = urls.play_hls;
 
           // 1. 替换 localhost 为真实 IP
-          if (flvUrl.includes('localhost')) {
+          if (hlsUrl.includes('localhost')) {
             // 从当前 API_BASE_URL 提取服务器 IP
             const apiBaseUrl = this.baseURL || API_BASE_URL;
             const serverIpMatch = apiBaseUrl.match(/https?:\/\/([^:\/]+)/);
             const serverIp = serverIpMatch ? serverIpMatch[1] : '192.168.31.189';
 
-            flvUrl = flvUrl.replace('localhost', serverIp);
-            console.log('🔄 [FLV转换] 已修正 localhost 为真实IP:', flvUrl);
+            hlsUrl = hlsUrl.replace('localhost', serverIp);
+            console.log('🔄 [HLS转换] 已修正 localhost 为真实IP:', hlsUrl);
           }
 
           // 2. 直接使用原始SRS地址（避免代理兼容性问题）
           // 暂时移除代理，直接使用原始SRS地址测试
-          if (flvUrl.includes('192.168.31.189:8086')) {
-            console.log('🔄 [FLV转换] 使用原始SRS地址（不使用代理）:', {
-              原始地址: flvUrl,
+          if (hlsUrl.includes('192.168.31.189:8086')) {
+            console.log('🔄 [HLS转换] 使用原始SRS地址（不使用代理）:', {
+              原始地址: hlsUrl,
               说明: '直接使用SRS服务器，避免代理转发的兼容性问题'
             });
           }
 
-          console.log('📺 [FLV转换] 最终FLV地址:', flvUrl);
+          console.log('📺 [HLS转换] 最终HLS地址:', hlsUrl);
           console.log('📺 [转换完成] 流地址信息:', {
             push_url: urls.push_url,
-            play_flv: flvUrl,
-            play_hls: urls.play_hls,
-            格式: 'FLV (HTTP协议，微信小程序推荐)'
+            play_flv: urls.play_flv,
+            play_hls: hlsUrl,
+            格式: 'HLS (原生video组件支持更好)'
           });
-          return flvUrl;
-        } else if (urls && urls.play_hls) {
-          // 备选方案：如果没有FLV，使用HLS（需要HTTPS）
-          console.warn('⚠️ [FLV转换] 无法获取FLV地址，使用HLS作为备选');
-          let hlsUrl = urls.play_hls;
+          return hlsUrl;
+        } else if (urls && urls.play_flv) {
+          // 备选方案：如果没有HLS，使用FLV
+          console.warn('⚠️ [HLS转换] 无法获取HLS地址，使用FLV作为备选');
+          let flvUrl = urls.play_flv;
 
           // 同样的修正逻辑
-          if (hlsUrl.includes('localhost')) {
+          if (flvUrl.includes('localhost')) {
             const apiBaseUrl = this.baseURL || API_BASE_URL;
             const serverIpMatch = apiBaseUrl.match(/https?:\/\/([^:\/]+)/);
             const serverIp = serverIpMatch ? serverIpMatch[1] : '192.168.31.189';
-            hlsUrl = hlsUrl.replace('localhost', serverIp);
+            flvUrl = flvUrl.replace('localhost', serverIp);
           }
 
-          if (hlsUrl.includes('192.168.31.189:8086')) {
-            console.log('🔄 [HLS备选] 使用原始SRS地址（不使用代理）:', hlsUrl);
+          if (flvUrl.includes('192.168.31.189:8086')) {
+            console.log('🔄 [FLV备选] 使用原始SRS地址（不使用代理）:', flvUrl);
           }
 
-          console.log('📺 [HLS备选] 最终HLS地址:', hlsUrl);
-          return hlsUrl;
+          console.log('📺 [FLV备选] 最终FLV地址:', flvUrl);
+          return flvUrl;
         } else {
           console.error('❌ [FLV转换] API返回数据中没有FLV或HLS地址, 完整响应:', urls);
           throw new Error('无法获取播放地址');

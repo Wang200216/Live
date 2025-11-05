@@ -233,6 +233,53 @@ if (PRIORITIZE_BACKEND_SERVER && BACKEND_SERVER_URL) {
 	console.log('✅ 代理中间件已成功配置');
 }
 
+// ==================== 直播流代理（SRS 服务器） ====================
+// 将直播流请求代理到 SRS 服务器，让小程序通过中间层访问
+const SRS_SERVER_URL = 'http://192.168.31.189:8086';
+
+const srsProxy = createProxyMiddleware({
+	target: SRS_SERVER_URL,
+	changeOrigin: true,
+	logger: console,
+	// 路径重写：保留 /live 前缀
+	// 请求: /live/test.m3u8 -> 转发到: http://192.168.31.189:8086/live/test.m3u8
+	// 注意：app.use('/live', proxy) 会自动移除 /live 前缀，所以需要手动加回来
+	pathRewrite: (path, req) => {
+		// 如果路径不包含 /live，添加 /live 前缀
+		if (!path.startsWith('/live')) {
+			return '/live' + path;
+		}
+		return path;
+	},
+	onProxyReq: (proxyReq, req, res) => {
+		console.log(`📺 [直播流代理] ${req.method} ${req.path} -> ${SRS_SERVER_URL}${proxyReq.path}`);
+	},
+	onProxyRes: (proxyRes, req, res) => {
+		// 设置 CORS 头，允许小程序访问
+		proxyRes.headers['Access-Control-Allow-Origin'] = '*';
+		proxyRes.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS';
+		proxyRes.headers['Access-Control-Allow-Headers'] = 'Content-Type, Range';
+		proxyRes.headers['Access-Control-Expose-Headers'] = 'Content-Length, Content-Range';
+		console.log(`✅ [直播流代理] ${req.path} <- ${proxyRes.statusCode} ${SRS_SERVER_URL}`);
+	},
+	onError: (err, req, res) => {
+		console.error(`❌ [直播流代理错误] ${req.path}:`, err.message);
+		if (!res.headersSent) {
+			res.status(502).json({
+				success: false,
+				error: 'Bad Gateway',
+				message: `无法连接到 SRS 服务器 ${SRS_SERVER_URL}`,
+				path: req.path,
+				details: err.message
+			});
+		}
+	}
+});
+
+// 在所有路由之前添加直播流代理（在 API 代理之后，但在其他路由之前）
+app.use('/live', srsProxy);
+console.log('✅ 直播流代理已配置: /live/* -> ' + SRS_SERVER_URL);
+
 // ==================== 后台管理 API（仅在非优先后端模式时使用） ====================
 const db = require('./admin/db.js');
 
