@@ -595,7 +595,7 @@
 				
 				// 直播状态和预设观点相关
 				isLiveStarted: false, // 直播是否已开始
-				presetOpinion: 100, // 预设观点倾向 (0-100, 初始100表示100票全投正方)
+				presetOpinion: 50, // 预设观点倾向 (0-100, 初始50表示50%票数投正方，50%投反方)
 				showPresetSlider: true, // 是否显示预设滑块
 				showPresetPanel: true, // 是否显示预设观点面板（直播开始后可通过按钮控制）
 				isValueChanging: false, // 数值变化动画状态
@@ -1980,26 +1980,66 @@
 					// 确保使用正确的 apiService（优先使用 this.apiService，如果没有则使用导入的）
 					const service = this.apiService || apiService;
 					
+					// 🔍 调试日志：检查 streamId 和当前票数
+					console.log('📊 获取票数 - streamId:', this.streamId);
+					console.log('📊 获取票数 - 当前票数:', { left: this.topLeftVotes, right: this.topRightVotes });
+					
+					// 🔧 如果 streamId 不存在，记录警告但不继续（避免获取错误的全局数据）
+					if (!this.streamId) {
+						console.warn('⚠️ 无法获取票数：缺少 streamId，跳过本次更新');
+						return;
+					}
+					
 					// 调试日志：检查当前使用的服务器地址
 					console.log('📊 获取票数 - 使用服务器:', service.baseURL || service.getCurrentConfig?.()?.baseURL || '未设置');
 					
-					// 传递 streamId 参数（如果存在）
+					// 传递 streamId 参数（必需）
 					const response = await service.getVotes(this.streamId);
-					if (response.success) {
+					
+					console.log('📊 获取票数 - API响应:', response);
+					
+					if (response && response.success && response.data) {
 						const data = response.data;
-						this.topLeftVotes = data.leftVotes;
-						this.topRightVotes = data.rightVotes;
-						console.log('✅ 票数更新成功:', data);
+						
+						// 🔧 保护逻辑：防止错误数据覆盖正确的票数
+						if (data.leftVotes !== undefined && data.rightVotes !== undefined) {
+							const newLeftVotes = data.leftVotes || 0;
+							const newRightVotes = data.rightVotes || 0;
+							const currentTotal = this.topLeftVotes + this.topRightVotes;
+							const newTotal = newLeftVotes + newRightVotes;
+							
+							// 只有当以下情况之一时才更新：
+							// 1. 之前的票数都是0（首次加载）
+							// 2. 新的票数大于0（有有效数据）
+							// 3. 新的总票数大于等于当前总票数（避免被旧数据覆盖）
+							if (currentTotal === 0 || newTotal > 0 || newTotal >= currentTotal) {
+								this.topLeftVotes = newLeftVotes;
+								this.topRightVotes = newRightVotes;
+								console.log('✅ 票数更新成功:', { 
+									left: this.topLeftVotes, 
+									right: this.topRightVotes,
+									total: newTotal,
+									streamId: this.streamId
+								});
+							} else {
+								console.log('⚠️ 跳过更新：API返回的票数可能比当前票数少，可能是旧的缓存数据', {
+									当前: { left: this.topLeftVotes, right: this.topRightVotes, total: currentTotal },
+									API返回: { left: newLeftVotes, right: newRightVotes, total: newTotal }
+								});
+							}
+						} else {
+							console.warn('⚠️ API返回的数据格式不正确:', data);
+						}
 					} else {
 						console.warn('⚠️ 获取票数失败:', response);
 					}
 				} catch (error) {
 					console.error('❌ 获取票数失败:', error);
-					uni.showToast({
-						title: '获取票数失败: ' + (error.message || '网络错误'),
-						icon: 'error',
-						duration: 3000
-					});
+					// 🔧 获取失败时不要显示错误提示，避免干扰用户
+					// 只在开发环境显示详细错误
+					if (process.env.NODE_ENV === 'development') {
+						console.error('❌ 获取票数错误详情:', error.message);
+					}
 				}
 			},
 
@@ -4052,7 +4092,8 @@
 						break;
 						
 					case 'votesUpdate':
-						// 更新票数
+					case 'votes-updated':
+						// 更新票数（支持两种消息类型）
 						this.handleVotesUpdate(data.data);
 						break;
 						
@@ -4240,24 +4281,46 @@
 				}
 			},
 			
-			// 处理票数更新
+			// 处理票数更新（支持多直播流）- 完全符合文档要求
 			handleVotesUpdate(data) {
-				console.log('📊 票数更新:', data);
+				console.log('📊 WebSocket票数更新:', data);
 				
-				// 更新顶部对抗条的票数
-				if (data.leftVotes !== undefined) {
-					this.topLeftVotes = data.leftVotes;
-				}
-				if (data.rightVotes !== undefined) {
-					this.topRightVotes = data.rightVotes;
-				}
+				// 🔍 多直播流支持：根据文档要求，检查 streamId
+				const streamId = data.streamId || null;
+				const currentStreamId = this.streamId || null;
 				
-				// 更新百分比
-				if (data.leftPercentage !== undefined) {
-					this.leftPercentage = data.leftPercentage;
-				}
-				if (data.rightPercentage !== undefined) {
-					this.rightPercentage = data.rightPercentage;
+				console.log('📊 WebSocket票数更新 - streamId匹配:', {
+					消息streamId: streamId,
+					当前streamId: currentStreamId,
+					当前票数: { left: this.topLeftVotes, right: this.topRightVotes }
+				});
+				
+				// 📋 文档要求的逻辑：streamId === currentStreamId || streamId === null
+				// 如果消息的 streamId 与当前直播间匹配，或者是全局辩题（streamId === null），则更新
+				if (streamId === currentStreamId || streamId === null) {
+					console.log('✅ 应用WebSocket票数更新到当前直播间');
+					
+					// 更新顶部对抗条的票数（只有在有有效数据时才更新）
+					if (data.leftVotes !== undefined && data.rightVotes !== undefined) {
+						this.topLeftVotes = data.leftVotes || 0;
+						this.topRightVotes = data.rightVotes || 0;
+						console.log('✅ WebSocket票数更新成功:', { 
+							left: this.topLeftVotes, 
+							right: this.topRightVotes,
+							streamId: streamId
+						});
+					}
+					
+					// 更新百分比（如果服务器提供了百分比，直接使用；否则根据票数计算）
+					if (data.leftPercentage !== undefined) {
+						this.leftPercentage = data.leftPercentage;
+					}
+					if (data.rightPercentage !== undefined) {
+						this.rightPercentage = data.rightPercentage;
+					}
+				} else {
+					// 其他直播流的投票更新，忽略
+					console.log(`⏩ 收到其他直播流的投票更新: ${streamId}，当前直播间: ${currentStreamId}，忽略`);
 				}
 			},
 			
