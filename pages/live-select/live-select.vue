@@ -6,7 +6,10 @@
 		<!-- 顶部标题区域 -->
 		<view class="header-section">
 			<view class="header-title">
-				<text class="title-main">🎬 选择直播间</text>
+				<view class="title-main">
+					<image src="/static/iconfont/zhibo.png" class="title-icon-img" mode="aspectFit"></image>
+					<text class="title-main-text">选择直播间</text>
+				</view>
 				<text class="title-sub">Choose Your Live Room</text>
 			</view>
 		</view>
@@ -38,7 +41,7 @@
 					<view class="card-content">
 						<!-- 直播间名称 -->
 						<view class="stream-name">
-							<text class="name-icon">📺</text>
+							<image src="/static/iconfont/bofang.png" class="name-icon-img" mode="aspectFit"></image>
 							<text class="name-text">{{ stream.name }}</text>
 						</view>
 						
@@ -46,42 +49,54 @@
 						<view v-if="stream.debateTopic && stream.debateTopic.title" class="debate-info">
 							<text class="debate-title">{{ stream.debateTopic.title }}</text>
 							<view class="debate-sides">
-								<text class="side left-side">⚔️ {{ stream.debateTopic.leftSide || stream.debateTopic.leftPosition || '' }}</text>
+								<view class="side left-side">
+									<image src="/static/iconfont/gongjigongju.png" class="side-icon-img" mode="aspectFit"></image>
+									<text class="side-text">{{ stream.debateTopic.leftSide || stream.debateTopic.leftPosition || '' }}</text>
+								</view>
 								<text class="vs">VS</text>
-								<text class="side right-side">🛡️ {{ stream.debateTopic.rightSide || stream.debateTopic.rightPosition || '' }}</text>
+								<view class="side right-side">
+									<image src="/static/iconfont/fangyudunpai-.png" class="side-icon-img" mode="aspectFit"></image>
+									<text class="side-text">{{ stream.debateTopic.rightSide || stream.debateTopic.rightPosition || '' }}</text>
+								</view>
 							</view>
 						</view>
 						
 						<!-- 直播数据（仅直播中显示） -->
 						<view v-if="stream.isLive" class="stream-stats">
 							<view class="stat-item">
-								<text class="stat-icon">👁</text>
+								<image src="/static/iconfont/guankanrenshu.png" class="stat-icon-img" mode="aspectFit"></image>
 								<text class="stat-label">观看:</text>
 								<text class="stat-value">{{ stream.activeUsers || 0 }}</text>
 							</view>
 							<view class="stat-item">
-								<text class="stat-icon">📊</text>
+								<image src="/static/iconfont/toupiao.png" class="stat-icon-img" mode="aspectFit"></image>
 								<text class="stat-label">投票:</text>
 								<text class="stat-value">{{ stream.totalVotes || 0 }}</text>
 							</view>
 						</view>
 						
-						<!-- 投票进度条（仅直播中显示） -->
-						<view v-if="stream.isLive && stream.leftPercentage !== undefined" class="vote-progress">
+						<!-- 投票进度条（仅直播中显示，显示具体票数） -->
+						<view v-if="stream.isLive" class="vote-progress">
 							<view class="progress-bar-container">
 								<view class="progress-left" :style="{ width: stream.leftPercentage + '%' }">
-									<text class="progress-text">{{ stream.leftPercentage }}%</text>
+									<text class="progress-text">{{ stream.leftVotes || 0 }}</text>
 								</view>
 								<view class="progress-right" :style="{ width: stream.rightPercentage + '%' }">
-									<text class="progress-text">{{ stream.rightPercentage }}%</text>
+									<text class="progress-text">{{ stream.rightVotes || 0 }}</text>
 								</view>
+							</view>
+							<!-- 票数信息 -->
+							<view class="vote-info">
+								<text class="vote-label left-label">正方: {{ stream.leftVotes || 0 }}</text>
+								<text class="vote-label right-label">反方: {{ stream.rightVotes || 0 }}</text>
 							</view>
 						</view>
 						
 						<!-- 进入按钮 -->
 						<view class="enter-btn" :class="{ 'disabled': !stream.isLive }">
 							<text class="btn-text">{{ stream.isLive ? '进入直播间' : '等待开播' }}</text>
-							<text class="btn-icon">{{ stream.isLive ? '→' : '🔒' }}</text>
+							<image v-if="stream.isLive" src="/static/iconfont/bofang.png" class="btn-icon-img" mode="aspectFit"></image>
+							<image v-else src="/static/iconfont/suo.png" class="btn-icon-img" mode="aspectFit"></image>
 						</view>
 					</view>
 				</view>
@@ -89,7 +104,7 @@
 			
 			<!-- 空状态 -->
 			<view v-else class="empty-container">
-				<text class="empty-icon">📭</text>
+				<image src="/static/iconfont/zhibo.png" class="empty-icon-img" mode="aspectFit"></image>
 				<text class="empty-text">暂无直播间</text>
 				<text class="empty-hint">请稍后再来</text>
 			</view>
@@ -98,7 +113,7 @@
 		<!-- 底部刷新按钮 -->
 		<view class="footer-section">
 			<view class="refresh-btn" @click="refreshStreams">
-				<text class="refresh-icon">🔄</text>
+				<image src="/static/iconfont/shuaxin.png" class="refresh-icon-img" mode="aspectFit"></image>
 				<text class="refresh-text">刷新列表</text>
 			</view>
 		</view>
@@ -206,8 +221,37 @@ export default {
 				
 				console.log(`${isCurrentlyLive ? '🟢' : '⚪'} 直播流 "${stream.name}" 状态: ${isCurrentlyLive ? '正在直播' : '未开播'}`);
 				
-				// 获取该直播流的投票数据
-				const votes = await apiService.getVotesStatistics(stream.id);
+				// 获取该直播流的投票数据（使用getVotes获取完整票数信息）
+				let votesData = null;
+				try {
+					const votesResponse = await apiService.getVotes(stream.id);
+					if (votesResponse && votesResponse.success && votesResponse.data) {
+						votesData = votesResponse.data;
+					}
+				} catch (error) {
+					console.warn('⚠️ 获取投票数据失败，尝试使用统计接口:', error);
+					// 如果getVotes失败，尝试使用getVotesStatistics作为备用
+					try {
+						votesData = await apiService.getVotesStatistics(stream.id);
+					} catch (statsError) {
+						console.warn('⚠️ 获取投票统计数据也失败:', statsError);
+					}
+				}
+				
+				// 🔧 如果Dashboard数据包含票数，优先使用Dashboard的数据（更实时）
+				if (dashboard && dashboard.leftVotes !== undefined && dashboard.rightVotes !== undefined) {
+					console.log('📊 Dashboard包含票数数据，使用Dashboard数据:', {
+						left: dashboard.leftVotes,
+						right: dashboard.rightVotes
+					});
+					votesData = {
+						leftVotes: dashboard.leftVotes,
+						rightVotes: dashboard.rightVotes,
+						totalVotes: dashboard.totalVotes || ((dashboard.leftVotes || 0) + (dashboard.rightVotes || 0)),
+						leftPercentage: dashboard.leftPercentage,
+						rightPercentage: dashboard.rightPercentage
+					};
+				}
 				
 				// 获取辩题信息（传递当前流的ID）
 				const debateResponse = await apiService.getDebateTopic(stream.id);
@@ -227,9 +271,11 @@ export default {
 					...stream,
 					isLive: isCurrentlyLive, // 从该流的Dashboard获取独立状态
 					activeUsers: isCurrentlyLive ? (dashboard?.activeUsers || 0) : 0,
-					totalVotes: votes?.totalVotes || 0,
-					leftPercentage: votes?.leftPercentage || 50,
-					rightPercentage: votes?.rightPercentage || 50,
+					totalVotes: votesData?.totalVotes || (votesData?.leftVotes || 0) + (votesData?.rightVotes || 0),
+					leftVotes: votesData?.leftVotes || 0,
+					rightVotes: votesData?.rightVotes || 0,
+					leftPercentage: votesData?.leftPercentage || 50,
+					rightPercentage: votesData?.rightPercentage || 50,
 					debateTopic: debateTopic
 				};
 			} catch (error) {
@@ -239,6 +285,8 @@ export default {
 					isLive: false,
 					activeUsers: 0,
 					totalVotes: 0,
+					leftVotes: 0,
+					rightVotes: 0,
 					leftPercentage: 50,
 					rightPercentage: 50
 				};
@@ -412,13 +460,47 @@ export default {
 			}
 		},
 		
-		// 更新投票数据
+		// 更新投票数据（支持多流，完全符合文档要求）
 		updateVotes(streamId, data) {
 			const stream = this.liveStreams.find(s => s.id === streamId);
 			if (stream) {
-				stream.totalVotes = data.totalVotes || 0;
-				stream.leftPercentage = data.leftPercentage || 50;
-				stream.rightPercentage = data.rightPercentage || 50;
+				// 🔍 多直播流支持：检查消息是否属于当前流
+				const messageStreamId = data.streamId || streamId;
+				if (messageStreamId && messageStreamId !== streamId) {
+					console.log('⏩ 投票更新消息不属于当前流，忽略:', messageStreamId, '当前流:', streamId);
+					return;
+				}
+				
+				// 更新票数数据
+				if (data.leftVotes !== undefined) {
+					stream.leftVotes = data.leftVotes;
+				}
+				if (data.rightVotes !== undefined) {
+					stream.rightVotes = data.rightVotes;
+				}
+				if (data.totalVotes !== undefined) {
+					stream.totalVotes = data.totalVotes;
+				} else if (data.leftVotes !== undefined && data.rightVotes !== undefined) {
+					// 如果没有totalVotes，根据leftVotes和rightVotes计算
+					stream.totalVotes = (data.leftVotes || 0) + (data.rightVotes || 0);
+				}
+				if (data.leftPercentage !== undefined) {
+					stream.leftPercentage = data.leftPercentage;
+				}
+				if (data.rightPercentage !== undefined) {
+					stream.rightPercentage = data.rightPercentage;
+				}
+				
+				console.log(`✅ 直播间 "${stream.name}" 票数更新:`, {
+					left: stream.leftVotes,
+					right: stream.rightVotes,
+					total: stream.totalVotes
+				});
+				
+				// 强制更新视图
+				this.$forceUpdate();
+			} else {
+				console.warn(`⚠️ 未找到流ID为 ${streamId} 的直播流，无法更新票数`);
 			}
 		}
 	}
@@ -470,6 +552,17 @@ export default {
 }
 
 .title-main {
+	display: flex;
+	align-items: center;
+	gap: 12rpx;
+}
+
+.title-icon-img {
+	width: 48rpx;
+	height: 48rpx;
+}
+
+.title-main-text {
 	font-size: 52rpx;
 	font-weight: 700;
 	color: #ffffff;
@@ -632,8 +725,9 @@ export default {
 	gap: 12rpx;
 }
 
-.name-icon {
-	font-size: 36rpx;
+.name-icon-img {
+	width: 36rpx;
+	height: 36rpx;
 }
 
 .name-text {
@@ -679,6 +773,24 @@ export default {
 	overflow: hidden; /* 防止文本溢出 */
 	text-overflow: ellipsis; /* 文本溢出显示省略号 */
 	white-space: nowrap; /* 不换行 */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6rpx;
+}
+
+.side-icon-img {
+	width: 24rpx;
+	height: 24rpx;
+	flex-shrink: 0;
+}
+
+.side-text {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .left-side {
@@ -715,8 +827,9 @@ export default {
 	border: 1rpx solid rgba(255, 255, 255, 0.05);
 }
 
-.stat-icon {
-	font-size: 24rpx;
+.stat-icon-img {
+	width: 24rpx;
+	height: 24rpx;
 }
 
 .stat-label {
@@ -778,6 +891,34 @@ export default {
 	text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.5);
 }
 
+/* ==================== 票数信息 ==================== */
+.vote-info {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 12rpx;
+	gap: 12rpx;
+}
+
+.vote-label {
+	font-size: 22rpx;
+	font-weight: 500;
+	padding: 6rpx 12rpx;
+	border-radius: 8rpx;
+}
+
+.left-label {
+	color: rgba(255, 150, 180, 0.95);
+	background: rgba(255, 100, 150, 0.15);
+	border: 1rpx solid rgba(255, 100, 150, 0.3);
+}
+
+.right-label {
+	color: rgba(150, 180, 255, 0.95);
+	background: rgba(100, 150, 255, 0.15);
+	border: 1rpx solid rgba(100, 150, 255, 0.3);
+}
+
 /* ==================== 进入按钮 ==================== */
 .enter-btn {
 	display: flex;
@@ -815,8 +956,9 @@ export default {
 	text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
 }
 
-.btn-icon {
-	font-size: 28rpx;
+.btn-icon-img {
+	width: 28rpx;
+	height: 28rpx;
 }
 
 /* ==================== 加载状态 ==================== */
@@ -857,8 +999,9 @@ export default {
 	gap: 20rpx;
 }
 
-.empty-icon {
-	font-size: 100rpx;
+.empty-icon-img {
+	width: 100rpx;
+	height: 100rpx;
 	opacity: 0.5;
 }
 
@@ -909,8 +1052,9 @@ export default {
 	background: rgba(255, 255, 255, 0.15);
 }
 
-.refresh-icon {
-	font-size: 30rpx;
+.refresh-icon-img {
+	width: 30rpx;
+	height: 30rpx;
 }
 
 .refresh-text {

@@ -1,5 +1,11 @@
 <template>
 	<view class="home-container">
+		<!-- 返回按钮 - 整个页面左上角 -->
+		<view class="back-btn-floating" @click="goBackToSelect">
+			<text class="back-icon">←</text>
+			<text class="back-text">返回</text>
+		</view>
+		
 		<!-- 全屏 Lottie 背景动画 -->
 		<view class="fullscreen-lottie-bg">
 			<!-- #ifdef MP-WEIXIN -->
@@ -192,11 +198,11 @@
 								<text class="message-text">{{ message.text }}</text>
 								<view class="message-actions">
 									<view class="action-item" @click.stop="handleMessageComment(message)">
-										<text class="action-icon">💬</text>
+										<image src="/static/iconfont/pinglun.png" class="action-icon-img" mode="aspectFit"></image>
 										<text class="action-count">{{ message.comments.length }}</text>
 									</view>
 									<view class="action-item" @click.stop="handleMessageLike(message)" :class="{'liked': message.isLiked}">
-										<text class="action-icon">👍</text>
+										<image src="/static/iconfont/dianzan.png" class="action-icon-img" mode="aspectFit"></image>
 										<text class="action-count">{{ message.likes }}</text>
 									</view>
 								</view>
@@ -436,7 +442,7 @@
 					<!-- AI总结内容区域 -->
 					<view class="summary-section">
 						<view class="section-title">
-							<text class="title-icon">📝</text>
+							<image src="/static/iconfont/baogaozongjie.png" class="title-icon-img" mode="aspectFit"></image>
 							<text class="title-text">AI总结内容</text>
 						</view>
 						<view class="summary-content">
@@ -447,7 +453,7 @@
 					<!-- 评论区域 -->
 					<view class="comments-section">
 						<view class="section-title">
-							<text class="title-icon">💬</text>
+							<image src="/static/iconfont/pinglun.png" class="title-icon-img" mode="aspectFit"></image>
 							<text class="title-text">用户评论 ({{ selectedMessage ? selectedMessage.comments.length : 0 }}条)</text>
 						</view>
 						
@@ -461,7 +467,7 @@
 								<view class="comment-header-right">
 									<text class="comment-time">{{ comment.time }}</text>
 									<view class="comment-delete-btn" v-if="comment.user === '我'" @click.stop="deleteComment(selectedMessage, index)">
-										<text class="delete-icon">🗑️</text>
+										<image src="/static/iconfont/shanchu.png" class="delete-icon-img" mode="aspectFit"></image>
 									</view>
 								</view>
 							</view>
@@ -885,8 +891,41 @@
 			}
 
 			// ================= 自助自动拉取直播状态 =================
-			// 初始化时获取直播状态
-			this.fetchLiveStatus();
+			// 初始化时获取直播状态（这个调用会从Dashboard获取票数数据）
+			this.fetchLiveStatus().then(() => {
+				// Dashboard调用完成后，如果还没有获取到票数，再调用专门的投票接口
+				// 延迟一点时间，确保 Dashboard 的数据已经更新
+				setTimeout(() => {
+					if (this.streamId && (this.topLeftVotes === 0 && this.topRightVotes === 0)) {
+						console.log('📊 Dashboard未返回票数或票数为0，尝试从投票接口获取');
+						this.fetchTopBarVotes();
+					}
+				}, 200);
+			});
+			
+			// 🔧 页面加载时立即获取票数（确保一进入页面就显示票数）
+			// 延迟一点时间，确保 API 服务已初始化，但也要确保 streamId 已设置
+			setTimeout(() => {
+				// 再次确认 streamId 存在
+				if (this.streamId) {
+					console.log('📊 页面加载后获取票数，streamId:', this.streamId);
+					this.fetchTopBarVotes();
+					// 启动顶部对抗条实时更新（包括定时轮询）
+					this.startTopBarRealTimeUpdate();
+				} else {
+					console.warn('⚠️ streamId 未设置，延迟获取票数');
+					// 如果 streamId 还没有设置，再延迟一点
+					setTimeout(() => {
+						if (this.streamId) {
+							console.log('📊 延迟获取票数，streamId:', this.streamId);
+							this.fetchTopBarVotes();
+							this.startTopBarRealTimeUpdate();
+						} else {
+							console.error('❌ streamId 仍未设置，无法获取票数');
+						}
+					}, 500);
+				}
+			}, 300); // 缩短延迟时间，更快显示票数
 			
 			// 启动定时轮询（作为WebSocket的备用方案）
 			this.startLiveStatusPolling();
@@ -894,16 +933,21 @@
 			// 建立WebSocket连接（用于接收实时更新）
 			this.connectWebSocket();
 		},
-		onShow() {
-			// 页面显示时，确保导航栏选中状态正确
-			this.currentTab = 'home';
-			// 再次确保切回可见时也是最新辩题
-			this.fetchDebateTopic();
+			onShow() {
+				// 页面显示时，确保导航栏选中状态正确
+				this.currentTab = 'home';
+				// 再次确保切回可见时也是最新辩题
+				this.fetchDebateTopic();
 
-			// ================= 自助自动拉取直播状态 =================
-			// 页面显示时获取直播状态
-			this.fetchLiveStatus();
-		},
+				// ================= 自助自动拉取直播状态 =================
+				// 页面显示时获取直播状态
+				this.fetchLiveStatus();
+				
+				// 🔧 页面显示时也获取票数（确保切回页面时显示最新票数）
+				if (this.streamId) {
+					this.fetchTopBarVotes();
+				}
+			},
 			onUnload() {
 				// 页面卸载时清理定时器
 				if (this.recognitionTimer) {
@@ -1198,6 +1242,39 @@
 						if (this.streamId && responseStreamId && responseStreamId !== this.streamId) {
 							console.log('⏩ Dashboard数据不属于当前直播间，忽略:', responseStreamId, '当前直播间:', this.streamId);
 							return;
+						}
+						
+						// 🔧 从Dashboard获取票数数据（如果包含，优先使用）
+						if (dashboardData.leftVotes !== undefined && dashboardData.rightVotes !== undefined) {
+							console.log('📊 Dashboard包含票数数据，更新票数:', {
+								left: dashboardData.leftVotes,
+								right: dashboardData.rightVotes,
+								streamId: responseStreamId
+							});
+							// 只有在streamId匹配时才更新（首次加载时总是更新）
+							if (!this.streamId || !responseStreamId || responseStreamId === this.streamId) {
+								// 首次加载时直接更新，或者当前票数为0时更新
+								if (this.topLeftVotes === 0 && this.topRightVotes === 0) {
+									this.topLeftVotes = dashboardData.leftVotes || 0;
+									this.topRightVotes = dashboardData.rightVotes || 0;
+									console.log('✅ 从Dashboard更新票数成功（首次加载）:', {
+										left: this.topLeftVotes,
+										right: this.topRightVotes
+									});
+								} else {
+									// 如果不是首次加载，只有当Dashboard的票数大于0时才更新
+									const dashboardTotal = (dashboardData.leftVotes || 0) + (dashboardData.rightVotes || 0);
+									const currentTotal = this.topLeftVotes + this.topRightVotes;
+									if (dashboardTotal > currentTotal || dashboardTotal >= currentTotal) {
+										this.topLeftVotes = dashboardData.leftVotes || 0;
+										this.topRightVotes = dashboardData.rightVotes || 0;
+										console.log('✅ 从Dashboard更新票数成功:', {
+											left: this.topLeftVotes,
+											right: this.topRightVotes
+										});
+									}
+								}
+							}
 						}
 						
 						// 更新直播状态
@@ -2008,24 +2085,36 @@
 							const currentTotal = this.topLeftVotes + this.topRightVotes;
 							const newTotal = newLeftVotes + newRightVotes;
 							
-							// 只有当以下情况之一时才更新：
-							// 1. 之前的票数都是0（首次加载）
-							// 2. 新的票数大于0（有有效数据）
-							// 3. 新的总票数大于等于当前总票数（避免被旧数据覆盖）
-							if (currentTotal === 0 || newTotal > 0 || newTotal >= currentTotal) {
+							// 🔧 首次加载时（当前票数为0），直接更新（无论API返回什么值）
+							// 这样可以确保页面加载时能显示票数
+							if (currentTotal === 0) {
 								this.topLeftVotes = newLeftVotes;
 								this.topRightVotes = newRightVotes;
-								console.log('✅ 票数更新成功:', { 
+								console.log('✅ 票数更新成功（首次加载）:', { 
 									left: this.topLeftVotes, 
 									right: this.topRightVotes,
 									total: newTotal,
 									streamId: this.streamId
 								});
 							} else {
-								console.log('⚠️ 跳过更新：API返回的票数可能比当前票数少，可能是旧的缓存数据', {
-									当前: { left: this.topLeftVotes, right: this.topRightVotes, total: currentTotal },
-									API返回: { left: newLeftVotes, right: newRightVotes, total: newTotal }
-								});
+								// 非首次加载时，只有当以下情况之一时才更新：
+								// 1. 新的票数大于0（有有效数据）
+								// 2. 新的总票数大于等于当前总票数（避免被旧数据覆盖）
+								if (newTotal > 0 || newTotal >= currentTotal) {
+									this.topLeftVotes = newLeftVotes;
+									this.topRightVotes = newRightVotes;
+									console.log('✅ 票数更新成功:', { 
+										left: this.topLeftVotes, 
+										right: this.topRightVotes,
+										total: newTotal,
+										streamId: this.streamId
+									});
+								} else {
+									console.log('⚠️ 跳过更新：API返回的票数可能比当前票数少，可能是旧的缓存数据', {
+										当前: { left: this.topLeftVotes, right: this.topRightVotes, total: currentTotal },
+										API返回: { left: newLeftVotes, right: newRightVotes, total: newTotal }
+									});
+								}
 							}
 						} else {
 							console.warn('⚠️ API返回的数据格式不正确:', data);
@@ -2413,6 +2502,12 @@
 			
 			// 启动顶部对抗条实时更新
 			startTopBarRealTimeUpdate() {
+				// 🔧 清除已有的定时器，避免重复启动
+				if (this.topBarUpdateTimer) {
+					clearInterval(this.topBarUpdateTimer);
+					this.topBarUpdateTimer = null;
+				}
+				
 				// 立即获取一次数据
 				this.fetchTopBarVotes();
 				
@@ -2420,6 +2515,8 @@
 				this.topBarUpdateTimer = setInterval(() => {
 					this.fetchTopBarVotes();
 				}, 5000);
+				
+				console.log('✅ 顶部对抗条实时更新已启动（每5秒更新一次）');
 			},
 			
 			// 启动AI内容实时更新
@@ -2556,6 +2653,30 @@
 			},
 			toggleLiveCollapse() {
 				this.isLiveCollapsed = !this.isLiveCollapsed;
+			},
+			
+			// 返回直播选择页面
+			goBackToSelect() {
+				console.log('🔄 返回直播选择页面');
+				uni.redirectTo({
+					url: '/pages/live-select/live-select',
+					success: () => {
+						console.log('✅ 已返回直播选择页面');
+					},
+					fail: (err) => {
+						console.error('❌ 返回直播选择页面失败:', err);
+						// 如果 redirectTo 失败，尝试使用 navigateBack
+						uni.navigateBack({
+							delta: 1,
+							fail: () => {
+								// 如果 navigateBack 也失败，尝试使用 navigateTo
+								uni.navigateTo({
+									url: '/pages/live-select/live-select'
+								});
+							}
+						});
+					}
+				});
 			},
 			
 			voteLeft() {
@@ -4932,6 +5053,50 @@
 		}
 	}
 
+	/* 浮动返回按钮 - 整个页面左上角 */
+	.back-btn-floating {
+		position: fixed;
+		top: 40rpx;
+		left: 30rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6rpx;
+		padding: 12rpx 20rpx;
+		background: radial-gradient(circle at 30% 30%, rgba(100, 150, 255, 0.9) 0%, transparent 50%), linear-gradient(135deg, rgba(100, 150, 255, 0.7), rgba(150, 200, 255, 0.5));
+		border: 2rpx solid rgba(255, 255, 255, 0.3);
+		border-radius: 30rpx;
+		box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.3), 0 0 0 1rpx rgba(255, 255, 255, 0.2), inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		cursor: pointer;
+		backdrop-filter: blur(10rpx);
+		z-index: 9999; /* 确保在所有内容上方 */
+	}
+
+	.back-btn-floating:active {
+		transform: scale(0.95);
+		box-shadow: 0 2rpx 8rpx rgba(100, 150, 255, 0.3), 0 0 0 1rpx rgba(255, 255, 255, 0.2);
+	}
+
+	.back-btn-floating:hover {
+		transform: scale(1.02);
+		box-shadow: 0 6rpx 20rpx rgba(100, 150, 255, 0.5), 0 0 0 2rpx rgba(255, 255, 255, 0.2);
+	}
+
+	.back-icon {
+		font-size: 32rpx;
+		color: #ffffff;
+		font-weight: 600;
+		text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
+	}
+
+	.back-text {
+		font-size: 24rpx;
+		color: #ffffff;
+		font-weight: 500;
+		text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
+	}
+
 	/* 浮动收起按钮 - 右下角 */
 	.collapse-btn-floating {
 		position: absolute;
@@ -6074,8 +6239,9 @@
 		box-shadow: 0 2rpx 12rpx rgba(244, 67, 54, 0.2);
 	}
 
-	.action-icon {
-		font-size: 22rpx;
+	.action-icon-img {
+		width: 22rpx;
+		height: 22rpx;
 		margin-right: 8rpx;
 		filter: drop-shadow(0 1rpx 2rpx rgba(0, 0, 0, 0.1));
 	}
@@ -7209,8 +7375,9 @@
 		border-bottom: 1rpx solid #e5e5e5;
 	}
 
-	.title-icon {
-		font-size: 32rpx;
+	.title-icon-img {
+		width: 32rpx;
+		height: 32rpx;
 		margin-right: 10rpx;
 	}
 
@@ -7331,8 +7498,9 @@
 		transform: scale(0.95);
 	}
 
-	.delete-icon {
-		font-size: 24rpx;
+	.delete-icon-img {
+		width: 24rpx;
+		height: 24rpx;
 		opacity: 0.8;
 	}
 

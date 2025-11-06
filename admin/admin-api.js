@@ -586,49 +586,72 @@ async function toggleStream(streamId) {
 // ==================== 直播流辩题管理接口 ====================
 
 /**
- * 为直播流设置辩题
+ * 获取流关联的辩题
  * @param {string} streamId - 直播流ID
- * @param {Object} debateData - 辩题数据
- * @returns {Promise<Object|null>}
+ * @returns {Promise<Object|null>} 返回 {success: true, data: {...}} 或 {success: true, data: null}
  */
-async function setStreamDebateTopic(streamId, debateData) {
-	return await apiRequest(`/api/v1/admin/streams/${streamId}/debate-topic`, {
-		method: 'POST',
-		body: JSON.stringify(debateData)
+async function getStreamDebateTopic(streamId) {
+	return await apiRequest(`/api/v1/admin/streams/${streamId}/debate`, {
+		method: 'GET'
 	});
 }
 
 /**
- * 更新直播流辩题
- * @param {string} streamId - 直播流ID
- * @param {Object} debateData - 辩题数据
+ * 更新辩题信息
+ * @param {string} debateId - 辩题ID
+ * @param {Object} debateData - 辩题数据 {title, description, leftPosition, rightPosition, isActive}
  * @returns {Promise<Object|null>}
  */
-async function updateStreamDebateTopic(streamId, debateData) {
-	return await apiRequest(`/api/v1/admin/streams/${streamId}/debate-topic`, {
+async function updateDebate(debateId, debateData) {
+	return await apiRequest(`/api/v1/admin/debates/${debateId}`, {
 		method: 'PUT',
 		body: JSON.stringify(debateData)
 	});
 }
 
 /**
- * 获取直播流辩题
- * @param {string} streamId - 直播流ID
+ * 创建新辩题
+ * @param {Object} debateData - 辩题数据 {title, description, leftPosition, rightPosition, isActive}
  * @returns {Promise<Object|null>}
  */
-async function getStreamDebateTopic(streamId) {
-	return await apiRequest(`/api/v1/admin/streams/${streamId}/debate-topic`, {
+async function createDebate(debateData) {
+	return await apiRequest(`/api/v1/admin/debates`, {
+		method: 'POST',
+		body: JSON.stringify(debateData)
+	});
+}
+
+/**
+ * 获取单个辩题详情
+ * @param {string} debateId - 辩题ID
+ * @returns {Promise<Object|null>}
+ */
+async function getDebateById(debateId) {
+	return await apiRequest(`/api/v1/admin/debates/${debateId}`, {
 		method: 'GET'
 	});
 }
 
 /**
- * 删除直播流辩题
+ * 关联辩题到直播流
+ * @param {string} streamId - 直播流ID
+ * @param {string} debateId - 辩题ID
+ * @returns {Promise<Object|null>}
+ */
+async function associateDebateToStream(streamId, debateId) {
+	return await apiRequest(`/api/v1/admin/streams/${streamId}/debate`, {
+		method: 'PUT',
+		body: JSON.stringify({ debate_id: debateId })
+	});
+}
+
+/**
+ * 删除辩题（通过流ID，解除关联）
  * @param {string} streamId - 直播流ID
  * @returns {Promise<Object|null>}
  */
 async function deleteStreamDebateTopic(streamId) {
-	return await apiRequest(`/api/v1/admin/streams/${streamId}/debate-topic`, {
+	return await apiRequest(`/api/v1/admin/streams/${streamId}/debate`, {
 		method: 'DELETE'
 	});
 }

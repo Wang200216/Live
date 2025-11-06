@@ -86,7 +86,7 @@ function bindStreamManagementEvents() {
 }
 
 /**
- * 加载直播流列表
+ * 加载直播流列表（增强版：为每个流获取辩题信息）
  */
 async function loadStreamsList() {
 	try {
@@ -118,7 +118,35 @@ async function loadStreamsList() {
 			streams = [];
 		}
 		
-		renderStreamsTable(streams);
+		// 🔧 增强：为每个流获取辩题信息（如果列表中没有）
+		if (streams.length > 0) {
+			console.log('📡 为每个流获取辩题信息...');
+			const streamsWithDebates = await Promise.all(streams.map(async (stream) => {
+				// 如果流数据中已经有 debateTopic，直接使用
+				if (stream.debateTopic) {
+					return stream;
+				}
+				
+				// 否则，尝试获取辩题信息
+				try {
+					const debateResponse = await getStreamDebateTopic(stream.id);
+					const debateData = debateResponse?.data || debateResponse;
+					
+					if (debateData && debateData.id) {
+						stream.debateTopic = debateData;
+					}
+				} catch (error) {
+					// 获取失败，说明没有设置辩题，保持原样
+					console.log(`流 ${stream.id} 没有设置辩题`);
+				}
+				
+				return stream;
+			}));
+			
+			renderStreamsTable(streamsWithDebates);
+		} else {
+			renderStreamsTable(streams);
+		}
 		
 		console.log('✅ 直播流列表加载完成，共', streams.length, '个');
 		
@@ -404,26 +432,33 @@ async function openDebateModal(streamId) {
 			return;
 		}
 		
-		// 设置标题
-		title.textContent = '设置辩题';
-		
-		// 保存流ID
+		// 保存流ID（先设置，避免reset清除）
 		document.getElementById('debate-stream-id').value = streamId;
 		
-		// 重置表单
-		document.getElementById('debate-form').reset();
-		document.getElementById('debate-stream-id').value = streamId;
-		
-		// 尝试获取现有辩题
+		// 先尝试获取现有辩题，然后再决定是否重置表单
+		let hasExistingDebate = false;
 		try {
-			const debateTopic = await getStreamDebateTopic(streamId);
-			if (debateTopic && debateTopic.data) {
-				const data = debateTopic.data;
-				// 填充表单
-				document.getElementById('debate-title').value = data.title || '';
-				document.getElementById('debate-description').value = data.description || '';
-				document.getElementById('debate-left-position').value = data.leftPosition || '';
-				document.getElementById('debate-right-position').value = data.rightPosition || '';
+			const response = await getStreamDebateTopic(streamId);
+			console.log('📡 获取辩题响应:', response);
+			
+			// 根据文档，返回格式可能是 {success: true, data: {...}} 或 {success: true, data: null}
+			const debateData = response?.data || response;
+			
+			if (debateData && debateData.id) {
+				hasExistingDebate = true;
+				
+				// 有辩题，填充表单（不重置，直接填充）
+				document.getElementById('debate-title').value = debateData.title || '';
+				document.getElementById('debate-description').value = debateData.description || '';
+				document.getElementById('debate-left-position').value = debateData.leftPosition || '';
+				document.getElementById('debate-right-position').value = debateData.rightPosition || '';
+				const isActiveCheckbox = document.getElementById('debate-is-active');
+				if (isActiveCheckbox) {
+					isActiveCheckbox.checked = debateData.isActive === true || debateData.isActive === 'true';
+				}
+				
+				// 保存辩题ID到隐藏字段
+				document.getElementById('debate-stream-id').dataset.debateId = debateData.id;
 				
 				// 显示删除按钮
 				if (deleteBtn) {
@@ -432,18 +467,35 @@ async function openDebateModal(streamId) {
 				
 				// 更新标题
 				title.textContent = '编辑辩题';
+				
+				console.log('✅ 已加载辩题信息:', debateData);
 			} else {
-				// 没有辩题，隐藏删除按钮
+				// 没有辩题（data: null）
+				console.log('该直播流尚未设置辩题');
 				if (deleteBtn) {
 					deleteBtn.style.display = 'none';
 				}
+				// 重置表单
+				document.getElementById('debate-form').reset();
+				// 重新设置流ID（因为reset会清除）
+				document.getElementById('debate-stream-id').value = streamId;
+				document.getElementById('debate-stream-id').dataset.debateId = '';
+				// 设置标题
+				title.textContent = '设置辩题';
 			}
 		} catch (error) {
-			// 如果获取失败（可能是404），说明没有辩题，这是正常的
-			console.log('该直播流尚未设置辩题');
+			// 如果获取失败，说明没有辩题或出错
+			console.log('获取辩题信息失败:', error);
 			if (deleteBtn) {
 				deleteBtn.style.display = 'none';
 			}
+			// 重置表单
+			document.getElementById('debate-form').reset();
+			// 重新设置流ID（因为reset会清除）
+			document.getElementById('debate-stream-id').value = streamId;
+			document.getElementById('debate-stream-id').dataset.debateId = '';
+			// 设置标题
+			title.textContent = '设置辩题';
 		}
 		
 		// 显示弹窗
@@ -474,11 +526,14 @@ async function handleDebateFormSubmit(e) {
 	
 	try {
 		const streamId = document.getElementById('debate-stream-id').value;
+		const debateId = document.getElementById('debate-stream-id').dataset.debateId || '';
+		
 		const debateData = {
 			title: document.getElementById('debate-title').value.trim(),
 			description: document.getElementById('debate-description').value.trim(),
 			leftPosition: document.getElementById('debate-left-position').value.trim(),
-			rightPosition: document.getElementById('debate-right-position').value.trim()
+			rightPosition: document.getElementById('debate-right-position').value.trim(),
+			isActive: document.getElementById('debate-is-active')?.checked || false
 		};
 		
 		// 验证
@@ -487,7 +542,7 @@ async function handleDebateFormSubmit(e) {
 			return;
 		}
 		
-		console.log('提交辩题表单:', streamId, debateData);
+		console.log('提交辩题表单:', streamId, '辩题ID:', debateId || '新建', debateData);
 		
 		// 禁用提交按钮
 		const submitBtn = document.querySelector('#debate-form button[type="submit"]');
@@ -496,34 +551,57 @@ async function handleDebateFormSubmit(e) {
 		if (btnText) btnText.textContent = '保存中...';
 		
 		try {
-			// 先尝试获取现有辩题，判断是创建还是更新
-			let isUpdate = false;
-			try {
-				await getStreamDebateTopic(streamId);
-				isUpdate = true;
-			} catch (error) {
-				// 404 说明没有辩题，需要创建
-				isUpdate = false;
-			}
-			
-			if (isUpdate) {
-				// 更新
-				console.log('调用更新辩题API:', streamId);
-				await updateStreamDebateTopic(streamId, debateData);
-				showToast('辩题更新成功！', 'success');
+			if (debateId) {
+				// 已有辩题，更新辩题信息
+				console.log('更新辩题:', debateId);
+				const result = await updateDebate(debateId, debateData);
+				
+				if (result && (result.success !== false)) {
+					const isActiveMsg = debateData.isActive ? '（已激活）' : '';
+					showToast(`辩题更新成功！${isActiveMsg}`, 'success');
+					// 关闭弹窗
+					closeDebateModal();
+					// 重新加载列表（延迟一点，确保后端数据已更新）
+					setTimeout(async () => {
+						await loadStreamsList();
+					}, 300);
+				} else {
+					throw new Error(result?.message || result?.detail || '更新失败');
+				}
 			} else {
-				// 创建
-				console.log('调用设置辩题API:', streamId);
-				await setStreamDebateTopic(streamId, debateData);
-				showToast('辩题设置成功！', 'success');
+				// 没有辩题，需要创建新辩题并关联到流
+				console.log('创建新辩题并关联到流:', streamId);
+				
+				// 先创建辩题
+				const createResult = await createDebate(debateData);
+				
+				if (!createResult || (createResult.success === false)) {
+					throw new Error(createResult?.message || createResult?.detail || '创建辩题失败');
+				}
+				
+				const newDebateId = createResult.data?.id || createResult.id;
+				if (!newDebateId) {
+					throw new Error('创建辩题成功但未返回辩题ID');
+				}
+				
+				console.log('辩题创建成功，ID:', newDebateId, '关联到流:', streamId);
+				
+				// 关联辩题到流
+				const associateResult = await associateDebateToStream(streamId, newDebateId);
+				
+				if (associateResult && (associateResult.success !== false)) {
+					const isActiveMsg = debateData.isActive ? '（已激活）' : '';
+					showToast(`辩题创建并关联成功！${isActiveMsg}`, 'success');
+					// 关闭弹窗
+					closeDebateModal();
+					// 重新加载列表（延迟一点，确保后端数据已更新）
+					setTimeout(async () => {
+						await loadStreamsList();
+					}, 300);
+				} else {
+					throw new Error(associateResult?.message || associateResult?.detail || '关联辩题失败');
+				}
 			}
-			
-			// 关闭弹窗
-			closeDebateModal();
-			
-			// 重新加载列表
-			await loadStreamsList();
-			
 		} finally {
 			// 恢复按钮
 			if (submitBtn) submitBtn.disabled = false;
@@ -554,15 +632,19 @@ async function handleDeleteDebate() {
 	
 	try {
 		console.log('调用删除辩题API:', streamId);
-		await deleteStreamDebateTopic(streamId);
-		showToast('辩题删除成功！', 'success');
+		const result = await deleteStreamDebateTopic(streamId);
 		
-		// 关闭弹窗
-		closeDebateModal();
-		
-		// 重新加载列表
-		await loadStreamsList();
-		
+		if (result && (result.success !== false)) {
+			showToast('辩题删除成功！', 'success');
+			// 关闭弹窗
+			closeDebateModal();
+			// 重新加载列表（延迟一点，确保后端数据已更新）
+			setTimeout(async () => {
+				await loadStreamsList();
+			}, 300);
+		} else {
+			throw new Error(result?.message || result?.detail || '删除失败');
+		}
 	} catch (error) {
 		console.error('❌ 删除辩题失败:', error);
 		showToast('删除失败：' + error.message, 'error');
