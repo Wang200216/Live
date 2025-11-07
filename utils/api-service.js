@@ -225,13 +225,14 @@ class ApiService {
 
   /**
    * 获取票数统计
-   * @param {string} streamId - 直播流ID（可选，不传则使用全局辩题）
+   * @param {string} streamId - 直播流ID（必需）
    * @returns {Promise<Object>} 票数数据
    */
-  async getVotes(streamId = null) {
-    const url = streamId 
-      ? `/api/v1/votes?stream_id=${streamId}`
-      : '/api/v1/votes';
+  async getVotes(streamId) {
+    if (!streamId) {
+      throw new Error('获取票数必须指定直播流ID (streamId)');
+    }
+    const url = `/api/v1/votes?stream_id=${streamId}`;
     return await this.request({
       url,
       method: 'GET'
@@ -513,13 +514,14 @@ class ApiService {
 
   /**
    * 查询用户投票状态
-   * @param {string} streamId - 直播流ID（可选，不传则使用全局辩题）
+   * @param {string} streamId - 直播流ID（必需）
    * @returns {Promise<Object>} 用户投票数据
    */
-  async getUserVotes(streamId = null) {
-    const url = streamId 
-      ? `/api/v1/user-votes?stream_id=${streamId}`
-      : '/api/v1/user-votes';
+  async getUserVotes(streamId) {
+    if (!streamId) {
+      throw new Error('查询用户投票状态必须指定直播流ID (streamId)');
+    }
+    const url = `/api/v1/user-votes?stream_id=${streamId}`;
     const response = await this.request({ url, method: 'GET' });
     if (response && response.success && response.data) {
       return response.data;
@@ -531,11 +533,24 @@ class ApiService {
 
   /**
    * 测试API连接
+   * @param {string} streamId - 直播流ID（可选，如果提供则测试投票API，否则仅测试基础连接）
    * @returns {Promise<boolean>} 连接是否成功
    */
-  async testConnection() {
+  async testConnection(streamId = null) {
     try {
-      await this.getVotes();
+      // 如果提供了 streamId，测试投票API
+      if (streamId) {
+        await this.getVotes(streamId);
+      } else {
+        // 如果没有提供 streamId，尝试使用 getDashboard 测试连接
+        // 或者简单地测试 baseURL 是否可访问
+        // 这里我们使用一个简单的请求来测试连接
+        // 注意：如果后端有健康检查端点，可以使用它
+        await this.request({
+          url: '/api/admin/live/status',
+          method: 'GET'
+        });
+      }
       return true;
     } catch (error) {
       return false;
