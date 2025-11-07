@@ -208,24 +208,102 @@ function handleWebSocketMessage(message) {
 			showNotification('票数已更新', 'success');
 			break;
 		case 'ai-started':
-			// AI识别启动
-			globalState.aiStatus = 'running';
-			globalState.aiSessionId = message.data.aiSessionId;
-			updateAIStatus('running');
-			showNotification('AI识别已启动', 'success');
+			// AI识别启动 - 🔧 修复：只更新匹配的流
+			{
+				const messageStreamId = message.data.streamId;
+				const currentStreamId = document.getElementById('ai-stream-select')?.value;
+				
+				console.log('📨 收到 AI 启动消息:', { messageStreamId, currentStreamId });
+				
+				// 只有当消息的 streamId 与当前选中的流匹配时，才更新按钮
+				if (!currentStreamId || messageStreamId === currentStreamId) {
+					globalState.aiStatus = 'running';
+					globalState.aiSessionId = message.data.aiSessionId;
+					if (typeof updateAIControlButtons === 'function') {
+						updateAIControlButtons('running');
+					}
+					showNotification(`AI识别已启动 (流: ${messageStreamId || 'default'})`, 'success');
+				} else {
+					console.log('⚠️ AI 启动消息被忽略（streamId 不匹配）');
+				}
+			}
 			break;
 		case 'ai-stopped':
-			// AI识别停止
-			globalState.aiStatus = 'stopped';
-			globalState.aiSessionId = null;
-			updateAIStatus('stopped');
-			showNotification('AI识别已停止', 'info');
+			// AI识别停止 - 🔧 修复：只更新匹配的流
+			{
+				const messageStreamId = message.data.streamId;
+				const currentStreamId = document.getElementById('ai-stream-select')?.value;
+				
+				console.log('📨 收到 AI 停止消息:', { messageStreamId, currentStreamId });
+				
+				// 只有当消息的 streamId 与当前选中的流匹配时，才更新按钮
+				if (!currentStreamId || messageStreamId === currentStreamId) {
+					globalState.aiStatus = 'stopped';
+					globalState.aiSessionId = null;
+					if (typeof updateAIControlButtons === 'function') {
+						updateAIControlButtons('stopped');
+					}
+					showNotification(`AI识别已停止 (流: ${messageStreamId || 'default'})`, 'info');
+				} else {
+					console.log('⚠️ AI 停止消息被忽略（streamId 不匹配）');
+				}
+			}
 			break;
 		case 'ai-status-changed':
-			// AI状态变更
-			globalState.aiStatus = message.data.status;
-			updateAIStatus(message.data.status);
-			showNotification(`AI识别已${message.data.status === 'paused' ? '暂停' : '恢复'}`, 'info');
+			// AI状态变更 - 🔧 修复：只更新匹配的流
+			{
+				const messageStreamId = message.data.streamId;
+				const currentStreamId = document.getElementById('ai-stream-select')?.value;
+				
+				console.log('📨 收到 AI 状态变更消息:', { messageStreamId, currentStreamId, status: message.data.status });
+				
+				// 只有当消息的 streamId 与当前选中的流匹配时，才更新按钮
+				if (!currentStreamId || messageStreamId === currentStreamId) {
+					globalState.aiStatus = message.data.status;
+					if (typeof updateAIControlButtons === 'function') {
+						updateAIControlButtons(message.data.status);
+					}
+					showNotification(`AI识别已${message.data.status === 'paused' ? '暂停' : '恢复'} (流: ${messageStreamId || 'default'})`, 'info');
+				} else {
+					console.log('⚠️ AI 状态变更消息被忽略（streamId 不匹配）');
+				}
+			}
+			break;
+		case 'viewersCount':
+			// 观看人数推送
+			{
+				const { streamId, data } = message;
+				const { count, action } = data || {};
+				
+				console.log(`👥 收到观看人数推送: 流 ${streamId}, 人数 ${count}, 动作: ${action}`);
+				
+				// 更新 globalState（如果是当前流）
+				if (globalState.currentStreamId === streamId || !globalState.currentStreamId) {
+					globalState.viewersCount = count;
+				}
+				
+				// 触发UI更新
+				if (typeof updateViewersDisplay === 'function') {
+					updateViewersDisplay(streamId, count, action);
+				}
+				
+				// 如果是多直播总览页面，更新相应流的观看人数
+				if (typeof updateStreamViewersInList === 'function') {
+					updateStreamViewersInList(streamId, count);
+				}
+				
+				// 根据动作显示不同的提示
+				const actionText = {
+					'user_joined': '用户加入',
+					'user_left': '用户离开',
+					'live_started': '直播开始',
+					'live_stopped': '直播结束',
+					'manual_broadcast': '手动广播'
+				}[action] || '更新';
+				
+				// 可选：显示通知（可根据需要注释掉）
+				// showNotification(`${actionText}: 观看人数 ${count}`, 'info');
+			}
 			break;
 		case 'ai-content-added':
 			// AI内容添加
@@ -538,6 +616,15 @@ function loadPageData(page) {
 			break;
 		case 'ai-content':
 			loadAIContent();
+			// 🔧 新增：初始化时查询当前选中流的 AI 状态
+			setTimeout(() => {
+				const aiStreamSelect = document.getElementById('ai-stream-select');
+				const streamId = aiStreamSelect?.value;
+				if (streamId && typeof updateAIStatusForStream === 'function') {
+					console.log('🔄 AI 内容管理页初始化，查询流', streamId, '的 AI 状态');
+					updateAIStatusForStream(streamId);
+				}
+			}, 500); // 延迟 500ms，等待页面元素加载完成
 			break;
 		case 'statistics':
 			loadStatistics();
@@ -580,6 +667,11 @@ async function loadDashboard() {
 			if (typeof updateAIControlButtons === 'function') {
 				updateAIControlButtons(data.aiStatus);
 			}
+		}
+		
+		// 🔧 新增：初始化观看人数
+		if (data.streamId && typeof initViewersCount === 'function') {
+			await initViewersCount(data.streamId);
 		}
 	} catch (error) {
 		console.error('加载概览数据失败:', error);
@@ -2231,7 +2323,7 @@ async function renderMultiLiveOverview() {
 			const borderColor = isLive ? '#4CAF50' : '#e0e0e0';
 			
 			return `
-				<div class="stream-card" style="
+				<div class="stream-card" data-stream-id="${stream.id}" style="
 					background: ${cardBg};
 					border-radius: 8px;
 					padding: 20px;
@@ -2255,13 +2347,17 @@ async function renderMultiLiveOverview() {
 					</div>
 					
 					<!-- 数据统计 -->
-					<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 15px;">
+					<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 15px;">
 						<div style="text-align: center; padding: 10px; background: #f5f5f5; border-radius: 6px;">
-							<div style="font-size: 24px; font-weight: 700; color: #2196F3;">👥 ${activeUsers}</div>
+							<div style="font-size: 20px; font-weight: 700; color: #2196F3;">👥 ${activeUsers}</div>
 							<div style="font-size: 11px; color: #666; margin-top: 4px;">在线用户</div>
 						</div>
 						<div style="text-align: center; padding: 10px; background: #f5f5f5; border-radius: 6px;">
-							<div style="font-size: 24px; font-weight: 700; color: #FF9800;">🗳️ ${totalVotes}</div>
+							<div class="stream-viewers" style="font-size: 20px; font-weight: 700; color: #9C27B0;">👁️ 0</div>
+							<div style="font-size: 11px; color: #666; margin-top: 4px;">观看人数</div>
+						</div>
+						<div style="text-align: center; padding: 10px; background: #f5f5f5; border-radius: 6px;">
+							<div style="font-size: 20px; font-weight: 700; color: #FF9800;">🗳️ ${totalVotes}</div>
 							<div style="font-size: 11px; color: #666; margin-top: 4px;">总投票</div>
 						</div>
 					</div>
@@ -2296,6 +2392,11 @@ async function renderMultiLiveOverview() {
 		}).join('');
 		
 		console.log(`✅ 多直播总览已加载（${streams.length} 个流）`);
+		
+		// 🔧 新增：初始化所有流的观看人数
+		if (typeof initViewersCount === 'function') {
+			await initViewersCount(); // 不传streamId，获取所有流的观看人数
+		}
 		
 	} catch (error) {
 		console.error('❌ 加载多直播总览失败:', error);

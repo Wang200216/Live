@@ -292,6 +292,10 @@ function initAIEvents() {
 		aiStreamSelect.addEventListener('change', async (e) => {
 			const streamId = e.target.value;
 			if (streamId) {
+				// 🔧 新增：查询该流的 AI 状态并更新按钮
+				console.log(`🔄 切换到流 ${streamId}，查询 AI 状态...`);
+				await updateAIStatusForStream(streamId);
+				
 				// 重新加载AI内容列表
 				await loadAIContentList(1);
 			} else {
@@ -301,6 +305,9 @@ function initAIEvents() {
 				if (container) {
 					container.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">请先选择要查看的直播流</div>';
 				}
+				
+				// 重置 AI 按钮状态为 stopped
+				updateAIControlButtons('stopped');
 			}
 		});
 	}
@@ -632,6 +639,56 @@ function updateAIControlButtons(status) {
 				resumeBtn.style.display = 'none';
 				break;
 		}
+	}
+}
+
+/**
+ * 🔧 查询并更新指定流的 AI 状态
+ * @param {string} streamId - 直播流ID
+ */
+async function updateAIStatusForStream(streamId) {
+	if (!streamId) {
+		console.warn('⚠️ updateAIStatusForStream: streamId 为空');
+		updateAIControlButtons('stopped');
+		return;
+	}
+	
+	try {
+		console.log(`🔍 查询流 ${streamId} 的 AI 状态...`);
+		
+		// 🔧 关键修复：使用 fetchDashboardByStream 查询特定流的状态
+		let dashboard = null;
+		
+		// 优先使用按 streamId 查询的 API
+		if (typeof fetchDashboardByStream === 'function') {
+			const result = await fetchDashboardByStream(streamId);
+			// 处理响应格式：可能是 {success: true, data: {...}} 或直接是数据
+			dashboard = result?.data || result;
+			console.log(`📊 流 ${streamId} 的 Dashboard 数据 (按流查询):`, dashboard);
+		} else {
+			// 降级方案：使用全局 Dashboard API（可能不准确）
+			console.warn('⚠️ fetchDashboardByStream 不存在，使用全局 Dashboard API');
+			dashboard = await fetchDashboard();
+			console.log('📊 Dashboard 数据 (全局):', dashboard);
+		}
+		
+		if (dashboard && dashboard.aiStatus) {
+			console.log(`✅ 流 ${streamId} 的 AI 状态: ${dashboard.aiStatus}`);
+			updateAIControlButtons(dashboard.aiStatus);
+			
+			// 更新全局状态
+			if (window.globalState) {
+				window.globalState.aiStatus = dashboard.aiStatus;
+			}
+		} else {
+			// 如果没有 AI 状态，默认为 stopped
+			console.log(`⚠️ 流 ${streamId} 没有 AI 状态信息，默认为 stopped`);
+			updateAIControlButtons('stopped');
+		}
+	} catch (error) {
+		console.error(`❌ 查询流 ${streamId} 的 AI 状态失败:`, error);
+		// 出错时默认为 stopped
+		updateAIControlButtons('stopped');
 	}
 }
 
@@ -1337,6 +1394,99 @@ function showAIContentStreamInfo(streamName) {
 function hideAIContentStreamInfo() {
 	const infoEl = document.getElementById('ai-content-stream-info');
 	if (infoEl) infoEl.style.display = 'none';
+}
+
+// ==================== 观看人数管理 ====================
+
+/**
+ * 更新Dashboard页面的观看人数显示
+ * @param {string} streamId - 直播流ID
+ * @param {number} count - 观看人数
+ * @param {string} action - 触发动作
+ */
+function updateViewersDisplay(streamId, count, action) {
+	// 在Dashboard页面更新观看人数
+	const viewersCountEl = document.getElementById('viewers-count');
+	const activeUsersEl = document.getElementById('active-users');
+	
+	if (viewersCountEl) {
+		viewersCountEl.textContent = count;
+		
+		// 添加动画效果
+		viewersCountEl.classList.add('highlight');
+		setTimeout(() => {
+			viewersCountEl.classList.remove('highlight');
+		}, 1000);
+	}
+	
+	// 同时更新活跃用户数（假设观看人数等于活跃用户数）
+	if (activeUsersEl) {
+		activeUsersEl.textContent = count;
+		
+		// 添加动画效果
+		activeUsersEl.classList.add('highlight');
+		setTimeout(() => {
+			activeUsersEl.classList.remove('highlight');
+		}, 1000);
+	}
+	
+	console.log(`✅ 已更新观看人数显示: 流 ${streamId}, 人数 ${count}`);
+}
+
+/**
+ * 更新多直播总览中某个流的观看人数
+ * @param {string} streamId - 直播流ID
+ * @param {number} count - 观看人数
+ */
+function updateStreamViewersInList(streamId, count) {
+	// 在多直播总览页面更新指定流的观看人数
+	const streamCard = document.querySelector(`[data-stream-id="${streamId}"]`);
+	if (!streamCard) {
+		console.log(`⚠️ 未找到流 ${streamId} 的卡片元素`);
+		return;
+	}
+	
+	const viewersEl = streamCard.querySelector('.stream-viewers, .viewers-count');
+	if (viewersEl) {
+		viewersEl.textContent = `${count} 人观看`;
+		
+		// 添加动画效果
+		viewersEl.classList.add('highlight');
+		setTimeout(() => {
+			viewersEl.classList.remove('highlight');
+		}, 1000);
+		
+		console.log(`✅ 已更新流 ${streamId} 的观看人数: ${count}`);
+	}
+}
+
+/**
+ * 初始化观看人数显示
+ * @param {string} streamId - 直播流ID（可选）
+ */
+async function initViewersCount(streamId = null) {
+	try {
+		let result;
+		
+		if (streamId) {
+			// 获取指定流的观看人数
+			result = await getViewersCount(streamId);
+			if (result?.success && result.data) {
+				updateViewersDisplay(streamId, result.data.viewers, 'manual_broadcast');
+			}
+		} else {
+			// 获取所有流的观看人数
+			result = await getAllViewersCount();
+			if (result?.success && result.data?.streams) {
+				// 更新多直播总览中的观看人数
+				Object.entries(result.data.streams).forEach(([sid, count]) => {
+					updateStreamViewersInList(sid, count);
+				});
+			}
+		}
+	} catch (error) {
+		console.error('❌ 初始化观看人数失败:', error);
+	}
 }
 
 console.log('✅ 后台管理系统事件处理器加载完成');

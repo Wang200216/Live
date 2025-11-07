@@ -885,3 +885,44 @@ input[type="radio"] {
 	border-top: 1px solid #eee;
 }
 
+
+/* ==================== 观看人数动画效果 ==================== */
+.highlight {
+	animation: highlightPulse 1s ease-in-out;
+}
+
+@keyframes highlightPulse {
+	0% {
+		background-color: transparent;
+		transform: scale(1);
+	}
+	50% {
+		background-color: #fff3cd;
+		transform: scale(1.1);
+	}
+	100% {
+		background-color: transparent;
+		transform: scale(1);
+	}
+}
+
+.stream-viewers {
+	transition: all 0.3s ease;
+}
+
+.stream-viewers.highlight {
+	color: #9C27B0 !important;
+	font-weight: 800 !important;
+}
+
+#viewers-count,
+#active-users {
+	transition: all 0.3s ease;
+	display: inline-block;
+}
+
+#viewers-count.highlight,
+#active-users.highlight {
+	color: #2196F3 !important;
+	font-weight: 700 !important;
+}

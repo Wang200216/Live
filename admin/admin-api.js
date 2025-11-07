@@ -29,9 +29,20 @@ async function fetchDashboardByStream(streamId) {
 		return await fetchDashboard();
 	}
 	
-	return await apiRequest(`/api/v1/admin/dashboard?stream_id=${streamId}`, {
+	console.log(`📡 [fetchDashboardByStream] 查询流 ${streamId} 的 Dashboard...`);
+	
+	// 🔧 关键：使用带 stream_id 参数的 API，确保获取特定流的状态
+	const result = await apiRequest(`/api/v1/admin/dashboard?stream_id=${streamId}`, {
 		method: 'GET'
 	});
+	
+	console.log(`📊 [fetchDashboardByStream] 流 ${streamId} 的响应:`, {
+		aiStatus: result?.aiStatus,
+		isLive: result?.isLive,
+		streamId: result?.streamId
+	});
+	
+	return result;
 }
 
 /**
@@ -536,6 +547,72 @@ async function getStreamsList() {
 	});
 }
 
+// ==================== 观看人数管理接口 ====================
+
+/**
+ * 获取指定直播流的观看人数
+ * @param {string} streamId - 直播流ID
+ * @returns {Promise<Object|null>} 返回 { streamId, viewers, timestamp }
+ */
+async function getViewersCount(streamId) {
+	if (!streamId) {
+		console.warn('⚠️ getViewersCount: streamId 为空');
+		return null;
+	}
+	
+	console.log(`📡 [getViewersCount] 查询流 ${streamId} 的观看人数...`);
+	
+	const result = await apiRequest(`/api/v1/admin/live/viewers?stream_id=${streamId}`, {
+		method: 'GET'
+	});
+	
+	console.log(`👥 [getViewersCount] 流 ${streamId} 的观看人数:`, result?.data?.viewers || 0);
+	
+	return result;
+}
+
+/**
+ * 获取所有直播流的观看人数
+ * @returns {Promise<Object|null>} 返回 { streams, totalConnections, timestamp }
+ */
+async function getAllViewersCount() {
+	console.log('📡 [getAllViewersCount] 查询所有流的观看人数...');
+	
+	const result = await apiRequest('/api/v1/admin/live/viewers', {
+		method: 'GET'
+	});
+	
+	if (result?.data?.streams) {
+		const total = Object.values(result.data.streams).reduce((sum, count) => sum + count, 0);
+		console.log(`👥 [getAllViewersCount] 总观看人数: ${total}`, result.data.streams);
+	}
+	
+	return result;
+}
+
+/**
+ * 手动广播指定直播流的观看人数
+ * @param {string} streamId - 直播流ID
+ * @returns {Promise<Object|null>} 返回 { streamId, viewers, message }
+ */
+async function broadcastViewersCount(streamId) {
+	if (!streamId) {
+		console.warn('⚠️ broadcastViewersCount: streamId 为空');
+		return null;
+	}
+	
+	console.log(`📡 [broadcastViewersCount] 广播流 ${streamId} 的观看人数...`);
+	
+	const result = await apiRequest('/api/v1/admin/live/broadcast-viewers', {
+		method: 'POST',
+		body: JSON.stringify({ streamId })
+	});
+	
+	console.log(`✅ [broadcastViewersCount] 广播成功:`, result?.data);
+	
+	return result;
+}
+
 /**
  * 添加直播流
  * @param {Object} streamData - 直播流数据
@@ -680,13 +757,24 @@ if (window.ws) {
 				window.globalState.isLive = data.data.isLive;
 			}
 			
-			if (data.type === 'aiStatus' && window.globalState) {
+		if (data.type === 'aiStatus' && window.globalState) {
+			// 🔧 修复：只更新匹配的流
+			const messageStreamId = data.data.streamId;
+			const currentStreamId = document.getElementById('ai-stream-select')?.value;
+			
+			console.log('📨 [admin-api.js] 收到 aiStatus 消息:', { messageStreamId, currentStreamId });
+			
+			// 只有当消息的 streamId 与当前选中的流匹配时，才更新按钮
+			if (!currentStreamId || messageStreamId === currentStreamId) {
 				window.globalState.aiStatus = data.data.status;
 				// 更新UI按钮状态
 				if (typeof updateAIControlButtons === 'function') {
 					updateAIControlButtons(data.data.status);
 				}
+			} else {
+				console.log('⚠️ [admin-api.js] aiStatus 消息被忽略（streamId 不匹配）');
 			}
+		}
 			
 			if (data.type === 'votesUpdate') {
 				// 更新票数显示
