@@ -1042,8 +1042,8 @@ app.get('/api/v1/admin/ai-content/list', (req, res) => {
 				position: item.position || item.side || 'left', // side转换为position
 				confidence: item.confidence || 0.95, // 默认置信度
 				statistics: {
-					views: item.statistics?.views || item.views || 0,
-					likes: item.statistics?.likes || item.likes || 0,
+					views: (item.statistics && item.statistics.views) || item.views || 0,
+					likes: (item.statistics && item.statistics.likes) || item.likes || 0,
 					comments: commentCount // 只返回数量，不返回详细评论
 				}
 			};
@@ -1410,8 +1410,8 @@ app.delete('/api/v1/admin/ai-content/:id/comments/:commentId', (req, res) => {
 			content.statistics.comments = (content.statistics.comments || 0) - 1;
 		} else {
 			content.statistics = {
-				views: content.statistics?.views || 0,
-				likes: content.statistics?.likes || content.likes || 0,
+				views: (content.statistics && content.statistics.views) || 0,
+				likes: (content.statistics && content.statistics.likes) || content.likes || 0,
 				comments: comments.length
 			};
 		}
@@ -2052,7 +2052,7 @@ app.post('/api/wechat-login', async (req, res) => {
         console.log('微信登录请求收到');
         console.log('═══════════════════════════════════════');
         console.log('Code:', code);
-        console.log('UserInfo:', userInfo?.nickName);
+        console.log('UserInfo:', userInfo && userInfo.nickName);
         console.log('useMock 配置:', WECHAT_CONFIG.useMock);
         console.log('═══════════════════════════════════════');
         
@@ -2135,8 +2135,8 @@ app.post('/api/wechat-login', async (req, res) => {
         if (userId) {
             db.users.createOrUpdate({
                 id: userId,
-                nickName: userInfo?.nickName || '微信用户',
-                avatarUrl: userInfo?.avatarUrl || '/static/logo.png'
+                nickName: (userInfo && userInfo.nickName) || '微信用户',
+                avatarUrl: (userInfo && userInfo.avatarUrl) || '/static/logo.png'
             });
         }
         
@@ -2182,7 +2182,7 @@ app.post('/api/user-vote', (req, res) => {
     console.log('📥 请求参数:', req.body);
     console.log('📥 请求头:', {
         'content-type': req.headers['content-type'],
-        'user-agent': req.headers['user-agent']?.substring(0, 50) + '...'
+        'user-agent': (req.headers['user-agent'] && req.headers['user-agent'].substring(0, 50)) + '...'
     });
     console.log('═══════════════════════════════════════');
     
@@ -3102,7 +3102,7 @@ app.get('/api/admin/miniprogram/users', (req, res) => {
 		// 排序
 		filteredUsers.sort((a, b) => {
 			if (orderBy === 'votes') {
-				return (b.statistics?.totalVotes || 0) - (a.statistics?.totalVotes || 0);
+				return ((b.statistics && b.statistics.totalVotes) || 0) - ((a.statistics && a.statistics.totalVotes) || 0);
 			}
 			return new Date(b.joinTime) - new Date(a.joinTime);
 		});

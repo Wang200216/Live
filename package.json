@@ -17,7 +17,7 @@
     "@lottiefiles/dotlottie-vue": "^0.10.5",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "http-proxy-middleware": "^3.0.5",
+    "http-proxy-middleware": "^2.0.6",
     "lottie-miniprogram": "^1.0.12",
     "lottie-web": "^5.13.0",
     "swagger-jsdoc": "^6.2.8",
