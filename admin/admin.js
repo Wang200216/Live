@@ -3,21 +3,19 @@
 const SERVER_CONFIG = {
 	// 本地开发时使用
 	LOCAL_URL: 'http://localhost:8081',
-	// 中间层服务器地址（支持 WebSocket 和状态同步）
+	// 中间层服务器地址（已废弃，不再使用）
 	MIDDLEWARE_URL: 'http://192.168.31.249:8081',
 	// 后端服务器地址（真实服务器，直接访问）
 	BACKEND_URL: 'http://192.140.160.119:8000',
-	// WebSocket 服务器地址（如果后端服务器没有WebSocket，使用中间层）
-	WS_URL: 'http://192.168.31.249:8081', // WebSocket 连接到中间层
 	// 当前使用的地址（修改这里切换服务器）
 	get BASE_URL() {
 		// 🔧 配置：直接访问真实后端服务器（获取真实数据）
-		// 注意：后端修复完成前，直播控制可能有问题（会自动重启）
 		return this.BACKEND_URL; // 使用真实后端服务器
 	},
 	get WEB_SOCKET_URL() {
-		// WebSocket 使用中间层（因为中间层管理WebSocket连接）
-		return this.WS_URL || this.MIDDLEWARE_URL;
+		// 🔧 配置：WebSocket 也直接连接到真实后端服务器
+		// 如果真实后端服务器不支持 WebSocket，可以设置为 null 来禁用 WebSocket
+		return this.BACKEND_URL; // 使用真实后端服务器
 	}
 };
 
@@ -81,14 +79,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 function initWebSocket() {
 	// 从服务器配置获取WebSocket地址
 	try {
-	// 使用专门的 WebSocket URL（如果配置了），否则使用 BASE_URL
-	const wsBaseUrl = SERVER_CONFIG.WEB_SOCKET_URL || SERVER_CONFIG.BASE_URL;
-	const baseUrl = new URL(wsBaseUrl);
-	const protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
-	const wsUrl = `${protocol}//${baseUrl.host}/ws`;
-	
-	console.log('🔌 连接WebSocket:', wsUrl);
-	
+		// 使用专门的 WebSocket URL（如果配置了），否则使用 BASE_URL
+		const wsBaseUrl = SERVER_CONFIG.WEB_SOCKET_URL || SERVER_CONFIG.BASE_URL;
+		
+		// 如果 WebSocket URL 为 null 或未配置，禁用 WebSocket
+		if (!wsBaseUrl) {
+			console.log('ℹ️ WebSocket 已禁用（未配置 WebSocket URL）');
+			updateConnectionStatus(false);
+			return;
+		}
+		
+		const baseUrl = new URL(wsBaseUrl);
+		const protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+		const wsUrl = `${protocol}//${baseUrl.host}/ws`;
+		
+		console.log('🔌 连接WebSocket:', wsUrl);
+		
 		// 如果已有连接，先关闭
 		if (ws && ws.readyState !== WebSocket.CLOSED) {
 			try {
@@ -98,10 +104,21 @@ function initWebSocket() {
 			}
 		}
 		
+		// 设置连接超时（10秒）
+		const connectTimeout = setTimeout(() => {
+			if (ws && ws.readyState === WebSocket.CONNECTING) {
+				console.warn('⚠️ WebSocket 连接超时，可能服务器不支持 WebSocket');
+				ws.close();
+				updateConnectionStatus(false);
+				// 不再重试，避免无限重连
+			}
+		}, 10000);
+		
 		ws = new WebSocket(wsUrl);
 		
 		ws.onopen = () => {
 			console.log('✅ WebSocket 已连接');
+			clearTimeout(connectTimeout);
 			clearTimeout(wsReconnectTimer);
 			updateConnectionStatus(true);
 		};
@@ -117,40 +134,53 @@ function initWebSocket() {
 		
 		ws.onerror = (error) => {
 			console.error('WebSocket 错误:', error);
+			clearTimeout(connectTimeout);
 			updateConnectionStatus(false);
 		};
 		
 		ws.onclose = (event) => {
-			console.log('WebSocket 已断开，5秒后尝试重连...', event.code, event.reason);
+			clearTimeout(connectTimeout);
+			console.log('WebSocket 已断开', event.code, event.reason || '');
 			updateConnectionStatus(false);
-			// 5秒后尝试重连（如果不是主动关闭）
-			if (event.code !== 1000) {
-			wsReconnectTimer = setTimeout(() => {
-				initWebSocket();
-			}, 5000);
+			
+			// 如果服务器不支持 WebSocket（连接被拒绝），不再重试
+			if (event.code === 1006 || event.code === 1002) {
+				console.warn('⚠️ 服务器可能不支持 WebSocket，将使用轮询方式更新数据');
+				// 不再重试 WebSocket 连接
+				return;
+			}
+			
+			// 其他情况，5秒后尝试重连（最多重试3次）
+			if (event.code !== 1000 && (!window.wsReconnectCount || window.wsReconnectCount < 3)) {
+				window.wsReconnectCount = (window.wsReconnectCount || 0) + 1;
+				console.log(`🔄 ${window.wsReconnectCount}/3 次重连尝试...`);
+				wsReconnectTimer = setTimeout(() => {
+					initWebSocket();
+				}, 5000);
+			} else if (window.wsReconnectCount >= 3) {
+				console.warn('⚠️ WebSocket 重连次数已达上限，将使用轮询方式更新数据');
+				window.wsReconnectCount = 0; // 重置计数器
 			}
 		};
 		
 		// 心跳保持连接（只设置一次）
 		if (!window.wsHeartbeatInterval) {
 			window.wsHeartbeatInterval = setInterval(() => {
-			if (ws && ws.readyState === WebSocket.OPEN) {
+				if (ws && ws.readyState === WebSocket.OPEN) {
 					try {
-				ws.send(JSON.stringify({ type: 'ping' }));
+						ws.send(JSON.stringify({ type: 'ping' }));
 					} catch (error) {
 						console.error('发送心跳失败:', error);
 					}
-			}
-		}, 30000); // 每30秒发送一次 ping
+				}
+			}, 30000); // 每30秒发送一次 ping
 		}
 		
 	} catch (error) {
 		console.error('WebSocket 初始化失败:', error);
 		updateConnectionStatus(false);
-		// 如果URL解析失败，5秒后重试
-		wsReconnectTimer = setTimeout(() => {
-			initWebSocket();
-		}, 5000);
+		// 如果URL解析失败，不再重试
+		console.warn('⚠️ WebSocket URL 配置错误，将使用轮询方式更新数据');
 	}
 }
 
