@@ -444,16 +444,20 @@ function updateLiveStatus(data) {
 	if (isStarted) {
 		currentLiveStatus = true;
 		globalState.isLive = true; // 同时更新全局状态
-		if (statusText) statusText.textContent = '🟢 直播中';
-		if (liveStatusEl) liveStatusEl.textContent = '🟢 直播中';
+		if (statusText) statusText.textContent = '直播中';
+		if (liveStatusEl) {
+			liveStatusEl.innerHTML = '<span style="color: #27ae60; display: flex; align-items: center; gap: 6px;"><span class="iconfont icon-circle" style="font-size: 14px; color: #27ae60;"></span>直播中</span>';
+		}
 		updateLiveControlButton(true);
 		showNotification('直播已开始', 'success');
 		console.log('✅ [状态更新] 直播已开始');
 	} else {
 		currentLiveStatus = false;
 		globalState.isLive = false; // 同时更新全局状态
-		if (statusText) statusText.textContent = '⚪ 未开播';
-		if (liveStatusEl) liveStatusEl.textContent = '⚪ 未开播';
+		if (statusText) statusText.textContent = '未开播';
+		if (liveStatusEl) {
+			liveStatusEl.innerHTML = '<span style="color: #95a5a6; display: flex; align-items: center; gap: 6px;"><span class="iconfont icon-circle" style="font-size: 14px; opacity: 0.5;"></span>未开播</span>';
+		}
 		updateLiveControlButton(false);
 		showNotification('直播已停止', 'info');
 		console.log('✅ [状态更新] 直播已停止');
@@ -546,7 +550,11 @@ function updateDashboardDisplay(dashboard) {
 	const liveStatusTextEl = document.getElementById('live-status-text');
 	
 	if (totalUsersEl) totalUsersEl.textContent = dashboard.totalUsers || 0;
-	if (liveStatusEl) liveStatusEl.textContent = dashboard.isLive ? '🟢 直播中' : '⚪ 未开播';
+	if (liveStatusEl) {
+		liveStatusEl.innerHTML = dashboard.isLive 
+			? '<span style="color: #27ae60; display: flex; align-items: center; gap: 6px;"><span class="iconfont icon-circle" style="font-size: 14px; color: #27ae60;"></span>直播中</span>' 
+			: '<span style="color: #95a5a6; display: flex; align-items: center; gap: 6px;"><span class="iconfont icon-circle" style="font-size: 14px; opacity: 0.5;"></span>未开播</span>';
+	}
 	if (totalVotesEl) totalVotesEl.textContent = dashboard.totalVotes || 0;
 	if (activeUsersEl) activeUsersEl.textContent = dashboard.activeUsers || 0;
 	if (liveStatusTextEl) liveStatusTextEl.textContent = dashboard.isLive ? '直播中' : '未开播';
@@ -688,7 +696,12 @@ async function loadDashboard() {
 		}
 		
 		document.getElementById('total-users').textContent = data.totalUsers || 0;
-		document.getElementById('live-status').textContent = data.isLive ? '🟢 直播中' : '⚪ 未开播';
+		const liveStatusEl = document.getElementById('live-status');
+		if (liveStatusEl) {
+			liveStatusEl.innerHTML = data.isLive 
+				? '<span style="color: #27ae60; display: flex; align-items: center; gap: 6px;"><span class="iconfont icon-circle" style="font-size: 14px; color: #27ae60;"></span>直播中</span>' 
+				: '<span style="color: #95a5a6; display: flex; align-items: center; gap: 6px;"><span class="iconfont icon-circle" style="font-size: 14px; opacity: 0.5;"></span>未开播</span>';
+		}
 		document.getElementById('total-votes').textContent = data.totalVotes || 0;
 		document.getElementById('active-users').textContent = data.activeUsers || 0;
 		document.getElementById('live-status-text').textContent = data.isLive ? '直播中' : '未开播';
@@ -1011,7 +1024,7 @@ async function loadLiveSetup() {
 			const statusEl = document.getElementById('live-control-status');
 			if (statusEl) {
 				if (isLive) {
-					statusEl.innerHTML = '<span style="color: #4CAF50;">🟢 直播中</span>';
+					statusEl.innerHTML = '<span style="color: #27ae60; display: flex; align-items: center; gap: 8px; justify-content: center;"><span class="iconfont icon-circle" style="font-size: 20px; color: #27ae60;"></span>直播中</span>';
 					
 					// 显示直播流信息
 					if (data.liveStreamUrl) {
@@ -1027,7 +1040,7 @@ async function loadLiveSetup() {
 						}
 					}
 				} else {
-					statusEl.innerHTML = '<span style="color: #999;">⚪ 未开播</span>';
+					statusEl.innerHTML = '<span style="color: #95a5a6; display: flex; align-items: center; gap: 8px; justify-content: center;"><span class="iconfont icon-circle" style="font-size: 20px; opacity: 0.5;"></span>未开播</span>';
 					
 					// 隐藏直播流信息
 					const streamInfoEl = document.getElementById('live-stream-info');
@@ -1481,13 +1494,15 @@ async function loadAllStreamsStatus() {
 			const duration = status.startTime ? calculateDuration(status.startTime) : '-';
 
 			// 状态徽章样式
-			const statusBadgeColor = isLive ? '#4CAF50' : '#999';
-			const statusBadgeText = isLive ? '🟢 正在直播' : '⚪ 未开播';
+			const statusBadgeColor = isLive ? '#27ae60' : '#95a5a6';
+			const statusBadgeText = isLive ? '<span class="iconfont icon-circle" style="font-size: 12px; color: #27ae60; margin-right: 4px;"></span>正在直播' : '<span class="iconfont icon-circle" style="font-size: 12px; opacity: 0.5; margin-right: 4px;"></span>未开播';
 			const statusBgColor = isLive ? '#f0f9ff' : '#fafafa';
 			const statusBorderColor = isLive ? '#e3f2fd' : '#e0e0e0';
 
 			// 流启用状态指示器
-			const enabledIndicator = stream.enabled ? '✅' : '❌';
+			const enabledIndicator = stream.enabled 
+				? '<span class="iconfont icon-check" style="color: #27ae60; font-size: 14px;"></span>' 
+				: '<span class="iconfont icon-close" style="color: #e74c3c; font-size: 14px;"></span>';
 			const enabledText = stream.enabled ? '已启用' : '已禁用';
 
 			// 当前选中的流显示特殊样式
@@ -1540,21 +1555,21 @@ async function loadAllStreamsStatus() {
 									style="padding: 10px 18px; font-size: 14px; font-weight: 600; white-space: nowrap; min-width: 100px; transition: all 0.3s ease;"
 									onclick="controlStreamLive('${stream.id}', ${!isLive})"
 								>
-									${isLive ? '⏹️ 停止直播' : '🚀 开始直播'}
+									${isLive ? '<span class="iconfont icon-stop" style="font-size: 14px; margin-right: 4px;"></span>停止直播' : '<img src="/static/iconfont/bofang.png" style="width: 14px; height: 14px; filter: brightness(0) invert(1); margin-right: 4px; vertical-align: middle;" alt="">开始直播'}
 								</button>
 								${isLive ? `
-									<div style="font-size: 11px; color: #4CAF50; text-align: center; background: #e8f5e9; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #4CAF50;">
-										✅ 直播进行中
+									<div style="font-size: 11px; color: #27ae60; text-align: center; background: #d4edda; padding: 6px 10px; border-radius: 4px; border-left: 3px solid #27ae60; display: flex; align-items: center; justify-content: center; gap: 4px;">
+										<span class="iconfont icon-circle" style="font-size: 10px; color: #27ae60;"></span>直播进行中
 									</div>
 								` : ''}
 							` : `
 								<button
 									class="btn btn-secondary"
-									style="padding: 10px 18px; font-size: 14px; font-weight: 600; white-space: nowrap; min-width: 100px;"
+									style="padding: 10px 18px; font-size: 14px; font-weight: 600; white-space: nowrap; min-width: 100px; display: flex; align-items: center; justify-content: center; gap: 4px;"
 									disabled
 									title="请先启用此流"
 								>
-									❌ 已禁用
+									<span class="iconfont icon-close" style="font-size: 14px; color: #6c757d;"></span>已禁用
 								</button>
 							`}
 						</div>
@@ -1596,8 +1611,8 @@ function calculateDuration(startTime) {
 async function controlStreamLive(streamId, start) {
 	const streamName = window.liveSetupStreams?.find(s => s.id === streamId)?.name || streamId;
 
-	if (!confirm(start ?
-		`确定要开始直播流 "${streamName}" 吗？\n\n💡 提示：可以同时开启多个直播流。` :
+		if (!confirm(start ?
+		`确定要开始直播流 "${streamName}" 吗？\n\n提示：可以同时开启多个直播流。` :
 		`确定要停止直播流 "${streamName}" 吗？`
 	)) {
 		return;
@@ -1811,15 +1826,15 @@ function displayScheduleInfo(schedule) {
 	if (timeUntilStart > 0) {
 		const hours = Math.floor(timeUntilStart / (1000 * 60 * 60));
 		const minutes = Math.floor((timeUntilStart % (1000 * 60 * 60)) / (1000 * 60));
-		statusHtml = `
-			<p style="color: #4CAF50; font-weight: bold;">✅ 计划已设置</p>
+			statusHtml = `
+			<p style="color: #27ae60; font-weight: bold; display: flex; align-items: center; gap: 6px;"><span class="iconfont icon-check" style="font-size: 16px;"></span>计划已设置</p>
 			<p><strong>开始时间:</strong> ${startTime.toLocaleString('zh-CN')}</p>
 			${endTime ? `<p><strong>结束时间:</strong> ${endTime.toLocaleString('zh-CN')}</p>` : '<p><strong>结束时间:</strong> 手动停止</p>'}
 			<p><strong>距离开始:</strong> ${hours}小时 ${minutes}分钟</p>
 		`;
 	} else {
 		statusHtml = `
-			<p style="color: #FF9800; font-weight: bold;">⚠️ 计划时间已过</p>
+			<p style="color: #f39c12; font-weight: bold; display: flex; align-items: center; gap: 6px;"><span class="iconfont icon-warning" style="font-size: 16px;"></span>计划时间已过</p>
 			<p><strong>开始时间:</strong> ${startTime.toLocaleString('zh-CN')}</p>
 		`;
 	}
@@ -2068,8 +2083,9 @@ async function loadAIContent() {
 				<div class="ai-content-item" style="padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 15px; background: white;">
 					<div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
 						<div style="flex: 1;">
-							<span style="display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px; background: ${item.position === 'left' ? '#e8f5e9' : '#e3f2fd'}; color: ${item.position === 'left' ? '#4CAF50' : '#2196F3'}; margin-right: 10px;">
-								${item.position === 'left' ? '⚔️ 正方' : '🛡️ 反方'}
+							<span style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 12px; font-size: 12px; background: ${item.position === 'left' ? '#e8f5e9' : '#e3f2fd'}; color: ${item.position === 'left' ? '#27ae60' : '#2196F3'}; margin-right: 10px;">
+								<img src="/static/iconfont/fangyudunpai-.png" style="width: 14px; height: 14px; opacity: 0.8;" alt="">
+								${item.position === 'left' ? '正方' : '反方'}
 							</span>
 							<span style="color: #999; font-size: 12px;">${timestamp}</span>
 							<span style="color: #999; font-size: 12px; margin-left: 10px;">置信度: ${((item.confidence || 0) * 100).toFixed(0)}%</span>
@@ -2077,10 +2093,10 @@ async function loadAIContent() {
 						<button class="btn btn-danger btn-sm" onclick="deleteAIContentItem('${safeId}')" style="padding: 4px 12px;">删除</button>
 					</div>
 					<div style="color: #333; line-height: 1.6; margin-bottom: 10px;">${safeContent}</div>
-					<div style="display: flex; gap: 15px; color: #999; font-size: 12px; margin-bottom: 10px;">
-						<span>👁️ ${(item.statistics && item.statistics.views) || 0} 查看</span>
-						<span>❤️ ${(item.statistics && item.statistics.likes) || 0} 点赞</span>
-						<span>💬 ${(item.statistics && item.statistics.comments) || 0} 评论</span>
+					<div style="display: flex; gap: 15px; color: #999; font-size: 12px; margin-bottom: 10px; align-items: center;">
+						<span style="display: flex; align-items: center; gap: 4px;"><img src="/static/iconfont/guankanrenshu.png" style="width: 14px; height: 14px; opacity: 0.7;" alt="">${(item.statistics && item.statistics.views) || 0} 查看</span>
+						<span style="display: flex; align-items: center; gap: 4px;"><img src="/static/iconfont/dianzan.png" style="width: 14px; height: 14px; opacity: 0.7;" alt="">${(item.statistics && item.statistics.likes) || 0} 点赞</span>
+						<span style="display: flex; align-items: center; gap: 4px;"><img src="/static/iconfont/pinglun.png" style="width: 14px; height: 14px; opacity: 0.7;" alt="">${(item.statistics && item.statistics.comments) || 0} 评论</span>
 					</div>
 					<div style="display: flex; gap: 10px;">
 						<button class="btn btn-danger btn-sm" onclick="deleteAIContentItem('${safeId}')" style="padding: 4px 12px;">删除</button>
@@ -2181,17 +2197,17 @@ async function openCommentsModal(contentId) {
 			const safeNickname = (comment.nickname || '匿名用户').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 			
 			const timestamp = comment.timestamp ? new Date(comment.timestamp).toLocaleString('zh-CN') : '';
-			const avatar = comment.avatar || '👤';
+			const avatarUrl = comment.avatar || '/static/iconfont/blue-user.png';
 			const likes = comment.likes || 0;
 			
 			commentEl.innerHTML = `
 				<div style="display: flex; align-items: center; margin-bottom: 10px;">
-					<span style="font-size: 24px; margin-right: 10px;">${avatar}</span>
+					<img src="${avatarUrl}" style="width: 32px; height: 32px; border-radius: 50%; margin-right: 10px; object-fit: cover;" onerror="this.src='/static/iconfont/blue-user.png';" alt="头像">
 					<div style="flex: 1;">
 						<div style="font-weight: 600; color: #333; margin-bottom: 4px;">${safeNickname}</div>
-						<div style="font-size: 12px; color: #999;">
+						<div style="font-size: 12px; color: #999; display: flex; align-items: center; gap: 8px;">
 							${timestamp}
-							${likes > 0 ? `<span style="margin-left: 10px;">❤️ ${likes}</span>` : ''}
+							${likes > 0 ? `<span style="display: flex; align-items: center; gap: 4px;"><img src="/static/iconfont/dianzan.png" style="width: 12px; height: 12px; opacity: 0.7;" alt="">${likes}</span>` : ''}
 						</div>
 					</div>
 					<button class="btn btn-sm btn-danger" onclick='deleteComment("${contentId}", "${safeCommentId}")' style="padding: 4px 8px; font-size: 12px;">删除</button>
@@ -2380,9 +2396,11 @@ async function renderMultiLiveOverview() {
 		if (!streams || streams.length === 0) {
 			container.innerHTML = `
 				<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.8); grid-column: 1 / -1;">
-					<div style="font-size: 48px; margin-bottom: 15px;">📭</div>
-					<div style="font-size: 16px;">暂无直播流</div>
-					<div style="font-size: 13px; margin-top: 8px; opacity: 0.7;">请先在"直播流管理"中添加直播流</div>
+					<div style="font-size: 32px; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+						<img src="/static/iconfont/live.png" style="width: 32px; height: 32px; filter: brightness(0) invert(1); opacity: 0.7;" alt="">
+					</div>
+					<div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">暂无直播流</div>
+					<div style="font-size: 13px; opacity: 0.7;">请先在"直播流管理"中添加直播流</div>
 				</div>
 			`;
 			return;
@@ -2397,9 +2415,9 @@ async function renderMultiLiveOverview() {
 			const aiStatus = dashboard.aiStatus || 'stopped';
 			
 			// 状态颜色
-			const statusColor = isLive ? '#4CAF50' : '#999';
-			const cardBg = isLive ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.85)';
-			const borderColor = isLive ? '#4CAF50' : '#e0e0e0';
+			const statusColor = isLive ? '#27ae60' : '#95a5a6';
+			const cardBg = isLive ? 'rgba(255,255,255,0.98)' : 'rgba(255,255,255,0.9)';
+			const borderColor = isLive ? '#27ae60' : '#dee2e6';
 			
 			return `
 				<div class="stream-card" data-stream-id="${stream.id}" style="
@@ -2407,44 +2425,56 @@ async function renderMultiLiveOverview() {
 					border-radius: 8px;
 					padding: 20px;
 					border-left: 4px solid ${borderColor};
+					border: 1px solid ${borderColor};
+					box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 					transition: all 0.3s ease;
 					cursor: pointer;
 				" onclick="viewStreamDetail('${stream.id}')">
 					<!-- 头部：流名称和状态 -->
 					<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px;">
 						<div style="flex: 1;">
-							<h4 style="margin: 0 0 5px 0; color: #333; font-size: 16px; font-weight: 600;">
+							<h4 style="margin: 0 0 5px 0; color: #2c3e50; font-size: 16px; font-weight: 600;">
 								${stream.name || 'Unnamed Stream'}
 							</h4>
-							<div style="font-size: 12px; color: #666;">
+							<div style="font-size: 12px; color: #6c757d;">
 								${stream.type ? stream.type.toUpperCase() : 'UNKNOWN'}
 							</div>
 						</div>
-						<div style="background: ${statusColor}; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap;">
-							${isLive ? '🟢 直播中' : '⚪ 未开播'}
+						<div style="background: ${statusColor}; color: white; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: 600; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
+							<span class="iconfont icon-circle" style="font-size: 10px; ${isLive ? 'color: white;' : 'opacity: 0.7;'}"></span>
+							${isLive ? '直播中' : '未开播'}
 						</div>
 					</div>
 					
 					<!-- 数据统计 -->
 					<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 15px;">
-						<div style="text-align: center; padding: 10px; background: #f5f5f5; border-radius: 6px;">
-							<div style="font-size: 20px; font-weight: 700; color: #2196F3;">👥 ${activeUsers}</div>
-							<div style="font-size: 11px; color: #666; margin-top: 4px;">在线用户</div>
+						<div style="text-align: center; padding: 10px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
+							<div style="font-size: 20px; font-weight: 600; color: #3498db; display: flex; align-items: center; justify-content: center; gap: 4px;">
+								<img src="/static/iconfont/blue-user.png" style="width: 16px; height: 16px; opacity: 0.8;" alt="">
+								${activeUsers}
+							</div>
+							<div style="font-size: 11px; color: #6c757d; margin-top: 4px;">在线用户</div>
 						</div>
-						<div style="text-align: center; padding: 10px; background: #f5f5f5; border-radius: 6px;">
-							<div class="stream-viewers" style="font-size: 20px; font-weight: 700; color: #9C27B0;">👁️ 0</div>
-							<div style="font-size: 11px; color: #666; margin-top: 4px;">观看人数</div>
+						<div style="text-align: center; padding: 10px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
+							<div class="stream-viewers" style="font-size: 20px; font-weight: 600; color: #8e44ad; display: flex; align-items: center; justify-content: center; gap: 4px;">
+								<img src="/static/iconfont/guankanrenshu.png" style="width: 16px; height: 16px; opacity: 0.8;" alt="">
+								0
+							</div>
+							<div style="font-size: 11px; color: #6c757d; margin-top: 4px;">观看人数</div>
 						</div>
-						<div style="text-align: center; padding: 10px; background: #f5f5f5; border-radius: 6px;">
-							<div style="font-size: 20px; font-weight: 700; color: #FF9800;">🗳️ ${totalVotes}</div>
-							<div style="font-size: 11px; color: #666; margin-top: 4px;">总投票</div>
+						<div style="text-align: center; padding: 10px; background: #f8f9fa; border-radius: 6px; border: 1px solid #e9ecef;">
+							<div style="font-size: 20px; font-weight: 600; color: #34495e; display: flex; align-items: center; justify-content: center; gap: 4px;">
+								<img src="/static/iconfont/toupiao.png" style="width: 16px; height: 16px; opacity: 0.8;" alt="">
+								${totalVotes}
+							</div>
+							<div style="font-size: 11px; color: #6c757d; margin-top: 4px;">总投票</div>
 						</div>
 					</div>
 					
 					<!-- AI状态 -->
-					<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: ${aiStatus === 'running' ? '#e8f5e9' : '#fafafa'}; border-radius: 6px; margin-bottom: 12px;">
-						<span style="font-size: 12px;">${aiStatus === 'running' ? '🤖' : '⚪'}</span>
-						<span style="font-size: 12px; color: ${aiStatus === 'running' ? '#4CAF50' : '#999'}; flex: 1;">
+					<div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: ${aiStatus === 'running' ? '#d4edda' : '#f8f9fa'}; border-radius: 6px; margin-bottom: 12px; border: 1px solid ${aiStatus === 'running' ? '#c3e6cb' : '#e9ecef'};">
+						<img src="/static/iconfont/gongjigongju.png" style="width: 14px; height: 14px; opacity: ${aiStatus === 'running' ? '1' : '0.5'};" alt="">
+						<span style="font-size: 12px; color: ${aiStatus === 'running' ? '#27ae60' : '#6c757d'}; flex: 1;">
 							AI: ${aiStatus === 'running' ? '运行中' : '未启动'}
 						</span>
 					</div>
@@ -2453,17 +2483,18 @@ async function renderMultiLiveOverview() {
 					<div style="display: flex; gap: 8px;">
 						<button 
 							class="btn btn-sm ${isLive ? 'btn-danger' : 'btn-success'}"
-							style="flex: 1; padding: 8px; font-size: 13px;"
+							style="flex: 1; padding: 8px; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 4px;"
 							onclick="event.stopPropagation(); controlStreamLive('${stream.id}', ${!isLive})"
 						>
-							${isLive ? '⏹️ 停止' : '🚀 开始'}
+							${isLive ? '<span class="iconfont icon-stop" style="font-size: 14px; margin-right: 4px;"></span>停止' : '<img src="/static/iconfont/bofang.png" style="width: 14px; height: 14px; filter: brightness(0) invert(1); margin-right: 4px; vertical-align: middle;" alt="">开始'}
 						</button>
 						<button 
 							class="btn btn-sm btn-secondary"
-							style="padding: 8px 16px; font-size: 13px;"
+							style="padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 4px; justify-content: center;"
 							onclick="event.stopPropagation(); viewStreamDetail('${stream.id}')"
 						>
-							📊 详情
+							<img src="/static/iconfont/shuju.png" style="width: 14px; height: 14px; opacity: 0.7;" alt="">
+							详情
 						</button>
 					</div>
 				</div>
@@ -2481,10 +2512,13 @@ async function renderMultiLiveOverview() {
 		console.error('❌ 加载多直播总览失败:', error);
 		container.innerHTML = `
 			<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.8); grid-column: 1 / -1;">
-				<div style="font-size: 48px; margin-bottom: 15px;">⚠️</div>
-				<div style="font-size: 16px;">加载失败</div>
-				<div style="font-size: 13px; margin-top: 8px; opacity: 0.7;">${error.message}</div>
-				<button class="btn btn-sm" style="margin-top: 15px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3);" onclick="refreshMultiLiveOverview()">
+				<div style="font-size: 32px; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+					<span class="iconfont icon-warning" style="font-size: 32px; filter: brightness(0) invert(1);"></span>
+				</div>
+				<div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">加载失败</div>
+				<div style="font-size: 13px; opacity: 0.7;">${error.message}</div>
+				<button class="btn btn-sm" style="margin-top: 15px; background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.3); display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px;" onclick="refreshMultiLiveOverview()">
+					<img src="/static/iconfont/shuaxin.png" style="width: 14px; height: 14px; filter: brightness(0) invert(1);" alt="">
 					重试
 				</button>
 			</div>
