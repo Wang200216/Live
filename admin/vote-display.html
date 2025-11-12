@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>票数统计大屏幕</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+			background: #1a1a1a;
+			color: white;
+			overflow: hidden;
+			width: 100vw;
+			height: 100vh;
+		}
+
+		.container {
+			width: 100%;
+			height: 100%;
+			display: flex;
+			flex-direction: column;
+			position: relative;
+			padding-top: 40px;
+		}
+
+		/* 顶部条状显示区域 */
+		.header {
+			width: 100%;
+			height: 150px;
+			display: flex;
+			position: relative;
+			overflow: hidden;
+			margin-bottom: 20px;
+		}
+
+		/* 正方区域（左侧红色） */
+		.header-left {
+			height: 100%;
+			background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			justify-content: center;
+			position: relative;
+			transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+			box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
+			gap: 20px;
+		}
+
+		.header-left::before {
+			content: '';
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: rgba(255, 255, 255, 0.05);
+			pointer-events: none;
+		}
+
+		/* 反方区域（右侧蓝色） */
+		.header-right {
+			height: 100%;
+			background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			justify-content: center;
+			position: relative;
+			transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+			box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.2);
+			gap: 20px;
+		}
+
+		.header-right::before {
+			content: '';
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			background: rgba(255, 255, 255, 0.05);
+			pointer-events: none;
+		}
+
+		/* 顶部标签文字 */
+		.header-label {
+			font-size: 42px;
+			font-weight: 900;
+			color: white;
+			text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
+			position: relative;
+			z-index: 1;
+			border: 3px solid rgba(255, 255, 255, 0.9);
+			padding: 8px 25px;
+			border-radius: 8px;
+			background: rgba(255, 255, 255, 0.1);
+		}
+
+		/* 进度条中的票数显示 */
+		.header-vote-value {
+			font-size: 64px;
+			font-weight: 900;
+			color: white;
+			text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
+			position: relative;
+			z-index: 1;
+			line-height: 1;
+			transition: transform 0.3s ease;
+		}
+
+		.header-vote-value.updated {
+			animation: numberUpdate 0.5s ease;
+		}
+
+		@keyframes numberUpdate {
+			0% { transform: scale(1); }
+			50% { transform: scale(1.15); }
+			100% { transform: scale(1); }
+		}
+
+		/* 进度条中的百分比显示 */
+		.header-vote-percentage {
+			font-size: 32px;
+			font-weight: 700;
+			color: rgba(255, 255, 255, 0.95);
+			text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+			position: relative;
+			z-index: 1;
+		}
+
+		/* 顶部中间分隔线 */
+		.header-divider {
+			position: absolute;
+			left: 50%;
+			top: 0;
+			bottom: 0;
+			width: 4px;
+			background: rgba(255, 255, 255, 0.9);
+			box-shadow: 0 0 15px rgba(255, 255, 255, 0.6);
+			z-index: 10;
+			transform: translateX(-50%);
+		}
+
+		/* 流信息（右上角小标签） */
+		.stream-info {
+			position: absolute;
+			top: 10px;
+			right: 20px;
+			font-size: 14px;
+			color: rgba(255, 255, 255, 0.9);
+			background: rgba(0, 0, 0, 0.4);
+			padding: 6px 12px;
+			border-radius: 15px;
+			display: flex;
+			align-items: center;
+			gap: 6px;
+			cursor: pointer;
+			transition: background 0.3s ease;
+			z-index: 20;
+			backdrop-filter: blur(10px);
+			border: 1px solid rgba(255, 255, 255, 0.2);
+		}
+
+		.stream-info:hover {
+			background: rgba(0, 0, 0, 0.6);
+		}
+
+		.status-indicator {
+			width: 10px;
+			height: 10px;
+			border-radius: 50%;
+			background: #95a5a6;
+			animation: pulse 2s infinite;
+		}
+
+		.status-indicator.live {
+			background: #27ae60;
+		}
+
+		@keyframes pulse {
+			0%, 100% { opacity: 1; }
+			50% { opacity: 0.5; }
+		}
+
+		/* 计时器和环节控制区域 */
+		.timer-section {
+			width: 100%;
+			padding: 30px 40px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 20px;
+			background: rgba(0, 0, 0, 0.3);
+			backdrop-filter: blur(10px);
+		}
+
+		.segment-info {
+			font-size: 48px;
+			font-weight: 900;
+			color: white;
+			text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.5);
+			text-align: center;
+		}
+
+		.timer-display {
+			font-size: 120px;
+			font-weight: 900;
+			color: #f39c12;
+			text-shadow: 4px 4px 8px rgba(0, 0, 0, 0.5);
+			font-family: 'Courier New', monospace;
+			letter-spacing: 8px;
+		}
+
+		.timer-display.warning {
+			color: #e74c3c;
+			animation: pulse-timer 1s infinite;
+		}
+
+		@keyframes pulse-timer {
+			0%, 100% { opacity: 1; transform: scale(1); }
+			50% { opacity: 0.8; transform: scale(1.05); }
+		}
+
+		.timer-controls {
+			display: flex;
+			gap: 15px;
+			align-items: center;
+		}
+
+		.timer-btn {
+			padding: 12px 24px;
+			font-size: 16px;
+			font-weight: 600;
+			border: 2px solid rgba(255, 255, 255, 0.3);
+			border-radius: 8px;
+			background: rgba(255, 255, 255, 0.1);
+			color: white;
+			cursor: pointer;
+			transition: all 0.3s ease;
+			backdrop-filter: blur(10px);
+		}
+
+		.timer-btn:hover {
+			background: rgba(255, 255, 255, 0.2);
+			border-color: rgba(255, 255, 255, 0.5);
+			transform: translateY(-2px);
+		}
+
+		.timer-btn:active {
+			transform: translateY(0);
+		}
+
+		.timer-btn:disabled {
+			opacity: 0.5;
+			cursor: not-allowed;
+		}
+
+		.timer-btn.primary {
+			background: rgba(52, 152, 219, 0.3);
+			border-color: rgba(52, 152, 219, 0.6);
+		}
+
+		.timer-btn.primary:hover {
+			background: rgba(52, 152, 219, 0.5);
+		}
+
+		.timer-btn.danger {
+			background: rgba(231, 76, 60, 0.3);
+			border-color: rgba(231, 76, 60, 0.6);
+		}
+
+		.timer-btn.danger:hover {
+			background: rgba(231, 76, 60, 0.5);
+		}
+
+		.segment-controls {
+			display: flex;
+			gap: 15px;
+			align-items: center;
+		}
+
+		/* 主内容区 */
+		.main-content {
+			flex: 1;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 40px;
+			position: relative;
+		}
+
+		/* 票数显示区域 */
+		.votes-display {
+			width: 100%;
+			max-width: 1600px;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			gap: 40px;
+		}
+
+		/* 总票数显示 */
+		.total-votes {
+			text-align: center;
+			background: rgba(0, 0, 0, 0.4);
+			padding: 25px 50px;
+			border-radius: 20px;
+			font-size: 32px;
+			font-weight: 600;
+			backdrop-filter: blur(10px);
+			border: 2px solid rgba(255, 255, 255, 0.2);
+			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+		}
+
+		.total-label {
+			font-size: 24px;
+			opacity: 0.9;
+			margin-right: 15px;
+			color: rgba(255, 255, 255, 0.8);
+		}
+
+		.total-value {
+			font-size: 48px;
+			font-weight: 700;
+			color: #f39c12;
+			text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+		}
+
+		/* 加载状态 */
+		.loading {
+			text-align: center;
+			font-size: 24px;
+			color: rgba(255, 255, 255, 0.6);
+		}
+
+		/* 错误状态 */
+		.error {
+			text-align: center;
+			font-size: 24px;
+			color: #e74c3c;
+			padding: 40px;
+		}
+
+		/* 控制面板（右上角，可选） */
+		.control-panel {
+			position: absolute;
+			top: 20px;
+			right: 20px;
+			background: rgba(0, 0, 0, 0.7);
+			padding: 20px;
+			border-radius: 10px;
+			backdrop-filter: blur(10px);
+			display: none;
+			z-index: 1000;
+			border: 1px solid rgba(255, 255, 255, 0.2);
+			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+		}
+
+		.control-panel.show {
+			display: block;
+		}
+
+		.control-panel label {
+			display: block;
+			margin-bottom: 10px;
+			font-size: 14px;
+			color: rgba(255, 255, 255, 0.9);
+		}
+
+		.control-panel .hint {
+			margin-top: 10px;
+			font-size: 12px;
+			color: rgba(255, 255, 255, 0.6);
+			line-height: 1.5;
+		}
+
+		.stream-select {
+			padding: 8px 12px;
+			border: 1px solid rgba(255, 255, 255, 0.3);
+			border-radius: 6px;
+			background: rgba(255, 255, 255, 0.1);
+			color: white;
+			font-size: 14px;
+			cursor: pointer;
+		}
+
+		.stream-select option {
+			background: #2c3e50;
+			color: white;
+		}
+
+		/* 评委显示区域 */
+		.judges-section {
+			width: 100%;
+			max-width: 1600px;
+			margin-top: 60px;
+		}
+
+		.judges-title {
+			text-align: center;
+			font-size: 36px;
+			font-weight: 700;
+			color: white;
+			text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+			margin-bottom: 40px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			gap: 15px;
+		}
+
+		.judges-title::before {
+			content: '⭐';
+			font-size: 32px;
+		}
+
+		.judges-title::after {
+			content: '⭐';
+			font-size: 32px;
+		}
+
+		.judges-container {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 30px;
+			justify-items: center;
+		}
+
+		.judge-card {
+			width: 100%;
+			max-width: 280px;
+			background: rgba(255, 255, 255, 0.05);
+			border: 2px solid rgba(255, 255, 255, 0.2);
+			border-radius: 15px;
+			padding: 25px;
+			text-align: center;
+			backdrop-filter: blur(10px);
+			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+			transition: all 0.3s ease;
+		}
+
+		.judge-card:hover {
+			background: rgba(255, 255, 255, 0.1);
+			border-color: rgba(255, 255, 255, 0.4);
+			transform: translateY(-5px);
+			box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+		}
+
+		.judge-image {
+			width: 150px;
+			height: 150px;
+			border-radius: 50%;
+			margin: 0 auto 20px;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			font-size: 60px;
+			color: white;
+			box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+			border: 3px solid rgba(255, 255, 255, 0.3);
+			overflow: hidden;
+			background-size: cover;
+			background-position: center;
+		}
+
+		.judge-image img {
+			width: 100%;
+			height: 100%;
+			object-fit: cover;
+		}
+
+		.judge-name {
+			font-size: 22px;
+			font-weight: 600;
+			color: white;
+			margin-bottom: 15px;
+			text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+		}
+
+		.judge-votes-group {
+			display: flex;
+			flex-direction: column;
+			gap: 15px;
+			margin-top: 20px;
+		}
+
+		.judge-vote-item {
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			padding: 12px;
+			border-radius: 10px;
+			font-size: 16px;
+			font-weight: 600;
+			text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+		}
+
+		.judge-vote-item.left-vote {
+			background: rgba(231, 76, 60, 0.3);
+			border: 2px solid rgba(231, 76, 60, 0.6);
+			color: #ff7b7b;
+		}
+
+		.judge-vote-item.right-vote {
+			background: rgba(52, 152, 219, 0.3);
+			border: 2px solid rgba(52, 152, 219, 0.6);
+			color: #7dd3fc;
+		}
+
+		.judge-vote-label {
+			font-size: 12px;
+			opacity: 0.8;
+			margin-bottom: 5px;
+		}
+
+		.judge-vote-count {
+			font-size: 28px;
+			font-weight: 700;
+		}
+
+		/* 评委区域响应式设计 */
+		@media (max-width: 1200px) {
+			.judges-container {
+				grid-template-columns: repeat(3, 1fr);
+				gap: 20px;
+			}
+
+			.judge-card {
+				max-width: 200px;
+				padding: 15px;
+			}
+
+			.judge-image {
+				width: 120px;
+				height: 120px;
+				font-size: 48px;
+			}
+
+			.judge-name {
+				font-size: 18px;
+			}
+
+			.judge-vote-count {
+				font-size: 24px;
+			}
+
+			.judges-title {
+				font-size: 28px;
+				margin-bottom: 30px;
+			}
+
+			.judges-title::before,
+			.judges-title::after {
+				font-size: 24px;
+			}
+		}
+
+		@media (max-width: 768px) {
+			.judges-container {
+				grid-template-columns: 1fr;
+				gap: 15px;
+			}
+
+			.judge-card {
+				max-width: 100%;
+				padding: 15px;
+			}
+
+			.judge-image {
+				width: 100px;
+				height: 100px;
+				font-size: 40px;
+			}
+
+			.judge-name {
+				font-size: 16px;
+				margin-bottom: 10px;
+			}
+
+			.judge-vote-item {
+				padding: 10px;
+				font-size: 14px;
+			}
+
+			.judge-vote-count {
+				font-size: 20px;
+			}
+
+			.judges-title {
+				font-size: 24px;
+				margin-bottom: 20px;
+			}
+
+			.judges-title::before,
+			.judges-title::after {
+				font-size: 20px;
+			}
+
+			.judges-section {
+				margin-top: 40px;
+			}
+		}
+
+		/* 响应式设计 */
+		@media (max-width: 1200px) {
+			.header {
+				height: 130px;
+			}
+
+			.header-left,
+			.header-right {
+				gap: 15px;
+			}
+
+			.header-label {
+				font-size: 36px;
+				padding: 6px 20px;
+			}
+
+			.header-vote-value {
+				font-size: 52px;
+			}
+
+			.header-vote-percentage {
+				font-size: 28px;
+			}
+
+			.segment-info {
+				font-size: 40px;
+			}
+
+			.timer-display {
+				font-size: 100px;
+			}
+
+			.timer-btn {
+				padding: 10px 20px;
+				font-size: 14px;
+			}
+		}
+
+		@media (max-width: 768px) {
+			.container {
+				padding-top: 20px;
+			}
+
+			.header {
+				height: 110px;
+			}
+
+			.header-left,
+			.header-right {
+				gap: 10px;
+			}
+
+			.header-label {
+				font-size: 28px;
+				padding: 5px 15px;
+			}
+
+			.header-vote-value {
+				font-size: 40px;
+			}
+
+			.header-vote-percentage {
+				font-size: 24px;
+			}
+
+			.timer-section {
+				padding: 20px;
+				gap: 15px;
+			}
+
+			.segment-info {
+				font-size: 32px;
+			}
+
+			.timer-display {
+				font-size: 80px;
+				letter-spacing: 4px;
+			}
+
+			.timer-controls,
+			.segment-controls {
+				flex-wrap: wrap;
+				justify-content: center;
+			}
+
+			.timer-btn {
+				padding: 8px 16px;
+				font-size: 12px;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<!-- 顶部条状显示 -->
+		<div class="header" id="header-bar">
+			<!-- 正方区域（左侧红色） -->
+			<div class="header-left" id="header-left" style="width: 50%;">
+				<div class="header-label" id="header-left-label">正方</div>
+				<div class="header-vote-value" id="header-left-votes">0</div>
+				<div class="header-vote-percentage" id="header-left-percentage">50%</div>
+			</div>
+			
+			<!-- 分隔线 -->
+			<div class="header-divider"></div>
+			
+			<!-- 反方区域（右侧蓝色） -->
+			<div class="header-right" id="header-right" style="width: 50%;">
+				<div class="header-label" id="header-right-label">反方</div>
+				<div class="header-vote-value" id="header-right-votes">0</div>
+				<div class="header-vote-percentage" id="header-right-percentage">50%</div>
+			</div>
+
+			<!-- 流信息（右上角） -->
+			<div class="stream-info">
+				<span class="status-indicator" id="status-indicator"></span>
+				<span id="stream-name">加载中...</span>
+			</div>
+		</div>
+
+		<!-- 计时器和环节控制区域 -->
+		<div class="timer-section" id="timer-section">
+			<div class="segment-info" id="segment-info">准备开始</div>
+			<div class="timer-display" id="timer-display">00:00</div>
+			<div class="timer-controls">
+				<button class="timer-btn" id="btn-pause" onclick="toggleTimer()">暂停</button>
+				<button class="timer-btn primary" id="btn-resume" onclick="resumeTimer()" style="display: none;">恢复</button>
+				<button class="timer-btn danger" onclick="resetTimer()">重置</button>
+			</div>
+			<div class="segment-controls">
+				<button class="timer-btn" onclick="previousSegment()" id="btn-prev">上一个环节 (←)</button>
+				<button class="timer-btn primary" onclick="nextSegment()" id="btn-next">下一个环节 (→)</button>
+			</div>
+		</div>
+
+		<!-- 主内容区 -->
+		<div class="main-content">
+			<div id="loading" class="loading">正在加载票数数据...</div>
+			<div id="error" class="error" style="display: none;"></div>
+			
+			<div id="votes-display" class="votes-display" style="display: none;">
+				<!-- 评委显示区域 -->
+				<div class="judges-section" id="judges-section">
+					<div class="judges-title">评委投票</div>
+					<div class="judges-container" id="judges-container">
+						<!-- 评委卡片将动态插入这里 -->
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- 控制面板（按F12或点击流信息显示） -->
+		<div class="control-panel" id="control-panel">
+			<label>选择直播流：</label>
+			<select id="stream-select" class="stream-select">
+				<option value="">加载中...</option>
+			</select>
+
+			<!-- 评委测试控制 -->
+			<div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255, 255, 255, 0.2);">
+				<label style="display: block; margin-bottom: 10px; font-weight: bold; color: #f39c12;">评委投票测试：</label>
+
+				<div style="font-size: 12px; margin-bottom: 10px; color: rgba(255, 255, 255, 0.7);">
+					评委一:
+					<button onclick="updateJudgeVote(1, 'left')" style="padding: 4px 8px; margin: 0 2px; font-size: 11px;">赞成</button>
+					<button onclick="updateJudgeVote(1, 'right')" style="padding: 4px 8px; margin: 0 2px; font-size: 11px;">反对</button>
+					<button onclick="updateJudgeVote(1, null)" style="padding: 4px 8px; margin: 0 2px; font-size: 11px;">清除</button>
+				</div>
+
+				<div style="font-size: 12px; margin-bottom: 10px; color: rgba(255, 255, 255, 0.7);">
+					评委二:
+					<button onclick="updateJudgeVote(2, 'left')" style="padding: 4px 8px; margin: 0 2px; font-size: 11px;">赞成</button>
+					<button onclick="updateJudgeVote(2, 'right')" style="padding: 4px 8px; margin: 0 2px; font-size: 11px;">反对</button>
+					<button onclick="updateJudgeVote(2, null)" style="padding: 4px 8px; margin: 0 2px; font-size: 11px;">清除</button>
+				</div>
+
+				<div style="font-size: 12px; margin-bottom: 10px; color: rgba(255, 255, 255, 0.7);">
+					评委三:
+					<button onclick="updateJudgeVote(3, 'left')" style="padding: 4px 8px; margin: 0 2px; font-size: 11px;">赞成</button>
+					<button onclick="updateJudgeVote(3, 'right')" style="padding: 4px 8px; margin: 0 2px; font-size: 11px;">反对</button>
+					<button onclick="updateJudgeVote(3, null)" style="padding: 4px 8px; margin: 0 2px; font-size: 11px;">清除</button>
+				</div>
+			</div>
+
+			<div class="hint">
+				提示：<br>
+				• 按 F12 或点击右上角流信息可显示/隐藏此面板<br>
+				• 可通过URL参数指定流：?stream_id=xxx<br>
+				• 使用评委投票测试按钮可快速测试评委投票功能
+			</div>
+		</div>
+	</div>
+
+	<script>
+		// 服务器配置（从admin.js继承或使用默认值）
+		const getAPIBase = () => {
+			if (window.SERVER_CONFIG && window.SERVER_CONFIG.BASE_URL) {
+				return window.SERVER_CONFIG.BASE_URL;
+			}
+			return 'http://192.140.160.119:8000';
+		};
+
+		// 全局状态
+		let currentStreamId = null;
+		let refreshTimer = null;
+		let ws = null;
+
+		// 评委数据管理
+		let judgesData = [
+			{
+				id: 1,
+				name: '评委一',
+				imageUrl: null,  // 可以是图片URL或base64
+				vote: null  // 'left' 或 'right' 或 null
+			},
+			{
+				id: 2,
+				name: '评委二',
+				imageUrl: null,
+				vote: null
+			},
+			{
+				id: 3,
+				name: '评委三',
+				imageUrl: null,
+				vote: null
+			}
+		];
+
+		// 辩论流程配置
+		const DEBATE_SEGMENTS = [
+			{ name: '正方发言', duration: 180, side: 'left' },      // 3分钟
+			{ name: '反方质问', duration: 120, side: 'right' },     // 2分钟
+			{ name: '反方发言', duration: 180, side: 'right' },      // 3分钟
+			{ name: '正方质问', duration: 120, side: 'left' },       // 2分钟
+			{ name: '自由辩论', duration: 300, side: 'both' },      // 5分钟
+			{ name: '正方总结', duration: 120, side: 'left' },      // 2分钟
+			{ name: '反方总结', duration: 120, side: 'right' }      // 2分钟
+		];
+
+		// 计时器状态
+		let timerState = {
+			currentSegmentIndex: -1,  // -1表示未开始
+			remainingSeconds: 0,
+			isRunning: false,
+			isPaused: false,
+			timerInterval: null
+		};
+
+		// 从URL参数获取stream_id
+		function getStreamIdFromURL() {
+			const params = new URLSearchParams(window.location.search);
+			return params.get('stream_id') || params.get('streamId');
+		}
+
+		// 渲染评委卡片
+		function renderJudgesCards() {
+			const container = document.getElementById('judges-container');
+			container.innerHTML = '';
+
+			judgesData.forEach((judge) => {
+				const card = document.createElement('div');
+				card.className = 'judge-card';
+
+				// 构建图片HTML
+				let imageHTML;
+				if (judge.imageUrl) {
+					imageHTML = `<img src="${judge.imageUrl}" alt="${judge.name}">`;
+				} else {
+					// 显示默认占位符（一个简单的数字）
+					imageHTML = `${judge.id}`;
+				}
+
+				// 构建投票显示部分
+				let voteHTML = '';
+				if (judge.vote) {
+					const isLeftVote = judge.vote === 'left';
+					const voteLabel = isLeftVote ? '正方' : '反方';
+					const voteClass = isLeftVote ? 'left-vote' : 'right-vote';
+					voteHTML = `
+						<div class="judge-votes-group">
+							<div class="judge-vote-item ${voteClass}">
+								<span class="judge-vote-label">投票：${voteLabel}</span>
+								<span class="judge-vote-count">✓</span>
+							</div>
+						</div>
+					`;
+				} else {
+					voteHTML = `
+						<div class="judge-votes-group">
+							<div class="judge-vote-item" style="background: rgba(128, 128, 128, 0.2); border-color: rgba(128, 128, 128, 0.4); color: #a0a0a0;">
+								<span class="judge-vote-label">未投票</span>
+								<span class="judge-vote-count">—</span>
+							</div>
+						</div>
+					`;
+				}
+
+				card.innerHTML = `
+					<div class="judge-image">${imageHTML}</div>
+					<div class="judge-name">${judge.name}</div>
+					${voteHTML}
+				`;
+
+				container.appendChild(card);
+			});
+		}
+
+		// 更新评委投票（供外部调用）
+		function updateJudgeVote(judgeId, vote) {
+			const judge = judgesData.find(j => j.id === judgeId);
+			if (judge) {
+				judge.vote = vote; // 'left', 'right', 或 null
+				renderJudgesCards();
+			}
+		}
+
+		// 更新评委图片（供外部调用）
+		function updateJudgeImage(judgeId, imageUrl) {
+			const judge = judgesData.find(j => j.id === judgeId);
+			if (judge) {
+				judge.imageUrl = imageUrl;
+				renderJudgesCards();
+			}
+		}
+
+		// 更新评委名字（供外部调用）
+		function updateJudgeName(judgeId, name) {
+			const judge = judgesData.find(j => j.id === judgeId);
+			if (judge) {
+				judge.name = name;
+				renderJudgesCards();
+			}
+		}
+
+		// 初始化
+		document.addEventListener('DOMContentLoaded', async () => {
+			// 显示控制面板（按F12或点击右上角）
+			document.addEventListener('keydown', (e) => {
+				if (e.key === 'F12' || (e.ctrlKey && e.shiftKey && e.key === 'I')) {
+					e.preventDefault();
+					const panel = document.getElementById('control-panel');
+					panel.classList.toggle('show');
+				}
+				// 键盘快捷键
+				if (e.key === 'ArrowLeft' && !e.ctrlKey && !e.shiftKey) {
+					e.preventDefault();
+					previousSegment();
+				}
+				if (e.key === 'ArrowRight' && !e.ctrlKey && !e.shiftKey) {
+					e.preventDefault();
+					nextSegment();
+				}
+				if (e.key === ' ' && !e.ctrlKey && !e.shiftKey) {
+					e.preventDefault();
+					resumeTimer();
+				}
+				if (e.key === 'p' || e.key === 'P') {
+					if (!e.ctrlKey && !e.shiftKey) {
+						e.preventDefault();
+						toggleTimer();
+					}
+				}
+			});
+
+			// 点击右上角流信息也可以显示控制面板
+			document.getElementById('stream-name').addEventListener('click', () => {
+				const panel = document.getElementById('control-panel');
+				panel.classList.toggle('show');
+			});
+
+			// 初始化计时器显示
+			updateTimerDisplay();
+			updateSegmentInfo();
+
+			// 加载直播流列表
+			await loadStreamsList();
+
+			// 初始化WebSocket
+			initWebSocket();
+
+			// 初始化评委卡片显示
+			renderJudgesCards();
+
+			// 开始定时刷新
+			startAutoRefresh();
+		});
+
+		// 格式化时间显示（MM:SS）
+		function formatTime(seconds) {
+			const mins = Math.floor(seconds / 60);
+			const secs = seconds % 60;
+			return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+		}
+
+		// 更新计时器显示
+		function updateTimerDisplay() {
+			const timerEl = document.getElementById('timer-display');
+			timerEl.textContent = formatTime(timerState.remainingSeconds);
+			
+			// 剩余时间少于30秒时显示警告
+			if (timerState.remainingSeconds <= 30 && timerState.remainingSeconds > 0) {
+				timerEl.classList.add('warning');
+			} else {
+				timerEl.classList.remove('warning');
+			}
+		}
+
+		// 更新环节信息显示
+		function updateSegmentInfo() {
+			const segmentInfoEl = document.getElementById('segment-info');
+			const btnPrev = document.getElementById('btn-prev');
+			const btnNext = document.getElementById('btn-next');
+			
+			if (timerState.currentSegmentIndex === -1) {
+				segmentInfoEl.textContent = '准备开始';
+				btnPrev.disabled = true;
+				btnNext.disabled = false;
+			} else if (timerState.currentSegmentIndex >= DEBATE_SEGMENTS.length) {
+				segmentInfoEl.textContent = '辩论结束';
+				btnPrev.disabled = false;
+				btnNext.disabled = true;
+			} else {
+				const segment = DEBATE_SEGMENTS[timerState.currentSegmentIndex];
+				segmentInfoEl.textContent = segment.name;
+				btnPrev.disabled = false;
+				// 如果是最后一个环节，下一个按钮仍然可用（会进入结束状态）
+				btnNext.disabled = false;
+			}
+		}
+
+		// 开始计时器
+		function startTimer() {
+			if (timerState.timerInterval) {
+				clearInterval(timerState.timerInterval);
+			}
+			
+			timerState.isRunning = true;
+			timerState.isPaused = false;
+			
+			timerState.timerInterval = setInterval(() => {
+				if (timerState.remainingSeconds > 0) {
+					timerState.remainingSeconds--;
+					updateTimerDisplay();
+					
+					// 时间到
+					if (timerState.remainingSeconds === 0) {
+						stopTimer();
+						// 可以添加提示音或通知
+						console.log('时间到！');
+					}
+				} else {
+					stopTimer();
+				}
+			}, 1000);
+			
+			updateButtonStates();
+		}
+
+		// 停止计时器
+		function stopTimer() {
+			if (timerState.timerInterval) {
+				clearInterval(timerState.timerInterval);
+				timerState.timerInterval = null;
+			}
+			timerState.isRunning = false;
+			updateButtonStates();
+		}
+
+		// 暂停/恢复计时器
+		function toggleTimer() {
+			if (timerState.isRunning) {
+				stopTimer();
+				timerState.isPaused = true;
+			} else if (timerState.isPaused && timerState.remainingSeconds > 0) {
+				startTimer();
+			}
+			updateButtonStates();
+		}
+
+		// 恢复计时器
+		function resumeTimer() {
+			if (timerState.isPaused && timerState.remainingSeconds > 0) {
+				startTimer();
+			} else if (timerState.currentSegmentIndex >= 0 && timerState.remainingSeconds > 0) {
+				startTimer();
+			}
+			updateButtonStates();
+		}
+
+		// 重置计时器
+		function resetTimer() {
+			stopTimer();
+			if (timerState.currentSegmentIndex >= 0 && timerState.currentSegmentIndex < DEBATE_SEGMENTS.length) {
+				const segment = DEBATE_SEGMENTS[timerState.currentSegmentIndex];
+				timerState.remainingSeconds = segment.duration;
+				timerState.isPaused = false;
+				updateTimerDisplay();
+				updateButtonStates();
+			}
+		}
+
+		// 更新按钮状态
+		function updateButtonStates() {
+			const btnPause = document.getElementById('btn-pause');
+			const btnResume = document.getElementById('btn-resume');
+			
+			if (timerState.isRunning) {
+				btnPause.style.display = 'inline-block';
+				btnResume.style.display = 'none';
+			} else if (timerState.isPaused || (timerState.currentSegmentIndex >= 0 && timerState.remainingSeconds > 0)) {
+				btnPause.style.display = 'none';
+				btnResume.style.display = 'inline-block';
+			} else {
+				btnPause.style.display = 'inline-block';
+				btnResume.style.display = 'none';
+			}
+		}
+
+		// 切换到下一个环节
+		function nextSegment() {
+			stopTimer();
+			
+			if (timerState.currentSegmentIndex < DEBATE_SEGMENTS.length - 1) {
+				timerState.currentSegmentIndex++;
+				const segment = DEBATE_SEGMENTS[timerState.currentSegmentIndex];
+				timerState.remainingSeconds = segment.duration;
+				timerState.isPaused = false;
+				
+				updateTimerDisplay();
+				updateSegmentInfo();
+				updateButtonStates();
+			} else if (timerState.currentSegmentIndex === DEBATE_SEGMENTS.length - 1) {
+				// 最后一个环节，切换到结束状态
+				timerState.currentSegmentIndex = DEBATE_SEGMENTS.length;
+				timerState.remainingSeconds = 0;
+				updateTimerDisplay();
+				updateSegmentInfo();
+				updateButtonStates();
+			} else if (timerState.currentSegmentIndex === -1) {
+				// 从准备开始状态进入第一个环节
+				timerState.currentSegmentIndex = 0;
+				const segment = DEBATE_SEGMENTS[0];
+				timerState.remainingSeconds = segment.duration;
+				timerState.isPaused = false;
+				
+				updateTimerDisplay();
+				updateSegmentInfo();
+				updateButtonStates();
+			}
+		}
+
+		// 切换到上一个环节
+		function previousSegment() {
+			stopTimer();
+			
+			if (timerState.currentSegmentIndex > 0) {
+				timerState.currentSegmentIndex--;
+				const segment = DEBATE_SEGMENTS[timerState.currentSegmentIndex];
+				timerState.remainingSeconds = segment.duration;
+				timerState.isPaused = false;
+				
+				updateTimerDisplay();
+				updateSegmentInfo();
+				updateButtonStates();
+			} else if (timerState.currentSegmentIndex === 0) {
+				timerState.currentSegmentIndex = -1;
+				timerState.remainingSeconds = 0;
+				updateTimerDisplay();
+				updateSegmentInfo();
+				updateButtonStates();
+			}
+		}
+
+		// 加载直播流列表
+		async function loadStreamsList() {
+			try {
+				const response = await fetch(`${getAPIBase()}/api/v1/admin/streams`);
+				const result = await response.json();
+				
+				const streams = result?.data?.streams || result?.streams || (Array.isArray(result) ? result : []);
+				const select = document.getElementById('stream-select');
+				
+				select.innerHTML = '<option value="">请选择直播流</option>';
+				
+				if (streams.length === 0) {
+					select.innerHTML += '<option value="" disabled>暂无可用的直播流</option>';
+					showError('暂无可用的直播流，请先在后台管理系统中添加直播流');
+					return;
+				}
+
+				streams.forEach(stream => {
+					if (stream.enabled) {
+						const option = document.createElement('option');
+						option.value = stream.id;
+						option.textContent = `${stream.name} (${stream.type?.toUpperCase() || 'HLS'})`;
+						select.appendChild(option);
+					}
+				});
+
+				// 优先使用URL参数中的stream_id
+				const urlStreamId = getStreamIdFromURL();
+				let selectedStreamId = null;
+
+				if (urlStreamId) {
+					// 检查URL中的stream_id是否在列表中
+					const urlStream = streams.find(s => s.id === urlStreamId && s.enabled);
+					if (urlStream) {
+						selectedStreamId = urlStreamId;
+						select.value = urlStreamId;
+					} else {
+						console.warn('URL中的stream_id不存在或未启用，使用默认流');
+					}
+				}
+
+				// 如果没有从URL获取到，使用第一个启用的流
+				if (!selectedStreamId) {
+					const firstEnabled = streams.find(s => s.enabled);
+					if (firstEnabled) {
+						selectedStreamId = firstEnabled.id;
+						select.value = firstEnabled.id;
+					}
+				}
+
+				// 加载票数
+				if (selectedStreamId) {
+					currentStreamId = selectedStreamId;
+					await loadVotes(selectedStreamId);
+				} else {
+					showError('没有可用的直播流');
+				}
+
+				// 监听选择变化
+				select.addEventListener('change', async (e) => {
+					const streamId = e.target.value;
+					if (streamId) {
+						currentStreamId = streamId;
+						// 更新URL参数（不刷新页面）
+						const url = new URL(window.location);
+						url.searchParams.set('stream_id', streamId);
+						window.history.pushState({}, '', url);
+						await loadVotes(streamId);
+					}
+				});
+			} catch (error) {
+				console.error('加载直播流列表失败:', error);
+				showError('加载直播流列表失败: ' + error.message);
+			}
+		}
+
+		// 加载票数数据
+		async function loadVotes(streamId, showLoadingState = true) {
+			if (!streamId) {
+				showError('请先选择直播流');
+				return;
+			}
+
+			try {
+				hideError();
+				
+				// 只在首次加载或手动切换时显示加载状态
+				if (showLoadingState) {
+					showLoading();
+				}
+
+				const response = await fetch(`${getAPIBase()}/api/v1/admin/dashboard?stream_id=${streamId}`);
+				const result = await response.json();
+				
+				const data = result?.data || result;
+				
+				if (!data) {
+					throw new Error('无法获取票数数据');
+				}
+
+				// 更新流信息
+				const streamSelect = document.getElementById('stream-select');
+				const selectedOption = streamSelect?.options[streamSelect.selectedIndex];
+				const streamName = selectedOption ? selectedOption.textContent : '未知流';
+				document.getElementById('stream-name').textContent = streamName;
+
+				// 更新状态指示器
+				const statusIndicator = document.getElementById('status-indicator');
+				if (data.isLive) {
+					statusIndicator.classList.add('live');
+				} else {
+					statusIndicator.classList.remove('live');
+				}
+
+				// 更新票数显示
+				const leftVotes = data.leftVotes || 0;
+				const rightVotes = data.rightVotes || 0;
+				const totalVotes = data.totalVotes || (leftVotes + rightVotes);
+				const leftPercentage = data.leftPercentage || (totalVotes > 0 ? Math.round((leftVotes / totalVotes) * 100) : 50);
+				const rightPercentage = data.rightPercentage || (totalVotes > 0 ? Math.round((rightVotes / totalVotes) * 100) : 50);
+
+				updateVotesDisplay(leftVotes, rightVotes, totalVotes, leftPercentage, rightPercentage);
+
+				// 只在首次加载时隐藏加载状态并显示票数
+				if (showLoadingState) {
+					hideLoading();
+					showVotesDisplay();
+				}
+			} catch (error) {
+				console.error('加载票数失败:', error);
+				// 如果已经有数据显示，不显示错误（避免闪烁），只在控制台记录
+				if (showLoadingState) {
+					showError('加载票数失败: ' + error.message);
+				} else {
+					console.warn('定时刷新失败，将在下次重试:', error.message);
+				}
+			}
+		}
+
+		// 更新票数显示
+		function updateVotesDisplay(leftVotes, rightVotes, totalVotes, leftPercentage, rightPercentage) {
+			const leftEl = document.getElementById('header-left-votes');
+			const rightEl = document.getElementById('header-right-votes');
+			const leftPctEl = document.getElementById('header-left-percentage');
+			const rightPctEl = document.getElementById('header-right-percentage');
+			const leftBar = document.getElementById('header-left');
+			const rightBar = document.getElementById('header-right');
+
+			// 获取当前显示的值（去除千分位逗号后比较）
+			const currentLeft = parseInt(leftEl.textContent.replace(/,/g, '')) || 0;
+			const currentRight = parseInt(rightEl.textContent.replace(/,/g, '')) || 0;
+
+			// 检查是否有变化，如果有则添加动画
+			if (currentLeft !== leftVotes) {
+				leftEl.classList.add('updated');
+				setTimeout(() => leftEl.classList.remove('updated'), 500);
+			}
+			if (currentRight !== rightVotes) {
+				rightEl.classList.add('updated');
+				setTimeout(() => rightEl.classList.remove('updated'), 500);
+			}
+
+			// 更新顶部条状显示的宽度（如果总票数为0，各占50%）
+			if (totalVotes === 0) {
+				leftBar.style.width = '50%';
+				rightBar.style.width = '50%';
+			} else {
+				leftBar.style.width = `${leftPercentage}%`;
+				rightBar.style.width = `${rightPercentage}%`;
+			}
+
+			// 格式化数字（添加千分位）
+			leftEl.textContent = formatNumber(leftVotes);
+			rightEl.textContent = formatNumber(rightVotes);
+			leftPctEl.textContent = `${leftPercentage}%`;
+			rightPctEl.textContent = `${rightPercentage}%`;
+		}
+
+		// 格式化数字（添加千分位）
+		function formatNumber(num) {
+			return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+		}
+
+		// 初始化WebSocket（用于实时更新）
+		function initWebSocket() {
+			try {
+				const wsBaseUrl = getAPIBase();
+				const baseUrl = new URL(wsBaseUrl);
+				const protocol = baseUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+				const wsUrl = `${protocol}//${baseUrl.host}/ws`;
+
+				ws = new WebSocket(wsUrl);
+
+				ws.onopen = () => {
+					console.log('✅ WebSocket 已连接');
+				};
+
+				ws.onmessage = (event) => {
+					try {
+						const message = JSON.parse(event.data);
+						handleWebSocketMessage(message);
+					} catch (error) {
+						console.error('WebSocket 消息解析失败:', error);
+					}
+				};
+
+				ws.onerror = (error) => {
+					console.error('WebSocket 错误:', error);
+				};
+
+				ws.onclose = () => {
+					console.log('WebSocket 已断开，5秒后重连...');
+					setTimeout(() => {
+						if (currentStreamId) {
+							initWebSocket();
+						}
+					}, 5000);
+				};
+			} catch (error) {
+				console.error('WebSocket 初始化失败:', error);
+			}
+		}
+
+		// 处理WebSocket消息
+		function handleWebSocketMessage(message) {
+			if (message.type === 'votes-updated' || message.type === 'vote-updated') {
+				const votes = message.data?.votes || message.data || message;
+				if (votes.leftVotes !== undefined && votes.rightVotes !== undefined) {
+					const totalVotes = votes.totalVotes || (votes.leftVotes + votes.rightVotes);
+					const leftPercentage = votes.leftPercentage || (totalVotes > 0 ? Math.round((votes.leftVotes / totalVotes) * 100) : 50);
+					const rightPercentage = votes.rightPercentage || (totalVotes > 0 ? Math.round((votes.rightVotes / totalVotes) * 100) : 50);
+					
+					updateVotesDisplay(votes.leftVotes, votes.rightVotes, totalVotes, leftPercentage, rightPercentage);
+				}
+			}
+		}
+
+		// 开始自动刷新
+		function startAutoRefresh() {
+			if (refreshTimer) {
+				clearInterval(refreshTimer);
+			}
+			
+			// 每5秒刷新一次（静默更新，不显示加载状态）
+			refreshTimer = setInterval(() => {
+				if (currentStreamId) {
+					// 传入 false 表示不显示加载状态，避免页面闪烁
+					loadVotes(currentStreamId, false);
+				}
+			}, 5000);
+		}
+
+		// 显示/隐藏函数
+		function showLoading() {
+			document.getElementById('loading').style.display = 'block';
+			document.getElementById('error').style.display = 'none';
+			document.getElementById('votes-display').style.display = 'none';
+		}
+
+		function hideLoading() {
+			document.getElementById('loading').style.display = 'none';
+		}
+
+		function showError(message) {
+			document.getElementById('error').textContent = message;
+			document.getElementById('error').style.display = 'block';
+			document.getElementById('loading').style.display = 'none';
+			document.getElementById('votes-display').style.display = 'none';
+		}
+
+		function hideError() {
+			document.getElementById('error').style.display = 'none';
+		}
+
+		function showVotesDisplay() {
+			document.getElementById('votes-display').style.display = 'flex';
+		}
+	</script>
+</body>
+</html>
+
