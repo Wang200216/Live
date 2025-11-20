@@ -54,10 +54,7 @@
 					<img src="/static/iconfont/live.png" class="nav-icon-img" alt="">
 					<span class="nav-text">直播流管理</span>
 				</a>
-				<a href="#flow-management" class="nav-item" data-page="flow-management">
-					<img src="/static/iconfont/baogaozongjie.png" class="nav-icon-img" alt="">
-					<span class="nav-text">流程设置</span>
-				</a>
+
 				<a href="#users" class="nav-item" data-page="users">
 					<img src="/static/iconfont/blue-user.png" class="nav-icon-img" alt="">
 					<span class="nav-text">用户管理</span>
@@ -504,41 +501,10 @@
 							</div>
 						</div>
 					</div>
-			</div>
-
-			<!-- 流程管理页 -->
-			<div id="flow-management" class="page">
-				<div class="page-header">
-					<h2>
-						<img src="/static/iconfont/baogaozongjie.png" class="icon-img" alt="">
-						流程设置
-					</h2>
 				</div>
 
-				<!-- 直播流选择器 -->
-				<div style="background: #d1ecf1; padding: 20px; border-radius: 8px; margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 4px solid #3498db; border: 1px solid #bee5eb;">
-					<div class="form-group" style="margin: 0;">
-						<label style="display: block; margin-bottom: 10px; color: #0c5460; font-weight: 600; font-size: 16px; display: flex; align-items: center; gap: 8px;">
-							<img src="/static/iconfont/live.png" class="icon-img" alt="">
-							选择直播流
-							<span style="color: #e74c3c; margin-left: 5px;">*</span>
-						</label>
-						<select id="flow-stream-select" class="form-input" style="margin-bottom: 10px;">
-							<option value="">-- 请选择直播流 --</option>
-						</select>
-					</div>
-				</div>
-
-				<!-- 流程管理容器 -->
-				<div id="flow-management-container" style="background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #ddd; padding: 20px;">
-					<div style="text-align: center; padding: 40px; color: #999;">
-						请先选择直播流以加载流程配置
-					</div>
-				</div>
-			</div>
-
-			<!-- 评委管理页 -->
-			<div id="judges" class="page">
+				<!-- 评委管理页 -->
+				<div id="judges" class="page">
 					<div class="page-header">
 						<h2>
 							<img src="/static/iconfont/blue-user.png" class="icon-img" alt="">
@@ -1070,7 +1036,6 @@
 	<script src="/admin/admin-events.js?v=2"></script>
 	<script src="/admin/stream-management.js?v=2"></script>
 	<script src="/admin/judges-management.js?v=1"></script>
-	<script src="/admin/flow-management.js?v=1"></script>
 	<script>
 		// 初始化直播流管理模块
 		document.addEventListener('DOMContentLoaded', () => {

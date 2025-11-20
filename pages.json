@@ -6,31 +6,28 @@
 				"navigationBarTitleText": "辩论LIVE"
 			}
 		},
-	{
-		"path": "pages/live-select/live-select",
-		"style": {
-			"navigationBarTitleText": "选择直播间",
-			"navigationBarBackgroundColor": "#FFEB3B"
-		}
-	},
-	{
-		"path": "pages/home/home",
-		"style": {
-			"navigationBarTitleText": "直播间",
-			"navigationBarBackgroundColor": "#FFEB3B"
-		}
-	},
 		{
-			"path": "pages/profile/profile",
+			"path": "pages/live-select/live-select",
 			"style": {
-				"navigationBarTitleText": "个人中心",
+				"navigationBarTitleText": "选择直播间",
 				"navigationStyle": "custom",
 				"app-plus": {
 					"titleNView": false,
 					"bounce": "none"
 				}
 			}
-		}
+		},
+		{
+			"path": "pages/home/home",
+			"style": {
+				"navigationBarTitleText": "首页",
+				"navigationStyle": "custom",
+				"app-plus": {
+					"titleNView": false,
+					"bounce": "none"
+				}
+			}
+	}
 	],
 	"globalStyle": {
 		"navigationBarTextStyle": "black",

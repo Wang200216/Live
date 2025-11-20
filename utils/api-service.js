@@ -385,7 +385,7 @@ class ApiService {
   /**
    * 直接按分布投票（left/right 和为100）
    */
-  async userVoteDistribution(leftVotes, rightVotes, streamId) {
+  async userVoteDistribution(leftVotes, rightVotes, streamId, userId = null) {
     if (typeof leftVotes !== 'number' || typeof rightVotes !== 'number') {
       throw new Error('leftVotes/rightVotes 必须是数字');
     }
@@ -396,28 +396,136 @@ class ApiService {
     if (!streamId) {
       throw new Error('投票必须指定直播流ID (streamId)');
     }
-    const requestBody = {
-      request: {
-        leftVotes: Math.round(leftVotes),
-        rightVotes: Math.round(rightVotes),
-        streamId: streamId,
-        stream_id: streamId
-      }
-    };
-    const response = await this.request({
-      url: '/api/v1/user-vote',
-      method: 'POST',
-      data: requestBody
-    });
-    try {
-      const totals = await this.getVote(streamId);
-      return totals;
-    } catch (e0) {
+    
+    // 获取用户ID（如果没有传入）
+    if (!userId) {
       try {
-        const totalsV1 = await this.getVotes(streamId);
-        return totalsV1;
-      } catch (e1) {
-        return response;
+        if (typeof uni !== 'undefined' && uni.getStorageSync) {
+          const currentUser = uni.getStorageSync('currentUser');
+          if (currentUser && currentUser.id) {
+            userId = currentUser.id;
+          }
+        }
+      } catch (e) {
+        console.warn('⚠️ 无法获取本地存储的用户ID:', e);
+      }
+    }
+    
+    // 如果仍然没有 userId，使用 'guest'
+    if (!userId) {
+      userId = 'guest';
+    }
+    
+    // 尝试多种请求格式和路径组合
+    const testConfigs = [
+      {
+        name: '格式1-v1路径（直接格式）',
+        url: '/api/v1/user-vote',
+        data: {
+          leftVotes: Math.round(leftVotes),
+          rightVotes: Math.round(rightVotes),
+          streamId: streamId,
+          stream_id: streamId,
+          userId: userId,
+          user_id: userId
+        }
+      },
+      {
+        name: '格式2-v1路径（包装格式）',
+        url: '/api/v1/user-vote',
+        data: {
+          request: {
+            leftVotes: Math.round(leftVotes),
+            rightVotes: Math.round(rightVotes),
+            streamId: streamId,
+            stream_id: streamId,
+            userId: userId,
+            user_id: userId
+          }
+        }
+      },
+      {
+        name: '格式3-非v1路径（直接格式）',
+        url: '/api/user-vote',
+        data: {
+          leftVotes: Math.round(leftVotes),
+          rightVotes: Math.round(rightVotes),
+          streamId: streamId,
+          stream_id: streamId,
+          userId: userId,
+          user_id: userId
+        }
+      },
+      {
+        name: '格式4-非v1路径（包装格式）',
+        url: '/api/user-vote',
+        data: {
+          request: {
+            leftVotes: Math.round(leftVotes),
+            rightVotes: Math.round(rightVotes),
+            streamId: streamId,
+            stream_id: streamId,
+            userId: userId,
+            user_id: userId
+          }
+        }
+      }
+    ];
+    
+    console.log('🔍 投票请求诊断信息:');
+    console.log('  streamId:', streamId);
+    console.log('  userId:', userId);
+    console.log('  leftVotes:', Math.round(leftVotes));
+    console.log('  rightVotes:', Math.round(rightVotes));
+    console.log('  测试配置总数:', testConfigs.length);
+    
+    // 逐个尝试不同的格式
+    for (let i = 0; i < testConfigs.length; i++) {
+      const config = testConfigs[i];
+      try {
+        console.log(`📤 [${i + 1}/${testConfigs.length}] 尝试 ${config.name}`);
+        console.log('   URL:', config.url);
+        console.log('   Data:', JSON.stringify(config.data, null, 2));
+        
+        const response = await this.request({
+          url: config.url,
+          method: 'POST',
+          data: config.data
+        });
+        
+        console.log(`✅ ${config.name} 成功！返回数据:`, response);
+        
+        // 成功后尝试获取更新后的投票总数
+        try {
+          const totals = await this.getVote(streamId);
+          return totals;
+        } catch (e0) {
+          try {
+            const totalsV1 = await this.getVotes(streamId);
+            return totalsV1;
+          } catch (e1) {
+            return response;
+          }
+        }
+      } catch (error) {
+        console.error(`❌ ${config.name} 失败:`, {
+          statusCode: error.statusCode,
+          message: error.message,
+          response: error.response
+        });
+        
+        // 继续尝试下一个格式
+        if (i === testConfigs.length - 1) {
+          // 最后一个配置也失败了
+          console.error('🔍 所有格式都失败了！完整错误信息:', {
+            statusCode: error.statusCode,
+            message: error.message,
+            response: error.response,
+            url: error.url,
+            allAttempts: testConfigs.map(c => c.name)
+          });
+          throw error;
+        }
       }
     }
   }
@@ -521,7 +629,7 @@ class ApiService {
    */
   async getDebateTopic(streamId = null) {
     const url = streamId 
-      ? `/api/v1/admin/streams/${streamId}/debate`
+      ? `/api/v1/debate-topic?stream_id=${streamId}`
       : '/api/v1/debate-topic';
     const response = await this.request({
       url,

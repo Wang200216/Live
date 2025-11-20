@@ -1,35 +1,9 @@
 <template>
 	<view class="home-container">
-		<!-- 返回按钮 - 整个页面左上角 -->
-		<view class="back-btn-floating" @click="goBackToSelect">
-			<text class="back-icon">←</text>
-			<text class="back-text">返回</text>
-		</view>
-		
-		<!-- 全屏 Lottie 背景动画 -->
-		<view class="fullscreen-lottie-bg">
-			<!-- #ifdef MP-WEIXIN -->
-			<!-- 微信小程序使用 canvas 渲染 -->
-			<canvas
-				type="2d"
-				id="home-bg-lottie-canvas"
-				class="bg-lottie-canvas"
-				canvas-id="home-bg-lottie-canvas"
-			></canvas>
-			<!-- #endif -->
-			<!-- #ifndef MP-WEIXIN -->
-			<DotLottieVue
-				:src="'/static/animations/lcBg-01.json'"
-				:autoplay="true"
-				:loop="true"
-				:background="'transparent'"
-				:speed="1"
-				:direction="1"
-				:playMode="'normal'"
-				style="width: 100%; height: 100%;"
-			/>
-			<!-- #endif -->
-		</view>
+	<!-- 返回按钮 - 整个页面左上角 -->
+	<view class="back-btn-floating" @click="goBackToSelect">
+		<text class="back-icon"><</text>
+	</view>
 		
 		<!-- 装饰性动画元素组件 -->
 		<PopDecoration />
@@ -43,39 +17,37 @@
 					<image src="/static/iconfont/shouqi.png" class="collapse-icon-img" mode="aspectFit"></image>
 				</view>
 				
-				<!-- 票数进度条对比 - 浮动在直播画面上方（实时统计） -->
-				<view class="vote-progress-overlay">
-					<view class="progress-bar">
-						<!-- 左侧区域 -->
-						<view class="progress-fill left-fill" :style="{ width: topLeftPercentage + '%' }">
-							<view class="progress-text left-text">
-								<text class="debater-name">⚔️ 正方</text>
-								<text class="vote-count">{{ topLeftVotes }}</text>
-							</view>
+			<!-- 票数进度条对比 - 浮动在直播画面上方（实时统计） -->
+			<view class="vote-progress-overlay">
+				<view class="progress-bar">
+					<!-- 左侧区域 -->
+					<view class="progress-fill left-fill" :style="{ width: topLeftPercentage + '%' }">
+						<view class="progress-text left-text">
+							<text class="vote-count">{{ topLeftVotes }}</text>
 						</view>
-						
-						<!-- 动态闪电分界线 -->
-						<view class="lightning-divider" :style="{ left: topLeftPercentage + '%' }">
-							<view class="lightning-container">
-								<view class="lightning">⚡</view>
-							</view>
-							<view class="lightning-glow"></view>
-							<view class="lightning-sparks">
-								<view class="spark spark-1">✨</view>
-								<view class="spark spark-2">✨</view>
-								<view class="spark spark-3">✨</view>
-							</view>
+					</view>
+					
+					<!-- 动态闪电分界线 -->
+					<view class="lightning-divider" :style="{ left: topLeftPercentage + '%' }">
+						<view class="lightning-container">
+							<view class="lightning">⚡</view>
 						</view>
-						
-						<!-- 右侧区域 -->
-						<view class="progress-fill right-fill" :style="{ width: topRightPercentage + '%' }">
-							<view class="progress-text right-text">
-								<text class="vote-count">{{ topRightVotes }}</text>
-								<text class="debater-name">反方 🛡️</text>
-							</view>
+						<view class="lightning-glow"></view>
+						<view class="lightning-sparks">
+							<view class="spark spark-1">✨</view>
+							<view class="spark spark-2">✨</view>
+							<view class="spark spark-3">✨</view>
+						</view>
+					</view>
+					
+					<!-- 右侧区域 -->
+					<view class="progress-fill right-fill" :style="{ width: topRightPercentage + '%' }">
+						<view class="progress-text right-text">
+							<text class="vote-count">{{ topRightVotes }}</text>
 						</view>
 					</view>
 				</view>
+			</view>
 				
 				<view class="live-video">
 					<!-- #ifdef MP-WEIXIN -->
@@ -135,44 +107,42 @@
 			</view>
 		</view>
 
-		<!-- 票数进度条对比 - 收起时显示（实时统计） -->
-		<view class="vote-progress-container" v-if="isLiveCollapsed">
-			<!-- 收起状态下的直播指示器 -->
-			<view class="collapsed-live-indicator" v-if="isLiveStarted">
-				<text class="live-dot">🔴</text>
-				<text class="live-text">直播进行中</text>
+	<!-- 票数进度条对比 - 收起时显示（实时统计） -->
+	<view class="vote-progress-container" v-if="isLiveCollapsed">
+		<!-- 收起状态下的直播指示器 -->
+		<view class="collapsed-live-indicator" v-if="isLiveStarted">
+			<text class="live-dot">🔴</text>
+			<text class="live-text">直播进行中</text>
+		</view>
+		<view class="progress-bar">
+			<!-- 左侧区域 -->
+			<view class="progress-fill left-fill" :style="{ width: topLeftPercentage + '%' }">
+				<view class="progress-text left-text">
+					<text class="vote-count">{{ topLeftVotes }}</text>
+				</view>
 			</view>
-			<view class="progress-bar">
-				<!-- 左侧区域 -->
-				<view class="progress-fill left-fill" :style="{ width: topLeftPercentage + '%' }">
-					<view class="progress-text left-text">
-						<text class="debater-name">⚔️ 正方</text>
-						<text class="vote-count">{{ topLeftVotes }}</text>
-					</view>
+			
+			<!-- 动态闪电分界线 -->
+			<view class="lightning-divider" :style="{ left: topLeftPercentage + '%' }">
+				<view class="lightning-container">
+					<view class="lightning">⚡</view>
 				</view>
-				
-				<!-- 动态闪电分界线 -->
-				<view class="lightning-divider" :style="{ left: topLeftPercentage + '%' }">
-					<view class="lightning-container">
-						<view class="lightning">⚡</view>
-					</view>
-					<view class="lightning-glow"></view>
-					<view class="lightning-sparks">
-						<view class="spark spark-1">✨</view>
-						<view class="spark spark-2">✨</view>
-						<view class="spark spark-3">✨</view>
-					</view>
+				<view class="lightning-glow"></view>
+				<view class="lightning-sparks">
+					<view class="spark spark-1">✨</view>
+					<view class="spark spark-2">✨</view>
+					<view class="spark spark-3">✨</view>
 				</view>
-				
-				<!-- 右侧区域 -->
-				<view class="progress-fill right-fill" :style="{ width: topRightPercentage + '%' }">
-					<view class="progress-text right-text">
-						<text class="vote-count">{{ topRightVotes }}</text>
-						<text class="debater-name">反方 🛡️</text>
-					</view>
+			</view>
+			
+			<!-- 右侧区域 -->
+			<view class="progress-fill right-fill" :style="{ width: topRightPercentage + '%' }">
+				<view class="progress-text right-text">
+					<text class="vote-count">{{ topRightVotes }}</text>
 				</view>
 			</view>
 		</view>
+	</view>
 
 		<!-- 展开按钮（当直播收起时显示） -->
 		<view class="expand-btn" v-if="isLiveCollapsed" @click="toggleLiveCollapse">
@@ -180,21 +150,16 @@
 			<text class="expand-text">展开画面</text>
 		</view>
 
-		<!-- 主要内容区域 -->
-		<view class="main-content" :class="{ 'expanded': isLiveCollapsed }">
+	<!-- 主要内容区域 -->
+	<view class="main-content" :class="{ 'expanded': isLiveCollapsed, 'preset-collapsed': isLiveStarted && !showPresetPanel }">
 			<!-- AI对话区域 -->
 		<view class="ai-chat-container">
 			<scroll-view class="chat-messages" scroll-y="true" :scroll-top="scrollTop">
 					<view class="message-item" v-for="message in aiMessages" :key="message.id"
 						  :class="{'left': message.side === 'left', 'right': message.side === 'right'}"
 						  @click="handleMessageClick(message)">
-						<view class="message-bubble-wrapper">
-							<!-- 正方/反方标识 -->
-							<view class="side-badge" :class="{'left-badge': message.side === 'left', 'right-badge': message.side === 'right'}">
-								<text class="badge-icon">{{ message.side === 'left' ? '⚔️' : '🛡️' }}</text>
-								<text class="badge-text">{{ message.side === 'left' ? '正方' : '反方' }}</text>
-							</view>
-							<view class="message-bubble">
+					<view class="message-bubble-wrapper">
+						<view class="message-bubble">
 								<text class="message-text">{{ message.text }}</text>
 								<view class="message-actions">
 									<view class="action-item" @click.stop="handleMessageComment(message)">
@@ -219,56 +184,49 @@
 					</view>
 				</scroll-view>
 			</view>
+		</view>
 
-			<!-- 对抗条和投票区域 -->
-			<view class="battle-section">
-				<!-- 预设观点滑块（直播前显示，直播开始后可通过按钮控制显示） -->
-				<view class="preset-section" v-if="showPresetSlider && (!isLiveStarted || (isLiveStarted && showPresetPanel))">
-					<view class="preset-header">
-						<text class="preset-title">预设观点倾向</text>
-						<!-- 直播开始后的关闭按钮 -->
-						<view class="preset-close-btn" v-if="isLiveStarted" @click="togglePresetPanel">
-							<text class="close-icon">✕</text>
-						</view>
+		<!-- 对抗条和投票区域（固定在页面下方） -->
+		<view class="battle-section-fixed">
+			<!-- 预设观点滑块（直播前显示，直播开始后可通过按钮控制显示） -->
+			<view class="preset-section" v-if="showPresetSlider && (!isLiveStarted || (isLiveStarted && showPresetPanel))">
+				<view class="preset-header">
+					<text class="preset-title">预设观点倾向</text>
+					<!-- 直播开始后的关闭按钮 -->
+					<view class="preset-close-btn" v-if="isLiveStarted" @click="togglePresetPanel">
+						<text class="close-icon">✕</text>
 					</view>
-					<!-- 辩题显示 -->
-					<view class="preset-debate-topic">
-						<text class="debate-topic-text">{{ debateTitle }}</text>
+				</view>
+				<view class="preset-slider-container">
+					<view class="slider-wrapper">
+						<slider 
+							class="preset-slider"
+							:value="presetOpinion"
+							@change="onPresetChange"
+							:min="0"
+							:max="100"
+							:step="1"
+							block-size="14"
+							block-color="#FF1493"
+							active-color="#FF8C00"
+							background-color="#E0E0E0"
+							:show-value="true"
+						/>
 					</view>
-					<view class="preset-slider-container">
-						<view class="slider-labels">
-							<text class="slider-label left-label">⚔️ 正方</text>
-							<text class="slider-label right-label">反方 🛡️</text>
-						</view>
-						<view class="slider-wrapper">
-							<slider 
-								class="preset-slider"
-								:value="presetOpinion"
-								@change="onPresetChange"
-								:min="0"
-								:max="100"
-								:step="1"
-								block-size="14"
-								block-color="#FF1493"
-								active-color="#FF8C00"
-								background-color="#E0E0E0"
-								:show-value="true"
-							/>
-						</view>
-						<!-- 确定按钮（圆形，放在进度条下方） -->
-						<view class="preset-confirm-btn-wrapper" v-if="(!isLiveStarted && !initialVotesSubmitted) || (isLiveStarted && votesChanged)">
-							<view class="preset-confirm-btn-circle" @click="confirmPresetVotes">
-								<text class="confirm-btn-text">✓</text>
-							</view>
-						</view>
-					<view class="preset-info">
+					<view class="preset-info-container">
 						<view class="preset-info-row">
 							<text class="preset-percentage">{{ presetOpinion }}%</text>
 							<text class="preset-desc">{{ getPresetDescription() }}</text>
 						</view>
+						<!-- 确定按钮（与百分数文字并列） -->
+						<view class="preset-confirm-btn-wrapper" v-if="(!isLiveStarted && !initialVotesSubmitted) || (isLiveStarted && votesChanged)">
+							<view class="preset-confirm-btn" @click="confirmPresetVotes">
+								<text class="confirm-btn-text">✓</text>
+							</view>
+						</view>
 					</view>
 				</view>
-				</view>
+			</view>
 				
 				<!-- 直播开始后的预设观点缩小按钮 -->
 				<view class="preset-mini-row" v-if="isLiveStarted && !showPresetPanel">
@@ -283,151 +241,58 @@
 					<text class="tip-text">{{ percentageTipText }}</text>
 				</view>
 				
-				<!-- 对抗条 -->
-				<view class="battle-bar">
-					<view class="battle-fill left-fill" :style="{ width: currentLeftPercentage + '%' }">
-						<view class="battle-text left-text">
-							<text class="battle-label">⚔️ 正方</text>
-							<text class="battle-percentage">{{ currentLeftPercentage }}%</text>
-						</view>
-					</view>
-					
-				<!-- 动态火焰分界线 - 使用 Lottie 动画 -->
-				<view class="flame-divider" :class="{ 'divider-hit': dividerHit }" :style="{ left: currentLeftPercentage + '%' }">
-						<!-- Lottie 火焰动画 -->
-						<view class="lottie-fire-container">
-							<!-- #ifdef MP-WEIXIN -->
-							<canvas
-								type="2d"
-								id="lottie-fire"
-								canvas-id="lottie-fire"
-								class="lottie-fire-canvas"
-								:style="{ width: '200rpx', height: '200rpx' }"
-							></canvas>
-							<!-- #endif -->
-							<!-- #ifndef MP-WEIXIN -->
-							<div 
-								id="lottie-fire"
-								class="lottie-fire-wrapper" 
-								:style="{ width: '200rpx', height: '200rpx' }">
-							</div>
-							<!-- #endif -->
-						</view>
-					</view>
-					
-					<view class="battle-fill right-fill" :style="{ width: currentRightPercentage + '%' }">
-						<view class="battle-text right-text">
-							<text class="battle-percentage">{{ currentRightPercentage }}%</text>
-							<text class="battle-label">反方 🛡️</text>
-						</view>
+			<!-- 对抗条 -->
+			<view class="battle-bar">
+				<view class="battle-fill left-fill" :style="{ width: currentLeftPercentage + '%' }">
+					<view class="battle-text left-text">
+						<text class="battle-percentage">{{ currentLeftPercentage }}%</text>
 					</view>
 				</view>
 				
-				<!-- 投票按钮 -->
-				<view class="vote-buttons">
-					<!-- 正方按钮 -->
-					<view class="lottie-button-container left-button" @click="voteLeft" 
-						  :class="{ 
-							  'voted': userVote === 'left',
-							  'disabled': !isLiveStarted
-						  }">
-						<!-- 动画外框 -->
-						<view class="animation-frame left-frame">
-							<!-- #ifdef MP-WEIXIN -->
-							<canvas
-								type="2d"
-								:id="'lottie-button-left'"
-								:canvas-id="'lottie-button-left'"
-								class="lottie-button-canvas"
-								:style="{ width: '200rpx', height: '120rpx' }"
-							></canvas>
-							<!-- #endif -->
-							<!-- #ifndef MP-WEIXIN -->
-							<div 
-								:id="'lottie-button-left'"
-								class="lottie-button-wrapper" 
-								:style="{ width: '200rpx', height: '120rpx' }">
-							</div>
-							<!-- #endif -->
-						</view>
+		<!-- 动态火焰分界线 -->
+		<view class="flame-divider" :class="{ 'divider-hit': dividerHit }" :style="{ left: currentLeftPercentage + '%' }">
+		</view>
+				
+				<view class="battle-fill right-fill" :style="{ width: currentRightPercentage + '%' }">
+					<view class="battle-text right-text">
+						<text class="battle-percentage">{{ currentRightPercentage }}%</text>
 					</view>
-					
-					<!-- 反方按钮 -->
-					<view class="lottie-button-container right-button" @click="voteRight" 
-						  :class="{ 
-							  'voted': userVote === 'right',
-							  'disabled': !isLiveStarted
-						  }">
-						<!-- 动画外框 -->
-						<view class="animation-frame right-frame">
-							<!-- #ifdef MP-WEIXIN -->
-							<canvas
-								type="2d"
-								:id="'lottie-button-right'"
-								:canvas-id="'lottie-button-right'"
-								class="lottie-button-canvas"
-								:style="{ width: '200rpx', height: '120rpx' }"
-							></canvas>
-							<!-- #endif -->
-							<!-- #ifndef MP-WEIXIN -->
-							<div 
-								:id="'lottie-button-right'"
-								class="lottie-button-wrapper" 
-								:style="{ width: '200rpx', height: '120rpx' }">
-							</div>
-							<!-- #endif -->
-						</view>
-					</view>
+				</view>
+			</view>
+				
+			<!-- 投票按钮 -->
+			<view class="vote-buttons">
+				<!-- 正方按钮 -->
+				<view class="vote-button left-button" @click="voteLeft" 
+					  :class="{ 
+						  'voted': userVote === 'left',
+						  'disabled': !isLiveStarted
+					  }">
+					<text class="vote-button-text">⚔️ 正方</text>
+				</view>
+				
+				<!-- 反方按钮 -->
+				<view class="vote-button right-button" @click="voteRight" 
+					  :class="{ 
+						  'voted': userVote === 'right',
+						  'disabled': !isLiveStarted
+					  }">
+					<text class="vote-button-text">反方 🛡️</text>
 				</view>
 			</view>
 		</view>
 		
-		<!-- 底部导航栏 -->
-		<view class="bottom-nav">
-			<view class="nav-item" :class="{ 'active': currentTab === 'home' }" @click="switchTab('home')">
-				<view class="nav-icon">
-					<image v-if="currentTab === 'home'" src="/static/iconfont/dibu_zhuye_yixuanzhongzhuangtai.png" class="nav-icon-img" mode="aspectFit"></image>
-					<image v-else src="/static/iconfont/dibu_zhuye_weixuanzhongzhuangtai.png" class="nav-icon-img" mode="aspectFit"></image>
-				</view>
-				<text class="nav-text">首页</text>
-			</view>
-
-			<view class="nav-item" :class="{ 'active': currentTab === 'profile' }" @click="switchTab('profile')">
-				<view class="nav-icon">
-					<image v-if="currentTab === 'profile'" src="/static/iconfont/wodexuanzhong.png" class="nav-icon-img" mode="aspectFit"></image>
-					<image v-else src="/static/iconfont/wode.png" class="nav-icon-img" mode="aspectFit"></image>
-				</view>
-				<text class="nav-text">我的</text>
-			</view>
+	<!-- 投票特效容器 -->
+	<view class="vote-effects-container">
+		<!-- 投票特效（飘起动画） -->
+		<view class="vote-effect"
+			  v-for="effect in voteEffects"
+			  :key="effect.id"
+			  :class="effect.class"
+			  :style="effect.style">
+			<image :src="effect.icon" class="effect-icon" mode="aspectFit"></image>
 		</view>
-		
-		<!-- 投票特效容器 -->
-		<view class="vote-effects-container">
-			<!-- Lottie 爱心动画特效 -->
-			<view class="lottie-effect"
-				  v-for="effect in voteEffects"
-				  :key="effect.id"
-				  :class="effect.class"
-				  :style="effect.style">
-				<!-- #ifdef MP-WEIXIN -->
-				<canvas
-					type="2d"
-					:id="'lottie-heart-' + effect.id"
-					:canvas-id="'lottie-heart-' + effect.id"
-					class="lottie-heart-canvas"
-					:style="{ width: '150rpx', height: '320rpx' }"
-				></canvas>
-				<!-- #endif -->
-				<!-- #ifndef MP-WEIXIN -->
-				<div 
-					:id="'lottie-heart-' + effect.id"
-					class="lottie-heart-wrapper" 
-					:style="{ width: '150rpx', height: '320rpx' }">
-					<!-- H5/浏览器环境下的 Lottie 容器 -->
-				</div>
-				<!-- #endif -->
-			</view>
-		</view>
+	</view>
 		
 		<!-- 自定义弹窗 -->
 		<view class="custom-modal-mask" v-if="showModal" @click="closeModal">
@@ -536,22 +401,6 @@
 <script>
 	import PopDecoration from '@/components/PopDecoration.vue'
 	import apiService from '@/utils/api-service.js'
-	import { DotLottieVue } from '@lottiefiles/dotlottie-vue'
-	// #ifdef MP-WEIXIN
-	import lottie from 'lottie-miniprogram'
-	import bgAnimationData from '@/static/animations/lcBg-01.json'
-	import heartAnimationData from '@/static/animations/Hearts feedback.json'
-	import circleMorphingData from '@/static/animations/Circle Shape Morphing animation.json'
-	import buttonYesData from '@/static/animations/button YES.json'
-	import fireAnimationData from '@/static/animations/fire.json'
-	// #endif
-	// #ifndef MP-WEIXIN
-	import lottie from 'lottie-web'
-	import heartAnimationData from '@/static/animations/Hearts feedback.json'
-	import circleMorphingData from '@/static/animations/Circle Shape Morphing animation.json'
-	import buttonYesData from '@/static/animations/button YES.json'
-	import fireAnimationData from '@/static/animations/fire.json'
-	// #endif
 	
 	// 导入直播配置
 	import liveConfig from '@/config/live-config.js'
@@ -559,8 +408,7 @@
 
 	export default {
 		components: {
-			PopDecoration,
-			DotLottieVue
+			PopDecoration
 		},
 		data() {
 			return {
@@ -586,19 +434,57 @@
 				leftClickCount: 0, // 正方按钮点击次数
 				rightClickCount: 0, // 反方按钮点击次数
 				triggerEffect: null, // 触发特效状态
-				voteEffects: [], // 投票特效数组（现在存储 Lottie 动画实例）
-				effectIdCounter: 0, // 特效ID计数器
-				dividerHit: false, // 分割线被击中状态
-				currentTab: 'home', // 当前选中的导航栏
-				heartAnimationData: heartAnimationData, // 爱心动画数据
-				circleMorphingData: circleMorphingData, // 圆形变形动画数据
-				buttonYesData: buttonYesData, // YES按钮动画数据
-				fireAnimationData: fireAnimationData, // 火焰动画数据
-				lottieHeartInstances: {}, // 存储 Lottie 动画实例
-				lottieButtonInstances: {}, // 存储按钮动画实例
-				lottieFireInstance: null, // 存储火焰动画实例
-				
-				// 直播状态和预设观点相关
+			voteEffects: [], // 投票特效数组
+		effectIdCounter: 0, // 特效ID计数器
+		dividerHit: false, // 分割线被击中状态
+		xiangsuIcons: [ // 祥素图标列表
+			'/static/xiangsu/xiangsu_aixin.png',
+			'/static/xiangsu/xiangsu_biaoqing.png',
+			'/static/xiangsu/xiangsu_caomei.png',
+			'/static/xiangsu/xiangsu_fangzi.png',
+			'/static/xiangsu/xiangsu_jiangbei.png',
+			'/static/xiangsu/xiangsu_jinbi.png',
+			'/static/xiangsu/xiangsu_mao.png',
+			'/static/xiangsu/xiangsu_pijiu.png',
+			'/static/xiangsu/xiangsu_tuzi.png',
+			'/static/xiangsu/xiangsu_wuqi.png',
+			'/static/xiangsu/xiangsu_xiaoya.png',
+			'/static/xiangsu/xiangsu_youxiji.png',
+			'/static/xiangsu/xiangsu_zuanshi.png',
+			'/static/xiangsu/xiangsu-denglong.png',
+			'/static/xiangsu/xiangsu-hanbao.png',
+			'/static/xiangsu/xiangsu-hongyingwu.png',
+			'/static/xiangsu/xiangsu-huangsehua.png',
+			'/static/xiangsu/xiangsu-huomiao.png',
+			'/static/xiangsu/xiangsu-huoyan.png',
+			'/static/xiangsu/xiangsu-kouzhao.png',
+			'/static/xiangsu/xiangsu-lvsehudie.png',
+			'/static/xiangsu/xiangsu-maliao.png',
+			'/static/xiangsu/xiangsu-mifeng-01.png',
+			'/static/xiangsu/xiangsu-pisa.png',
+			'/static/xiangsu/xiangsu-xingqiu.png',
+			'/static/xiangsu/xiangsu-xuehua.png',
+			'/static/xiangsu/xiangsu-zhadan.png',
+			'/static/xiangsu/xiangsu-zhaji.png',
+			'/static/xiangsu/xiangsu-zhongguojie.png',
+			'/static/xiangsu/xiangsu-zipitang-01.png',
+			'/static/xiangsu/xiangsu-zisehua.png',
+			'/static/xiangsu/xiangsu-zisehudie.png',
+			'/static/xiangsu/xiangsufeng_dangao.png',
+			'/static/xiangsu/xiangsufeng_dianshiji.png',
+			'/static/xiangsu/xiangsufeng_fangzi.png',
+			'/static/xiangsu/xiangsufeng_feidie.png',
+			'/static/xiangsu/xiangsufeng_huapen.png',
+			'/static/xiangsu/xiangsufeng_shouyinji.png',
+			'/static/xiangsu/xiangsufeng_xianhua.png',
+			'/static/xiangsu/xiangsufeng_xiaoxi.png',
+			'/static/xiangsu/xiangsufeng_xinfeng.png',
+			'/static/xiangsu/xiangsufeng_xunzhang.png',
+			'/static/xiangsu/huwenmao.png',
+			'/static/xiangsu/yumi-daipi.png'
+		],
+			
+			// 直播状态和预设观点相关
 				isLiveStarted: false, // 直播是否已开始
 				presetOpinion: 50, // 预设观点倾向 (0-100, 初始50表示50%票数投正方，50%投反方)
 				showPresetSlider: true, // 是否显示预设滑块
@@ -936,11 +822,9 @@
 			// 建立WebSocket连接（用于接收实时更新）
 			this.connectWebSocket();
 		},
-			onShow() {
-				// 页面显示时，确保导航栏选中状态正确
-				this.currentTab = 'home';
-				// 再次确保切回可见时也是最新辩题
-				this.fetchDebateTopic();
+		onShow() {
+			// 再次确保切回可见时也是最新辩题
+			this.fetchDebateTopic();
 
 				// ================= 自助自动拉取直播状态 =================
 				// 页面显示时获取直播状态
@@ -989,16 +873,11 @@
 			},
 		onReady() {
 			// 页面渲染完成后设置安全区域
-			this.setSafeArea();
-			
-			// 延迟初始化 Lottie 背景动画
-			setTimeout(() => {
-				this.initBackgroundLottie();
-			}, 500);
-			
-			// 延迟初始化按钮动画
-			setTimeout(() => {
-				this.initButtonAnimations();
+		this.setSafeArea();
+		
+		// 延迟初始化按钮动画
+		setTimeout(() => {
+			this.initButtonAnimations();
 			}, 1000);
 			
 			// 延迟初始化火焰动画
@@ -2254,14 +2133,27 @@
 						throw new Error('投票必须指定直播流ID (streamId)');
 					}
 					
-					console.log('📤 发送投票请求:', { side, votes, streamId: this.streamId });
+					// 获取用户ID
+					let userId = null;
+					try {
+						if (typeof uni !== 'undefined' && uni.getStorageSync) {
+							const currentUser = uni.getStorageSync('currentUser');
+							if (currentUser && currentUser.id) {
+								userId = currentUser.id;
+							}
+						}
+					} catch (e) {
+						console.warn('⚠️ 获取用户ID失败:', e);
+					}
+					
+					console.log('📤 发送投票请求:', { side, votes, streamId: this.streamId, userId });
 					console.log('📡 API服务器地址:', this.apiService?.baseURL || '未设置');
 					
                     // 统一按分布提交：以当前滑块 presetOpinion 作为分布来源（总和100）
                     const leftDist = Math.max(0, Math.min(100, Math.round((this.presetOpinion / 100) * 100)));
                     const rightDist = 100 - leftDist;
                     const service = this.apiService || apiService;
-                    const response = await service.userVoteDistribution(leftDist, rightDist, this.streamId);
+                    const response = await service.userVoteDistribution(leftDist, rightDist, this.streamId, userId);
 					
 					// 详细记录响应信息
 					console.log('📥 投票接口响应:', {
@@ -2973,404 +2865,87 @@
 				}, 300);
 			},
 
-		// 创建投票特效（Lottie 爱心动画版本 - 从按钮两端飘出爱心）
-		createVoteEffects(side) {
-			// 移除了特效数量限制，允许无限制创建动画
+	// 创建投票特效（从按钮两端飘出爱心）
+	createVoteEffects(side) {
+		// 每次点击创建 2-3 个爱心特效
+		const effectCount = Math.floor(Math.random() * 2) + 2;
 
-			// 每次点击创建 2-3 个爱心动画
-			const effectCount = Math.floor(Math.random() * 2) + 2;
+		for (let i = 0; i < effectCount; i++) {
+			// 计算起始位置（按钮的两端）
+			let startX, startY;
+			if (side === 'left') {
+				// 正方按钮：从左端飘出
+				startX = '10%'; // 按钮左端
+				startY = '78%'; // 按钮中心高度
+			} else {
+				// 反方按钮：从右端飘出
+				startX = '82%'; // 按钮右端
+				startY = '78%'; // 按钮中心高度
+			}
 
-				for (let i = 0; i < effectCount; i++) {
-					// 计算起始位置（按钮的两端）
-					let startX, startY;
-					if (side === 'left') {
-						// 正方按钮：从左端飘出
-						startX = '10%'; // 按钮左端
-						startY = '78%'; // 按钮中心高度
-					} else {
-						// 反方按钮：从右端飘出
-						startX = '82%'; // 按钮右端
-						startY = '78%'; // 按钮中心高度
-					}
+			// 添加随机偏移，让动画更自然
+			const randomOffsetX = (Math.random() - 0.5) * 100; // -50 到 50 rpx
+			const randomOffsetY = (Math.random() - 0.5) * 50; // -25 到 25 rpx
 
-					// 添加随机偏移，让动画更自然
-					const randomOffsetX = (Math.random() - 0.5) * 100; // -50 到 50 rpx
-					const randomOffsetY = (Math.random() - 0.5) * 50; // -25 到 25 rpx
+			// 动画参数
+			const duration = 3 + Math.random() * 1; // 3-4秒
+			const delay = (i * 100) / 1000; // 100ms 间隔
 
-					// 动画参数
-					const duration = 3 + Math.random() * 1; // 3-4秒
-					const delay = (i * 100) / 1000; // 100ms 间隔
+			this.effectIdCounter++;
+			const effectId = this.effectIdCounter;
 
-					this.effectIdCounter++;
-					const effectId = this.effectIdCounter;
-
-					const effect = {
-						id: effectId,
-						side: side,
-						class: `lottie-effect-${side}`,
-						createTime: Date.now(),
-						isLottie: true, // 标记为 Lottie 动画
-						style: {
-							left: `calc(${startX} + ${randomOffsetX}rpx)`,
-							top: `calc(${startY} + ${randomOffsetY}rpx)`,
-							animationDuration: `${duration}s`,
-							animationDelay: `${delay}s`,
-							opacity: 1
-						}
-					};
+		// 随机选择一个 xiangsu 图标
+		const randomIcon = this.xiangsuIcons[Math.floor(Math.random() * this.xiangsuIcons.length)];
+		
+		const effect = {
+			id: effectId,
+			side: side,
+			class: `vote-effect-${side}`,
+			createTime: Date.now(),
+			icon: randomIcon,
+			style: {
+				left: `calc(${startX} + ${randomOffsetX}rpx)`,
+				top: `calc(${startY} + ${randomOffsetY}rpx)`,
+				animationDuration: `${duration}s`,
+				animationDelay: `${delay}s`,
+				opacity: 1
+			}
+		};
 
 			this.voteEffects.push(effect);
 
-		// 延迟初始化 Lottie 动画，等待 DOM 渲染
-		this.$nextTick(() => {
-			setTimeout(() => {
-				this.initLottieHeartAnimation(effectId, delay * 1000);
-			}, 10); // 减少延迟时间到 10ms
-		});
+			// 动画结束后移除特效
+			const totalTime = (delay + duration) * 1000;
+			const timeoutId = setTimeout(() => {
+				this.removeVoteEffect(effectId);
+			}, totalTime + 500);
 
-					// 动画结束后移除特效
-					const totalTime = (delay + duration) * 1000;
-					const timeoutId = setTimeout(() => {
-						this.removeVoteEffect(effectId);
-					}, totalTime + 500);
-
-					// 防止内存泄漏
-					if (!this.effectTimeouts) {
-						this.effectTimeouts = [];
-					}
-					this.effectTimeouts.push(timeoutId);
-
-					// 清理过期的timeout ID
-					if (this.effectTimeouts.length > 50) {
-						this.effectTimeouts.shift();
-					}
-				}
-
-				// 特效创建完成（移除了延迟标志，允许立即创建下一批特效）
-		},
-		
-		// 初始化按钮动画
-		initButtonAnimations() {
-				
-				// #ifdef MP-WEIXIN
-				// 微信小程序环境
-				this.initWeixinButtonAnimations();
-				// #endif
-				
-				// #ifndef MP-WEIXIN
-				// H5/浏览器环境
-				this.initWebButtonAnimations();
-				// #endif
-			},
-			
-			// 微信小程序环境下的按钮动画初始化
-			initWeixinButtonAnimations() {
-				try {
-					// 初始化正方按钮
-					this.initWeixinButton('lottie-button-left', this.circleMorphingData);
-					// 初始化反方按钮
-					this.initWeixinButton('lottie-button-right', this.buttonYesData);
-				} catch (error) {
-					console.error('❌ 微信小程序按钮动画初始化失败:', error);
-				}
-			},
-			
-			// H5/浏览器环境下的按钮动画初始化
-			initWebButtonAnimations() {
-				try {
-					// 初始化正方按钮
-					this.initWebButton('lottie-button-left', this.circleMorphingData);
-					// 初始化反方按钮
-					this.initWebButton('lottie-button-right', this.buttonYesData);
-				} catch (error) {
-					console.error('❌ H5按钮动画初始化失败:', error);
-				}
-			},
-			
-			// 微信小程序按钮动画初始化
-			initWeixinButton(canvasId, animationData) {
-				uni.createSelectorQuery()
-					.in(this)
-					.select(`#${canvasId}`)
-					.node((res) => {
-						if (res && res.node) {
-							const canvas = res.node;
-							const context = canvas.getContext('2d');
-							
-							// 设置画布尺寸
-							const dpr = uni.getSystemInfoSync().pixelRatio || 1;
-							canvas.width = 200 * dpr;
-							canvas.height = 120 * dpr;
-							context.scale(dpr, dpr);
-							
-						// 初始化 Lottie 动画
-						lottie.setup(canvas);
-						const lottieInstance = lottie.loadAnimation({
-							loop: true,
-							autoplay: true,
-							animationData: animationData,
-							rendererSettings: {
-								context: context,
-								clearCanvas: true
-							}
-						});
-							
-							// 保存实例
-							this.lottieButtonInstances[canvasId] = lottieInstance;
-						}
-					})
-					.exec();
-			},
-			
-			// H5/浏览器按钮动画初始化
-			initWebButton(containerId, animationData) {
-				const container = document.getElementById(containerId);
-				if (container && typeof lottie !== 'undefined' && lottie.loadAnimation) {
-					const lottieInstance = lottie.loadAnimation({
-						container: container,
-						renderer: 'svg',
-						loop: true,
-						autoplay: true,
-						animationData: animationData
-					});
-					
-						// 保存实例
-						this.lottieButtonInstances[containerId] = lottieInstance;
-				} else {
-					console.error('❌ H5按钮容器未找到或lottie未加载:', containerId);
-				}
-			},
-			
-		// 初始化火焰动画
-		initFireAnimation() {
-				
-				// #ifdef MP-WEIXIN
-				// 微信小程序环境
-				this.initWeixinFireAnimation();
-				// #endif
-				
-				// #ifndef MP-WEIXIN
-				// H5/浏览器环境
-				this.initWebFireAnimation();
-				// #endif
-			},
-			
-			// 微信小程序环境下的火焰动画初始化
-			initWeixinFireAnimation() {
-				try {
-					uni.createSelectorQuery()
-						.in(this)
-						.select('#lottie-fire')
-						.node((res) => {
-							if (res && res.node) {
-								const canvas = res.node;
-								const context = canvas.getContext('2d');
-								
-								// 设置画布尺寸
-								const dpr = uni.getSystemInfoSync().pixelRatio || 1;
-								canvas.width = 200 * dpr;
-								canvas.height = 200 * dpr;
-								context.scale(dpr, dpr);
-								
-							// 初始化 Lottie 动画
-							lottie.setup(canvas);
-							const lottieInstance = lottie.loadAnimation({
-								loop: true,
-								autoplay: true,
-								animationData: this.fireAnimationData,
-								rendererSettings: {
-									context: context,
-									clearCanvas: true
-								}
-							});
-								
-							// 保存实例
-							this.lottieFireInstance = lottieInstance;
-							}
-						})
-						.exec();
-				} catch (error) {
-					console.error('❌ 微信小程序火焰动画初始化失败:', error);
-				}
-			},
-			
-			// H5/浏览器环境下的火焰动画初始化
-			initWebFireAnimation() {
-				try {
-					const container = document.getElementById('lottie-fire');
-					if (container && typeof lottie !== 'undefined' && lottie.loadAnimation) {
-						const lottieInstance = lottie.loadAnimation({
-							container: container,
-							renderer: 'svg',
-							loop: true,
-							autoplay: true,
-							animationData: this.fireAnimationData
-						});
-						
-					// 保存实例
-					this.lottieFireInstance = lottieInstance;
-					} else {
-						console.error('❌ H5火焰容器未找到或lottie未加载');
-					}
-				} catch (error) {
-					console.error('❌ H5火焰动画初始化失败:', error);
-				}
-			},
-		// 初始化 Lottie 爱心动画
-		initLottieHeartAnimation(effectId, delay = 0) {
-			// #ifdef MP-WEIXIN
-			try {
-				const canvasId = `lottie-heart-${effectId}`;
-				
-				// 增加延迟确保 DOM 已渲染
-				setTimeout(() => {
-					const query = uni.createSelectorQuery().in(this);
-					
-					// 使用与背景动画相同的方式查询
-					query.select(`#${canvasId}`)
-						.fields({ node: true, size: true })
-						.exec((res) => {
-							if (res[0] && res[0].node) {
-								const canvas = res[0].node;
-								const systemInfo = uni.getSystemInfoSync();
-								const dpr = systemInfo.pixelRatio || 1;
-								
-								try {
-									// 爱心动画原始尺寸是 390x844，按比例缩小到容器大小
-									// 放大容器尺寸，让动画更清晰
-									const logicalWidth = 200;  // 从 150 增加到 200
-									const logicalHeight = 400; // 从 320 增加到 400
-									canvas.width = logicalWidth * dpr;
-									canvas.height = logicalHeight * dpr;
-									
-									const context = canvas.getContext('2d');
-									context.scale(dpr, dpr);
-									
-									// 直接 loadAnimation，不再调用 setup（避免卡顿）
-									// lottie-miniprogram 会自动处理 canvas 绑定
-									const animation = lottie.loadAnimation({
-										loop: false,
-										autoplay: true,
-										animationData: this.heartAnimationData,
-										rendererSettings: {
-											context,
-											preserveAspectRatio: 'xMidYMid meet',
-											clearCanvas: true
-										}
-									});
-									
-									this.lottieHeartInstances[effectId] = animation;
-									
-									// 监听动画事件
-									animation.addEventListener('complete', () => {
-										if (this.lottieHeartInstances[effectId]) {
-											this.lottieHeartInstances[effectId].destroy();
-											delete this.lottieHeartInstances[effectId];
-										}
-									});
-									
-									// 立即播放
-									animation.play();
-									
-								} catch (error) {
-									// Canvas 初始化错误
-								}
-							}
-						});
-				}, delay + 50); // 减少延迟时间到 50ms
-			} catch (error) {
-				// 初始化失败
+			// 防止内存泄漏
+			if (!this.effectTimeouts) {
+				this.effectTimeouts = [];
 			}
-			// #endif
-				
-			// #ifndef MP-WEIXIN
-			// 非微信小程序环境：使用 lottie-web 库在浏览器中渲染
-			setTimeout(() => {
-				try {
-					const containerId = `lottie-heart-${effectId}`;
-					const container = document.getElementById(containerId);
-					
-					if (container) {
-						// 使用 lottie-web 渲染（如果已安装）
-						if (typeof lottie !== 'undefined' && lottie.loadAnimation) {
-							const lottieInstance = lottie.loadAnimation({
-								container: container,
-								renderer: 'svg',
-								loop: false,
-								autoplay: true,
-								animationData: this.heartAnimationData
-							});
-							
-							this.lottieHeartInstances[effectId] = lottieInstance;
-							
-							lottieInstance.addEventListener('complete', () => {
-								if (this.lottieHeartInstances[effectId]) {
-									this.lottieHeartInstances[effectId].destroy();
-									delete this.lottieHeartInstances[effectId];
-								}
-							});
-						} else {
-							// 备用方案：使用简单的 emoji 动画
-							this.createBackupEmojiEffect(effectId, container);
-						}
-					}
-				} catch (error) {
-					console.error('初始化 Web Lottie 失败:', error);
-				}
-			}, delay + 50);
-			// #endif
-			},
+			this.effectTimeouts.push(timeoutId);
+
+			// 清理过期的timeout ID
+			if (this.effectTimeouts.length > 50) {
+				this.effectTimeouts.shift();
+			}
+		}
+	},
+		
+	// 初始化按钮动画
+	initButtonAnimations() {
+		// 按钮动画已删除
+	},
 			
-		// 备用方案：创建简单的 emoji 爱心动画
-		createBackupEmojiEffect(effectId, container) {
-			if (!container) return;
-				
-				// 创建多个爱心 emoji
-				const hearts = ['💖', '❤️', '💕', '💗', '💓'];
-				const heartCount = Math.floor(Math.random() * 3) + 3; // 3-5个爱心
-				
-				for (let i = 0; i < heartCount; i++) {
-					const heart = document.createElement('div');
-					heart.className = 'emoji-heart';
-					heart.textContent = hearts[Math.floor(Math.random() * hearts.length)];
-					heart.style.cssText = `
-						position: absolute;
-						font-size: ${30 + Math.random() * 20}px;
-						left: ${Math.random() * 100}%;
-						top: ${Math.random() * 100}%;
-						animation: floatUpHeart ${2 + Math.random()}s ease-out forwards;
-						animation-delay: ${i * 0.1}s;
-						pointer-events: none;
-					`;
-					container.appendChild(heart);
-				}
-				
-				// 3秒后清理
-				setTimeout(() => {
-					if (container && container.parentNode) {
-						while (container.firstChild) {
-							container.removeChild(container.firstChild);
-						}
-					}
-				}, 3000);
-			},
 			
-			// 移除投票特效
-			removeVoteEffect(effectId) {
-				const index = this.voteEffects.findIndex(effect => effect.id === effectId);
-				if (index > -1) {
-					// 清理 Lottie 实例
-					if (this.lottieHeartInstances[effectId]) {
-						try {
-							this.lottieHeartInstances[effectId].destroy();
-						} catch (error) {
-							console.error('清理 Lottie 实例失败:', error);
-						}
-						delete this.lottieHeartInstances[effectId];
-					}
-					this.voteEffects.splice(index, 1);
-				}
-			},
+	// 移除投票特效
+	removeVoteEffect(effectId) {
+		const index = this.voteEffects.findIndex(effect => effect.id === effectId);
+		if (index > -1) {
+			this.voteEffects.splice(index, 1);
+		}
+	},
 			
 			// 特效性能优化 - 定期清理过期特效
 			startEffectCleanup() {
@@ -3454,8 +3029,21 @@
 					const leftVotes = Math.round((this.presetOpinion / 100) * this.initialVotesTotal);
 					const rightVotes = this.initialVotesTotal - leftVotes;
 					
+					// 获取用户ID
+					let userId = null;
+					try {
+						if (typeof uni !== 'undefined' && uni.getStorageSync) {
+							const currentUser = uni.getStorageSync('currentUser');
+							if (currentUser && currentUser.id) {
+								userId = currentUser.id;
+							}
+						}
+					} catch (e) {
+						console.warn('⚠️ 获取用户ID失败:', e);
+					}
+					
 					// 确保票数正确（即使滑块在50%位置，也应该发送50:50，而不是0:0）
-					console.log(`📊 [确认投票] 滑块位置: ${this.presetOpinion}%, 计算票数: 正方 ${leftVotes}, 反方 ${rightVotes}`);
+					console.log(`📊 [确认投票] 滑块位置: ${this.presetOpinion}%, 计算票数: 正方 ${leftVotes}, 反方 ${rightVotes}`, { userId, streamId: this.streamId });
 					
 					// 发送到数据库
 					// 服务器要求：leftVotes + rightVotes 必须等于 100
@@ -3475,7 +3063,7 @@
 						// 发送一次请求，根据哪一方票数更多，决定以哪一方为主
 						// 直接按当前对比条分布提交（总和为100）
 						const service = this.apiService || apiService;
-						const voteResult = await service.userVoteDistribution(finalLeftVotes, finalRightVotes, this.streamId);
+						const voteResult = await service.userVoteDistribution(finalLeftVotes, finalRightVotes, this.streamId, userId);
 						
 						// 检查投票结果
 						if (voteResult && voteResult.success !== false) {
@@ -3521,6 +3109,19 @@
 					let rightVotes = this.rightVotes;
 					const currentTotal = leftVotes + rightVotes;
 					
+					// 获取用户ID
+					let userId = null;
+					try {
+						if (typeof uni !== 'undefined' && uni.getStorageSync) {
+							const currentUser = uni.getStorageSync('currentUser');
+							if (currentUser && currentUser.id) {
+								userId = currentUser.id;
+							}
+						}
+					} catch (e) {
+						console.warn('⚠️ 获取用户ID失败:', e);
+					}
+					
 					if (currentTotal === 0) {
 						// 如果票数为0，根据滑块位置计算票数（默认50% = 50:50）
 						leftVotes = Math.round((this.presetOpinion / 100) * 100);
@@ -3544,7 +3145,7 @@
 					// 根据哪一方票数更多，决定以哪一方为主
 					// 直接按当前对比条分布提交（总和为100）
 					const service = this.apiService || apiService;
-					const voteResult = await service.userVoteDistribution(leftVotes, rightVotes, this.streamId);
+					const voteResult = await service.userVoteDistribution(leftVotes, rightVotes, this.streamId, userId);
 					
 					// 检查投票结果
 						if (voteResult && voteResult.success !== false) {
@@ -4153,22 +3754,6 @@
 			},
 			
 			// 导航栏切换方法
-			switchTab(tab) {
-				switch(tab) {
-					case 'home':
-						// 首页 - 当前页面，确保选中状态正确
-						this.currentTab = 'home';
-						break;
-					case 'profile':
-						// 我的页面 - 使用 navigateTo 保留首页在页面栈中
-						// currentTab 会在 profile 页面的 onShow 中设置为 'profile'
-						// 这里不改变 currentTab，避免首页导航栏显示错误
-						uni.navigateTo({
-							url: '/pages/profile/profile'
-						});
-						break;
-				}
-			},
 			
 			// ==================== WebSocket 连接与消息处理 ====================
 			
@@ -4608,87 +4193,14 @@
 					clearTimeout(this.wsReconnectTimer);
 					this.wsReconnectTimer = null;
 				}
-			},
-			
-			// 初始化背景 Lottie 动画
-			initBackgroundLottie() {
-				// #ifdef MP-WEIXIN
-				console.log('开始初始化 Home 页面背景 Lottie 动画...')
-
-				// 获取系统信息
-				const systemInfo = uni.getSystemInfoSync()
-				const dpr = systemInfo.pixelRatio || 1
-				const screenWidth = systemInfo.screenWidth
-				const screenHeight = systemInfo.screenHeight
-
-				// 获取 canvas 实例
-				const query = uni.createSelectorQuery().in(this)
-				query.select('#home-bg-lottie-canvas')
-					.fields({ node: true, size: true })
-					.exec(res => {
-						console.log('Home 背景 Canvas 查询结果:', res)
-
-						if (res[0] && res[0].node) {
-							const canvas = res[0].node
-							console.log('Home 背景 Canvas 实例:', canvas)
-
-							try {
-								// 设置 Canvas 为全屏尺寸
-								canvas.width = screenWidth * dpr
-								canvas.height = screenHeight * dpr
-
-								const context = canvas.getContext('2d')
-								context.scale(dpr, dpr)
-
-								console.log('Home 背景 Canvas 全屏尺寸:', canvas.width, canvas.height)
-
-								// 让 lottie 绑定 canvas
-								lottie.setup(canvas)
-								console.log('Home 背景 Lottie setup 完成')
-
-								// 直接使用本地导入的 JSON 对象
-								const animation = lottie.loadAnimation({
-									loop: true,
-									autoplay: true,
-									animationData: bgAnimationData,
-									rendererSettings: {
-										context,
-										preserveAspectRatio: 'xMidYMid slice'
-									}
-								})
-
-								console.log('Home 背景动画实例:', animation)
-
-								// 监听动画事件
-								animation.addEventListener('DOMLoaded', () => {
-									console.log('✅ Home 背景动画 DOM 加载完成')
-								})
-
-								animation.addEventListener('error', (error) => {
-									console.error('❌ Home 背景动画加载错误:', error)
-								})
-								
-								// 立即播放
-								animation.play()
-								console.log('✅ Home 背景动画已启动播放')
-
-							} catch (error) {
-								console.error('Home 背景 Canvas 初始化错误:', error)
-							}
-						} else {
-							console.error('Home 背景 Canvas 实例获取失败:', res)
-						}
-					})
-				// #endif
-			}
 		}
+	}
 	}
 </script>
 <style>
 	.home-container {
 		min-height: 100vh;
-		/* 波普风格渐变背景 */
-		background: linear-gradient(135deg, #FFE5F0 0%, #E5F3FF 50%, #FFF5E5 100%);
+		background: #FFEB3B;
 		padding: 20rpx;
 		padding-top: 120rpx;
 		padding-bottom: 40rpx;
@@ -4699,31 +4211,7 @@
 		overflow: hidden;
 	}
 	
-	/* 全屏 Lottie 背景动画 */
-	.fullscreen-lottie-bg {
-		position: absolute;
-		top: 0;
-		left: 0;
-		width: 100%;
-		height: 100%;
-		z-index: 0;
-		pointer-events: none;
-		overflow: hidden;
-		opacity: 0.4;
-		mix-blend-mode: multiply;
-	}
-
-	/* 背景 Canvas 样式 */
-	.bg-lottie-canvas {
-		position: absolute;
-		top: 0;
-		left: 0;
-		display: block;
-		width: 100% !important;
-		height: 100% !important;
-		pointer-events: none;
-	}
-	
+	/* Pop Art 点状背景 */
 	.home-container::before {
 		content: '';
 		position: absolute;
@@ -4731,49 +4219,28 @@
 		left: 0;
 		right: 0;
 		bottom: 0;
-		/* 波普风格光线层效果 */
-		background: radial-gradient(ellipse 600rpx 400rpx at 60% 15%, rgba(255, 217, 61, 0.1) 0%, transparent 35%), radial-gradient(ellipse 500rpx 500rpx at 20% 70%, rgba(255, 107, 157, 0.08) 0%, transparent 45%), linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, transparent 50%, rgba(78, 205, 196, 0.05) 100%);
-		pointer-events: none;
+		background-image: radial-gradient(#000 10%, transparent 11%);
+		background-size: 30rpx 30rpx;
+		opacity: 0.08;
 		z-index: 0;
-		animation: lightShimmer 8s ease-in-out infinite;
+		pointer-events: none;
 	}
 
-	@keyframes lightShimmer {
-		0%, 100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.8;
-		}
-	}
-
-	/* 票数进度条容器 - 玻璃态高级设计 */
+	/* 票数进度条容器 - Pop Art 风格 */
 	.vote-progress-container {
-		background: linear-gradient(135deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.08) 100%);
-		backdrop-filter: blur(20rpx);
-		border: 2rpx solid rgba(255, 255, 255, 0.25);
-		border-radius: 24rpx;
-		padding: 24rpx;
+		background: #FFF;
+		border: 6rpx solid #000;
+		padding: 20rpx;
 		margin-bottom: 20rpx;
-		box-shadow: 0 0 40rpx rgba(0, 180, 220, 0.2), 0 8rpx 32rpx rgba(0, 0, 0, 0.3), inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
+		box-shadow: 8rpx 8rpx 0 #000;
 		position: relative;
 		z-index: 1;
-		transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-		animation: cardFloating 6s ease-in-out infinite;
-	}
-
-	@keyframes cardFloating {
-		0%, 100% {
-			transform: translateY(0);
-		}
-		50% {
-			transform: translateY(-4rpx);
-		}
+		transition: all 0.3s ease;
 	}
 
 	.vote-progress-container:hover {
-		box-shadow: 0 0 50rpx rgba(0, 180, 220, 0.3), 0 12rpx 40rpx rgba(0, 0, 0, 0.35), inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
-		backdrop-filter: blur(25rpx);
+		box-shadow: 10rpx 10rpx 0 #000;
+		transform: translate(-2rpx, -2rpx);
 	}
 
 	/* 票数进度条浮动覆盖层 */
@@ -4786,34 +4253,21 @@
 		pointer-events: none; /* 允许点击穿透到下层 */
 	}
 
-	/* 直播区域 - 高级玻璃态 + 电影质感 */
+	/* 直播区域 - Pop Art 风格 */
 	.live-section {
-		background: linear-gradient(135deg, rgba(255, 255, 255, 0.11) 0%, rgba(200, 220, 255, 0.06) 100%);
-		backdrop-filter: blur(18rpx);
-		border: 2rpx solid rgba(255, 255, 255, 0.22);
-		border-radius: 28rpx;
+		background: #FFF;
+		border: 6rpx solid #000;
 		margin-bottom: 20rpx;
 		overflow: hidden;
-		transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-		box-shadow: 0 0 50rpx rgba(255, 100, 150, 0.15), 0 10rpx 40rpx rgba(0, 0, 0, 0.35), inset 0 1rpx 0 rgba(255, 255, 255, 0.18);
+		transition: all 0.3s ease;
+		box-shadow: 8rpx 8rpx 0 #000;
 		position: relative;
 		z-index: 1;
-		animation: cardGlow 8s ease-in-out infinite;
-	}
-
-	@keyframes cardGlow {
-		0%, 100% {
-			box-shadow: 0 0 50rpx rgba(255, 100, 150, 0.15), 0 10rpx 40rpx rgba(0, 0, 0, 0.35), inset 0 1rpx 0 rgba(255, 255, 255, 0.18);
-		}
-		50% {
-			box-shadow: 0 0 60rpx rgba(0, 180, 220, 0.2), 0 12rpx 48rpx rgba(0, 0, 0, 0.4), inset 0 1rpx 0 rgba(255, 255, 255, 0.22);
-		}
 	}
 
 	.live-section:hover {
-		backdrop-filter: blur(22rpx);
-		box-shadow: 0 0 70rpx rgba(255, 100, 150, 0.25), 0 15rpx 50rpx rgba(0, 0, 0, 0.4), inset 0 1rpx 0 rgba(255, 255, 255, 0.25);
-		transform: translateY(-6rpx);
+		box-shadow: 10rpx 10rpx 0 #000;
+		transform: translate(-2rpx, -2rpx);
 	}
 
 	.live-section.collapsed {
@@ -5134,40 +4588,33 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		gap: 6rpx;
-		padding: 12rpx 20rpx;
-		background: radial-gradient(circle at 30% 30%, rgba(100, 150, 255, 0.9) 0%, transparent 50%), linear-gradient(135deg, rgba(100, 150, 255, 0.7), rgba(150, 200, 255, 0.5));
-		border: 2rpx solid rgba(255, 255, 255, 0.3);
-		border-radius: 30rpx;
-		box-shadow: 0 8rpx 24rpx rgba(0, 0, 0, 0.3), 0 0 0 1rpx rgba(255, 255, 255, 0.2), inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+		width: 48rpx;
+		height: 48rpx;
+		background: rgba(0, 0, 0, 0.6);
+		border: 2rpx solid rgba(255, 255, 255, 0.8);
+		border-radius: 8rpx;
+		box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.4);
+		transition: all 0.3s ease;
 		cursor: pointer;
-		backdrop-filter: blur(10rpx);
 		z-index: 9999; /* 确保在所有内容上方 */
 	}
 
 	.back-btn-floating:active {
-		transform: scale(0.95);
-		box-shadow: 0 2rpx 8rpx rgba(100, 150, 255, 0.3), 0 0 0 1rpx rgba(255, 255, 255, 0.2);
+		transform: scale(0.92);
+		box-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.3);
 	}
 
 	.back-btn-floating:hover {
-		transform: scale(1.02);
-		box-shadow: 0 6rpx 20rpx rgba(100, 150, 255, 0.5), 0 0 0 2rpx rgba(255, 255, 255, 0.2);
+		transform: scale(1.05);
+		background: rgba(0, 0, 0, 0.75);
+		box-shadow: 0 6rpx 16rpx rgba(0, 0, 0, 0.5);
 	}
 
 	.back-icon {
-		font-size: 32rpx;
+		font-size: 28rpx;
 		color: #ffffff;
-		font-weight: 600;
-		text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
-	}
-
-	.back-text {
-		font-size: 24rpx;
-		color: #ffffff;
-		font-weight: 500;
-		text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.3);
+		font-weight: 700;
+		line-height: 1;
 	}
 
 	/* 浮动收起按钮 - 右下角 */
@@ -5253,39 +4700,37 @@
 
 	/* 票数进度条样式 */
 	.progress-bar {
-		height: 35rpx;
-		background: linear-gradient(90deg, #FF1493 0%, #FF8C00 25%, #32CD32 50%, #FF8C00 75%, #FF1493 100%);
-		background-size: 200% 200%;
-		border: 3rpx solid #000;
-		border-radius: 18rpx;
+		height: 40rpx;
+		background: transparent;
+		border: 4rpx solid #000;
+		border-radius: 8rpx;
 		position: relative;
 		overflow: hidden;
 		display: flex;
-		animation: gradientShift 4s ease infinite;
-		box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.3), inset 0 2rpx 0 rgba(255, 255, 255, 0.4);
+		animation: none;
+		box-shadow: none;
 	}
 
 	@keyframes gradientShift {
 		0% { 
 			background-position: 0% 50%; 
-			transform: translateZ(0); /* GPU加速 */
+			transform: translateZ(0);
 		}
 		50% { 
 			background-position: 100% 50%; 
-			transform: translateZ(0); /* GPU加速 */
+			transform: translateZ(0);
 		}
 		100% { 
 			background-position: 0% 50%; 
-			transform: translateZ(0); /* GPU加速 */
+			transform: translateZ(0);
 		}
 	}
 
 	/* 浮动覆盖层的进度条样式 */
 	.vote-progress-overlay .progress-bar {
-		background: linear-gradient(90deg, #FF1493 0%, #FF8C00 25%, #32CD32 50%, #FF8C00 75%, #FF1493 100%);
-		background-size: 200% 200%;
-		backdrop-filter: blur(20rpx);
-		box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.3), inset 0 2rpx 0 rgba(255, 255, 255, 0.4);
+		background: transparent;
+		border: 4rpx solid #000;
+		box-shadow: none;
 	}
 
 	.progress-fill {
@@ -5294,22 +4739,19 @@
 		transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 		display: flex;
 		align-items: center;
-		justify-content: center;
+		justify-content: flex-end;
 		overflow: hidden;
+		border-radius: 4rpx;
 	}
 
 	.left-fill {
-		background: radial-gradient(circle at 30% 30%, rgba(120, 119, 198, 0.9) 0%, transparent 50%), linear-gradient(135deg, rgba(120, 119, 198, 0.8), rgba(255, 119, 198, 0.6));
-		background-size: 300% 300%, 100% 100%;
-		animation: leftPopBounce 2.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
-		box-shadow: inset 0 0 20rpx rgba(255, 255, 255, 0.4), 0 0 20rpx rgba(120, 119, 198, 0.6), inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+		background: #FF0000;
+		box-shadow: none;
 	}
 
 	.right-fill {
-		background: radial-gradient(circle at 70% 30%, rgba(120, 219, 255, 0.9) 0%, transparent 50%), linear-gradient(135deg, rgba(255, 119, 198, 0.8), rgba(120, 219, 255, 0.6));
-		background-size: 300% 300%, 100% 100%;
-		animation: rightPopBounce 2.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
-		box-shadow: inset 0 0 20rpx rgba(255, 255, 255, 0.4), 0 0 20rpx rgba(120, 219, 255, 0.6), inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+		background: #0066FF;
+		box-shadow: none;
 	}
 
 	@keyframes leftPopBounce {
@@ -5324,13 +4766,13 @@
 
 	/* 浮动覆盖层的进度条填充样式 */
 	.vote-progress-overlay .left-fill {
-		background: linear-gradient(135deg, rgba(102, 126, 234, 0.9), rgba(118, 75, 162, 0.9));
-		background-size: 200% 200%;
+		background: #FF0000;
+		box-shadow: none;
 	}
 
 	.vote-progress-overlay .right-fill {
-		background: linear-gradient(135deg, rgba(240, 147, 251, 0.9), rgba(245, 87, 108, 0.9));
-		background-size: 200% 200%;
+		background: #0066FF;
+		box-shadow: none;
 	}
 
 	.progress-text {
@@ -5339,8 +4781,8 @@
 		align-items: center;
 		justify-content: center;
 		height: 100%;
-		padding: 0 15rpx;
-		gap: 8rpx;
+		padding: 0 10rpx;
+		gap: 6rpx;
 	}
 
 	.left-text {
@@ -5352,10 +4794,7 @@
 	}
 
 	.debater-name {
-		font-size: 16rpx;
-		font-weight: bold;
-		color: #FFFFFF;
-		text-shadow: 1rpx 1rpx 2rpx rgba(0, 0, 0, 0.7);
+		display: none;
 	}
 
 	.vote-count {
@@ -5372,49 +4811,9 @@
 	}
 
 
-	/* 动态火焰分界线 - Lottie 动画 */
+	/* 动态火焰分界线 */
 	.flame-divider {
-		position: absolute;
-		top: 50%;
-		width: 200rpx;
-		height: 200rpx;
-		transition: left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-		z-index: 20;
-		pointer-events: none;
-		overflow: visible;
-		will-change: left;
-		backface-visibility: hidden;
-		-webkit-backface-visibility: hidden;
-		transform: translate3d(-50%, -50%, 0);
-		-webkit-transform: translate3d(-50%, -50%, 0);
-		transform-origin: center center;
-	}
-	/* Lottie 火焰容器 */
-	.lottie-fire-container {
-		width: 100%;
-		height: 100%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		position: relative;
-		will-change: auto;
-		backface-visibility: hidden;
-		-webkit-backface-visibility: hidden;
-		-webkit-perspective: 1000;
-		perspective: 1000;
-	}
-	
-	.lottie-fire-canvas,
-	.lottie-fire-wrapper {
-		width: 100%;
-		height: 100%;
-		border-radius: 50%;
-		overflow: hidden;
-		position: relative;
-		z-index: 1;
-		transform: translateZ(0);
-		-webkit-transform: translateZ(0);
-		will-change: transform;
+		display: none;
 	}
 
 	@keyframes dividerPulse {
@@ -5445,9 +4844,6 @@
 		animation: dividerExplosion 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 	}
 	
-	.flame-divider.divider-hit .lottie-fire-container {
-		animation: fireShake 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-	}
 	
 	@keyframes fireShake {
 		0%, 100% { 
@@ -5981,6 +5377,8 @@
 		display: flex;
 		flex-direction: column;
 		transition: all 0.3s ease;
+		min-height: 0; /* 让 flex 子元素能正确计算高度 */
+		overflow-y: auto;
 	}
 
 	.main-content.expanded {
@@ -5990,14 +5388,12 @@
 
 	/* AI对话区域 */
 	.ai-chat-container {
-		background: linear-gradient(135deg, #fff9f5 0%, #ffeef0 100%);
-		border: 3rpx solid #ffb3d1;
-		border-radius: 30rpx;
-		margin-bottom: 20rpx;
+		background: #FFFFFF;
+		border: 6rpx solid #000;
+		border-radius: 12rpx;
+		margin-bottom: 12rpx;
 		overflow: hidden;
-		box-shadow: 0 8rpx 24rpx rgba(255, 179, 209, 0.3), 
-		            0 4rpx 12rpx rgba(255, 107, 157, 0.2),
-		            inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
+		box-shadow: 12rpx 12rpx 0 #000;
 		height: 600rpx;
 		display: flex;
 		flex-direction: column;
@@ -6005,6 +5401,12 @@
 		box-sizing: border-box;
 		width: 100%;
 		position: relative;
+		flex-shrink: 0;
+	}
+	
+	/* 预设观点收起时，AI对话框往下扩大 */
+	.main-content.preset-collapsed .ai-chat-container {
+		height: 820rpx; /* 预设观点收起时，AI对话框适度扩大 */
 	}
 	
 	.ai-chat-container::before {
@@ -6018,9 +5420,9 @@
 		pointer-events: none;
 	}
 
-	/* AI对话区域展开状态 - 简单增加高度 */
+	/* AI对话区域展开状态 - 适度增加高度 */
 	.main-content.expanded .ai-chat-container {
-		height: 900rpx; /* 增加高度，提供更多空间 */
+		height: 750rpx; /* 适度增加高度，避免挤压投票区域 */
 	}
 
 	.chat-header {
@@ -6114,18 +5516,18 @@
 
 	.chat-messages {
 		flex: 1;
-		padding: 28rpx 24rpx;
+		padding: 16rpx 16rpx;
 		overflow-y: auto;
 		box-sizing: border-box;
 		width: 100%;
 		height: 100%;
-		background: linear-gradient(135deg, #fff5f9 0%, #ffeef0 100%);
+		background: #FFFFFF;
 		position: relative;
 		z-index: 1;
 	}
 
 	.message-item {
-		margin-bottom: 20rpx;
+		margin-bottom: 12rpx;
 		display: flex;
 		flex-direction: column;
 		width: 100%;
@@ -6146,14 +5548,14 @@
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-		max-width: 85%;
+		max-width: 80%;
 	}
 
 	.message-item.right .message-bubble-wrapper {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-end;
-		max-width: 85%;
+		max-width: 80%;
 	}
 
 	@keyframes messageSlideIn {
@@ -6195,136 +5597,133 @@
 	.side-badge {
 		display: inline-flex;
 		align-items: center;
-		gap: 6rpx;
-		padding: 6rpx 14rpx;
-		border-radius: 16rpx;
-		font-size: 22rpx;
-		font-weight: 600;
-		margin-bottom: 8rpx;
-		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
-		backdrop-filter: blur(8rpx);
+		gap: 8rpx;
+		padding: 12rpx 20rpx;
+		border-radius: 8rpx;
+		font-size: 26rpx;
+		font-weight: 900;
+		margin-bottom: 12rpx;
+		backdrop-filter: none;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 		white-space: nowrap;
+		border: 4rpx solid #000;
+		letter-spacing: 1rpx;
+		text-shadow: 2rpx 2rpx 0 #000;
 	}
 
 	.message-item.left .side-badge {
-		background: linear-gradient(135deg, rgba(255, 100, 150, 0.95), rgba(255, 120, 160, 0.95));
+		background: #FF0000;
 		color: #ffffff;
-		border: 2rpx solid rgba(255, 100, 150, 0.6);
 		align-self: flex-start;
+		box-shadow: 6rpx 6rpx 0 #000;
 	}
 
 	.message-item.right .side-badge {
-		background: linear-gradient(135deg, rgba(100, 150, 255, 0.95), rgba(120, 170, 255, 0.95));
+		background: #0066FF;
 		color: #ffffff;
-		border: 2rpx solid rgba(100, 150, 255, 0.6);
 		align-self: flex-end;
+		box-shadow: 6rpx 6rpx 0 #000;
 	}
 
-	.badge-icon {
-		font-size: 24rpx;
-		line-height: 1;
-	}
-
-	.badge-text {
-		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-		font-size: 22rpx;
-		font-weight: 600;
-		letter-spacing: 0.5rpx;
-		text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.2);
-	}
 
 	.message-bubble {
 		width: 100%;
 		max-width: 100%;
-		padding: 24rpx 28rpx;
-		border-radius: 28rpx;
-		border: 2rpx solid rgba(0, 0, 0, 0.08);
+		padding: 16rpx 20rpx;
+		border-radius: 12rpx;
+		border: 4rpx solid #000;
 		position: relative;
 		transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		box-sizing: border-box;
-		box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.06);
-		backdrop-filter: blur(10rpx);
+		backdrop-filter: none;
 	}
 
 	.message-item.left .message-bubble {
-		background: linear-gradient(135deg, #ffe5f0 0%, #ffb6d6 100%);
+		background: #FF0000;
+		box-shadow: 8rpx 8rpx 0 #000;
 		border-bottom-left-radius: 12rpx;
-		border-color: rgba(255, 107, 157, 0.25);
-		box-shadow: 0 4rpx 12rpx rgba(255, 107, 157, 0.15);
 	}
 
 	.message-item.right .message-bubble {
-		background: linear-gradient(135deg, #e5f3ff 0%, #b3e0ff 100%);
+		background: #0066FF;
+		box-shadow: 8rpx 8rpx 0 #000;
 		border-bottom-right-radius: 12rpx;
-		border-color: rgba(0, 191, 255, 0.25);
-		box-shadow: 0 4rpx 12rpx rgba(0, 191, 255, 0.15);
 	}
 
 	.message-bubble:hover {
-		transform: translateY(-2rpx);
-		box-shadow: 0 6rpx 20rpx rgba(0, 0, 0, 0.12);
+		transform: translate(0, 0);
 	}
 
 	.message-bubble:active {
-		transform: scale(0.98) translateY(0);
-		box-shadow: 0 2rpx 10rpx rgba(0, 0, 0, 0.1);
+		transform: translate(2rpx, 2rpx);
+	}
+
+	.message-item.left .message-bubble:active {
+		box-shadow: 8rpx 8rpx 0 #FF0000;
+	}
+
+	.message-item.right .message-bubble:active {
+		box-shadow: 8rpx 8rpx 0 #0066FF;
 	}
 	.message-text {
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Source Han Sans CN', sans-serif;
-		font-size: 30rpx;
-		line-height: 1.6;
-		color: #2c3e50;
+		font-size: 28rpx;
+		line-height: 1.5;
+		color: #FFFFFF;
 		display: block;
-		margin-bottom: 18rpx;
+		margin-bottom: 12rpx;
 		word-wrap: break-word;
-		font-weight: 400;
-		letter-spacing: 0.3rpx;
-		text-shadow: 0 1rpx 2rpx rgba(0, 0, 0, 0.02);
+		font-weight: 700;
+		letter-spacing: 0.2rpx;
+		text-shadow: 2rpx 2rpx 0 #000;
 	}
 
 	.message-actions {
 		display: flex;
 		justify-content: flex-end;
-		gap: 15rpx;
+		gap: 10rpx;
 	}
 
 	.action-item {
 		display: flex;
 		align-items: center;
-		padding: 10rpx 16rpx;
-		border-radius: 18rpx;
-		background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 249, 250, 0.9));
-		border: 2rpx solid rgba(0, 0, 0, 0.06);
+		padding: 8rpx 14rpx;
+		border-radius: 6rpx;
+		background: rgba(255, 255, 255, 0.95);
+		border: 3rpx solid #000;
 		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-		backdrop-filter: blur(8rpx);
-		box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+		backdrop-filter: none;
+		box-shadow: 4rpx 4rpx 0 #000;
 	}
 
 	.action-item:active {
-		transform: scale(0.95);
-		box-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.08);
+		transform: translate(2rpx, 2rpx);
+		box-shadow: 2rpx 2rpx 0 #000;
 	}
 
 	.action-item.liked {
-		background: linear-gradient(135deg, #ffcdd2, #ffb3ba);
-		border-color: rgba(244, 67, 54, 0.3);
-		box-shadow: 0 2rpx 12rpx rgba(244, 67, 54, 0.2);
+		background: #FFEB3B;
+		border-color: #000;
+		box-shadow: 4rpx 4rpx 0 #000;
 	}
 
 	.action-icon-img {
-		width: 22rpx;
-		height: 22rpx;
-		margin-right: 8rpx;
-		filter: drop-shadow(0 1rpx 2rpx rgba(0, 0, 0, 0.1));
+		width: 20rpx;
+		height: 20rpx;
+		margin-right: 6rpx;
+		filter: none;
 	}
 
 	.action-count {
 		font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
 		font-size: 24rpx;
-		font-weight: 600;
-		color: #495057;
+		font-weight: 800;
+		color: #000;
 		letter-spacing: 0.2rpx;
+	}
+
+	.action-item.liked .action-count {
+		color: #000;
 	}
 
 	.placeholder-message {
@@ -6387,24 +5786,16 @@
 	}
 	/* 对抗条 */
 	.battle-bar {
-		height: 80rpx;
-		background: linear-gradient(135deg, #FF00FF, #00FFFF, #FFD700, #FF1493);
-		background-size: 300% 300%, 100% 100%;
-		border: 6rpx dashed #000;
-		border-radius: 50rpx;
+		height: 60rpx;
+		background: transparent;
+		border: none;
+		border-radius: 12rpx;
 		position: relative;
 		overflow: hidden;
 		display: flex;
-		animation: popGradientShift 5s ease infinite;
-		box-shadow: 0 0 20rpx rgba(255, 0, 255, 0.6),
-		            0 8rpx 20rpx rgba(0, 0, 0, 0.3);
-		margin-bottom: 30rpx;
-	}
-
-	@keyframes popGradientShift {
-		0% { background-position: 0% 50%; transform: scale(1); }
-		50% { background-position: 100% 50%; transform: scale(1.02); }
-		100% { background-position: 0% 50%; transform: scale(1); }
+		animation: none;
+		box-shadow: none;
+		margin-bottom: 12rpx;
 	}
 
 	.battle-fill {
@@ -6413,77 +5804,50 @@
 		transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 		display: flex;
 		align-items: center;
-		justify-content: center;
+		justify-content: flex-end;
 		overflow: hidden;
+		border-radius: 12rpx;
+		border: 4rpx solid #000;
 	}
 
 	.left-fill {
-		background: 
-			radial-gradient(circle at 30% 30%, rgba(120, 119, 198, 0.9) 0%, transparent 50%),
-			linear-gradient(135deg, rgba(120, 119, 198, 0.8), rgba(255, 119, 198, 0.6));
-		background-size: 300% 300%, 100% 100%;
-		animation: leftPopBounce 2.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
-		box-shadow: 
-			inset 0 0 20rpx rgba(255, 255, 255, 0.4),
-			0 0 20rpx rgba(120, 119, 198, 0.6),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+		background: #FF0000;
+		animation: none;
+		box-shadow: none;
 	}
 
 	.right-fill {
-		background: 
-			radial-gradient(circle at 70% 30%, rgba(120, 219, 255, 0.9) 0%, transparent 50%),
-			linear-gradient(135deg, rgba(255, 119, 198, 0.8), rgba(120, 219, 255, 0.6));
-		background-size: 300% 300%, 100% 100%;
-		animation: rightPopBounce 2.5s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
-		box-shadow: 
-			inset 0 0 20rpx rgba(255, 255, 255, 0.4),
-			0 0 20rpx rgba(120, 219, 255, 0.6),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
-	}
-
-	@keyframes leftPopBounce {
-		0%, 100% { background-position: 0% 50%; }
-		50% { background-position: 100% 50%; }
-	}
-
-	@keyframes rightPopBounce {
-		0%, 100% { background-position: 100% 50%; }
-		50% { background-position: 0% 50%; }
+		background: #0066FF;
+		animation: none;
+		box-shadow: none;
 	}
 
 	.battle-text {
 		display: flex;
-		flex-direction: row;
+		flex-direction: column;
 		align-items: center;
 		justify-content: center;
-		height: 100%;
-		padding: 0 20rpx;
-		gap: 10rpx;
+		gap: 4rpx;
 	}
 
 	.left-text {
-		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		justify-content: center;
+		gap: 4rpx;
 	}
 
 	.right-text {
-		text-align: center;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		justify-content: center;
+		gap: 4rpx;
 	}
 
 	.battle-label {
-		font-size: 24rpx;
-		font-weight: 900;
-		color: #FFFFFF;
-		text-shadow: 2rpx 2rpx 0 #000,
-		             -2rpx -2rpx 0 #000,
-		             2rpx -2rpx 0 #000,
-		             -2rpx 2rpx 0 #000;
-		letter-spacing: 2rpx;
-		animation: popJump 0.6s ease-in-out infinite;
-	}
-
-	@keyframes popJump {
-		0%, 100% { transform: translateY(0); }
-		50% { transform: translateY(-4rpx); }
+		display: none;
 	}
 
 	.battle-count {
@@ -6501,15 +5865,7 @@
 
 	/* 动态闪电分界线 */
 	.lightning-divider {
-		position: absolute;
-		top: 50%;
-		transform: translateX(-50%) translateY(-50%);
-		width: 40rpx;
-		height: 60rpx;
-		transition: left 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-		z-index: 20;
-		pointer-events: none;
-		animation: lightningPulse 1s ease-in-out infinite;
+		display: none;
 	}
 	
 	@keyframes lightningPulse {
@@ -6777,129 +6133,85 @@
 	}
 
 	/* 投票按钮 */
+	/* 固定大小的投票区域容器 */
+	.battle-section-fixed {
+		padding: 8rpx 20rpx 20rpx 20rpx;
+		background: transparent;
+		flex-shrink: 0;
+	}
+
 	.vote-buttons {
 		display: flex;
 		gap: 20rpx;
 		justify-content: center;
 		align-items: center;
+		margin-top: 12rpx;
 	}
 
-	.lottie-button-container {
+	/* 投票按钮 */
+	.vote-button {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
 		justify-content: center;
 		cursor: pointer;
-		transition: transform 0.3s ease;
+		transition: all 0.3s ease;
 		position: relative;
 		width: 100%;
+		padding: 20rpx 16rpx;
+		border: 4rpx solid #000;
+		box-shadow: 8rpx 8rpx 0 #000;
+		font-weight: 900;
 	}
 
-	.lottie-button-container:hover {
-		transform: scale(1.05);
+	/* 正方按钮样式（红色背景） */
+	.vote-button.left-button {
+		background: linear-gradient(135deg, #FF4444 0%, #FF0000 100%);
 	}
 
-	.lottie-button-container:active {
+	/* 反方按钮样式（蓝色背景） */
+	.vote-button.right-button {
+		background: linear-gradient(135deg, #4444FF 0%, #0000FF 100%);
+	}
+
+	.vote-button:hover {
+		transform: scale(1.08);
+		box-shadow: 12rpx 12rpx 0 #000;
+	}
+
+	.vote-button:active {
 		transform: scale(0.95);
+		box-shadow: 4rpx 4rpx 0 #000;
 	}
 
-	.lottie-button-container.disabled {
+	.vote-button.disabled {
 		opacity: 0.5;
 		pointer-events: none;
 		cursor: not-allowed;
 	}
 
-	.lottie-button-container.voted {
-		transform: scale(1.1);
+	.vote-button.voted {
+		transform: scale(1.1) rotate(2deg);
+		box-shadow: 12rpx 12rpx 0 #000;
+		filter: brightness(1.2);
 	}
 
-	/* 动画外框 - 直接包裹动画 */
-	.animation-frame {
-		display: inline-block;
-		border-radius: 20rpx;
-		padding: 8rpx;
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+	.vote-button.voted.left-button {
+		background: linear-gradient(135deg, #FFAA00 0%, #FF7700 100%);
+		border-color: #FFF;
 	}
 
-	/* 正方按钮外框 */
-	.left-frame {
-		background: linear-gradient(135deg, 
-			rgba(255, 105, 180, 0.15) 0%, 
-			rgba(255, 20, 147, 0.25) 50%, 
-			rgba(255, 182, 193, 0.15) 100%);
-		border: 2rpx solid rgba(255, 20, 147, 0.4);
-		box-shadow: 
-			0 4rpx 15rpx rgba(255, 20, 147, 0.25),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
+	.vote-button.voted.right-button {
+		background: linear-gradient(135deg, #AAFF00 0%, #77FF00 100%);
+		border-color: #FFF;
 	}
 
-	/* 反方按钮外框 */
-	.right-frame {
-		background: linear-gradient(135deg, 
-			rgba(0, 191, 255, 0.15) 0%, 
-			rgba(135, 206, 235, 0.25) 50%, 
-			rgba(176, 224, 230, 0.15) 100%);
-		border: 2rpx solid rgba(0, 191, 255, 0.4);
-		box-shadow: 
-			0 4rpx 15rpx rgba(0, 191, 255, 0.25),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.3);
-	}
-
-
-
-	/* 悬停效果 */
-	.lottie-button-container:hover .animation-frame {
-		transform: translateY(-2rpx) scale(1.05);
-	}
-
-	.lottie-button-container:hover .left-frame {
-		box-shadow: 
-			0 6rpx 20rpx rgba(255, 20, 147, 0.4),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.4);
-	}
-
-	.lottie-button-container:hover .right-frame {
-		box-shadow: 
-			0 6rpx 20rpx rgba(0, 191, 255, 0.4),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.4);
-	}
-
-	/* 已投票状态 */
-	.lottie-button-container.voted .animation-frame {
-		background: linear-gradient(135deg, 
-			rgba(255, 215, 0, 0.25) 0%, 
-			rgba(255, 165, 0, 0.35) 50%, 
-			rgba(255, 140, 0, 0.25) 100%);
-		border-color: rgba(255, 215, 0, 0.5);
-		box-shadow: 
-			0 4rpx 15rpx rgba(255, 215, 0, 0.4),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.4);
-		animation: votedGlow 2s ease-in-out infinite alternate;
-	}
-
-	@keyframes votedGlow {
-		0% {
-			box-shadow: 
-				0 4rpx 15rpx rgba(255, 215, 0, 0.4),
-				inset 0 1rpx 0 rgba(255, 255, 255, 0.4);
-		}
-		100% {
-			box-shadow: 
-				0 6rpx 20rpx rgba(255, 215, 0, 0.6),
-				inset 0 1rpx 0 rgba(255, 255, 255, 0.6);
-		}
-	}
-
-	/* 禁用状态 */
-	.lottie-button-container.disabled .animation-frame {
-		background: linear-gradient(135deg, 
-			rgba(200, 200, 200, 0.15) 0%, 
-			rgba(150, 150, 150, 0.25) 50%, 
-			rgba(100, 100, 100, 0.15) 100%);
-		border-color: rgba(150, 150, 150, 0.4);
-		box-shadow: 
-			0 2rpx 10rpx rgba(0, 0, 0, 0.15),
-			inset 0 1rpx 0 rgba(255, 255, 255, 0.2);
+	.vote-button-text {
+		font-size: 28rpx;
+		font-weight: 900;
+		color: #FFF;
+		text-shadow: 2rpx 2rpx 4rpx rgba(0, 0, 0, 0.5);
+		letter-spacing: 2rpx;
 	}
 
 
@@ -7246,84 +6558,6 @@
 	}
 
 	/* 底部导航栏 */
-	.bottom-nav {
-		position: fixed;
-		bottom: 0;
-		left: 0;
-		right: 0;
-		height: 120rpx;
-		background-color: #FFFFFF;
-		border-top: 4rpx solid #000;
-		display: flex;
-		align-items: center;
-		justify-content: space-around;
-		padding: 10rpx 0;
-		box-shadow: 0 -4rpx 12rpx rgba(0, 0, 0, 0.1);
-		z-index: 1000;
-	}
-
-	.nav-item {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		flex: 1;
-		height: 100%;
-		transition: all 0.3s ease;
-		border-radius: 15rpx;
-		margin: 0 5rpx;
-	}
-
-	.nav-item:active {
-		transform: scale(0.95);
-	}
-
-	.nav-item.active {
-		background-color: #f0f0f0;
-		transform: scale(1.05);
-	}
-
-	.nav-icon {
-		width: 56rpx;
-		height: 56rpx;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-bottom: 8rpx;
-		transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-	}
-
-	.nav-icon-img {
-		width: 48rpx;
-		height: 48rpx;
-		transition: all 0.3s ease;
-	}
-
-	.nav-item.active .nav-icon {
-		transform: scale(1.15);
-	}
-
-	.nav-item.active .nav-icon-img {
-		transform: scale(1.1);
-		filter: drop-shadow(0 2rpx 6rpx rgba(255, 107, 157, 0.4));
-	}
-
-	.nav-text {
-		font-size: 22rpx;
-		color: #666;
-		font-weight: 500;
-		transition: all 0.3s ease;
-	}
-
-	.nav-item.active .nav-text {
-		color: #FF1493;
-		font-weight: bold;
-	}
-
-	/* 为主容器添加底部间距，避免被导航栏遮挡 */
-	.home-container {
-		padding-bottom: 140rpx;
-	}
 
 	/* 自定义弹窗样式 */
 	.custom-modal-mask {
@@ -7347,17 +6581,14 @@
 	}
 
 	.custom-modal {
-		background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.9) 100%);
-		border: 6rpx solid #000000;
+		background: #FFF;
+		border: 6rpx solid #000;
 		border-radius: 0;
 		width: 100%;
 		max-width: 640rpx;
 		max-height: 85vh;
 		overflow: hidden;
-		box-shadow: 
-			12rpx 12rpx 0 #D9468F,
-			-12rpx -12rpx 0 #6BA3FF,
-			0 0 40rpx rgba(255, 217, 61, 0.4);
+		box-shadow: 12rpx 12rpx 0 #000;
 		animation: slideUp 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
 		transform: rotate(-1deg);
 	}
@@ -7374,7 +6605,7 @@
 	}
 
 	.modal-header {
-		background: linear-gradient(135deg, #D9468F 0%, #9B6ED8 100%);
+		background: linear-gradient(135deg, #1E90FF 0%, #00BFFF 100%);
 		padding: 32rpx 30rpx;
 		display: flex;
 		align-items: center;
@@ -7400,14 +6631,14 @@
 	.modal-content {
 		max-height: 60vh;
 		padding: 30rpx 24rpx;
-		background: #FFFFFF;
+		background: #F5F5F5;
 		box-sizing: border-box;
 		width: 100%;
 	}
 
 	.summary-section {
 		margin-bottom: 28rpx;
-		background: linear-gradient(135deg, #FFD93D 0%, #D9468F 100%);
+		background: linear-gradient(135deg, #FFEB3B 0%, #FFD700 100%);
 		border: 5rpx solid #000000;
 		border-radius: 0;
 		padding: 24rpx;
@@ -7419,7 +6650,7 @@
 
 	.comments-section {
 		margin-bottom: 0;
-		background: #FFFFFF;
+		background: linear-gradient(135deg, rgba(255, 179, 209, 0.2) 0%, rgba(255, 107, 157, 0.1) 100%);
 		border: 5rpx solid #000000;
 		border-radius: 0;
 		padding: 24rpx;
@@ -7649,9 +6880,7 @@
 	}
 
 	.confirm-btn {
-		background: linear-gradient(135deg, #D9468F 0%, #FFD93D 50%, #5ED4B3 100%);
-		background-size: 200% 200%;
-		animation: buttonGradient 3s ease infinite;
+		background: linear-gradient(135deg, #FF4444 0%, #FF0000 100%);
 		box-shadow: 4rpx 4rpx 0 #000000;
 		position: relative;
 		overflow: hidden;
@@ -7696,48 +6925,41 @@
 		overflow: visible;  /* 改为 visible，不裁剪子元素 */
 	}
 
-	/* Lottie 特效容器 */
-	.lottie-effect {
+	/* 投票特效容器 */
+	.vote-effect {
 		position: fixed;
-		width: 200rpx;  /* 从 150rpx 增加到 200rpx */
-		height: 400rpx; /* 从 320rpx 增加到 400rpx */
+		width: 100rpx;
+		height: 100rpx;
 		pointer-events: none;
 		z-index: 9999;
 		will-change: transform, opacity;
 		transform: translateZ(0);
+		font-size: 60rpx;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	
+	/* 投票特效图标 */
+	.effect-icon {
+		width: 100rpx;
+		height: 100rpx;
 	}
 
-	/* Lottie Canvas 样式 */
-	.lottie-heart-canvas {
-		width: 100%;
-		height: 100%;
-		display: block;
-		background: transparent;
-		visibility: visible;
-		opacity: 1;
-	}
-
-	/* Lottie Wrapper 样式（非微信环境） */
-	.lottie-heart-wrapper {
-		width: 100%;
-		height: 100%;
-		position: relative;
-	}
-
-	/* 左侧 Lottie 特效样式（正方） */
-	.lottie-effect-left {
-		animation: lottieFloatUpLeft var(--duration, 3s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+	/* 左侧投票特效样式（正方） */
+	.vote-effect-left {
+		animation: floatUpLeft var(--duration, 3s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 		animation-delay: var(--delay, 0s);
 	}
 
-	/* 右侧 Lottie 特效样式（反方） */
-	.lottie-effect-right {
-		animation: lottieFloatUpRight var(--duration, 3s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+	/* 右侧投票特效样式（反方） */
+	.vote-effect-right {
+		animation: floatUpRight var(--duration, 3s) cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 		animation-delay: var(--delay, 0s);
 	}
 
-	/* Lottie 爱心动画 - 左侧向上飘动 */
-	@keyframes lottieFloatUpLeft {
+	/* 爱心特效动画 - 左侧向上飘动 */
+	@keyframes floatUpLeft {
 		0% {
 			opacity: 1;
 			transform: translate(0, 0) scale(1);
@@ -7764,8 +6986,8 @@
 		}
 	}
 
-	/* Lottie 爱心动画 - 右侧向上飘动 */
-	@keyframes lottieFloatUpRight {
+	/* 爱心特效动画 - 右侧向上飘动 */
+	@keyframes floatUpRight {
 		0% {
 			opacity: 1;
 			transform: translate(0, 0) scale(1);
@@ -7789,33 +7011,6 @@
 		100% {
 			opacity: 0;
 			transform: translate(0, -750rpx) scale(0.9);
-		}
-	}
-	/* 备用 emoji 爱心动画 */
-	@keyframes floatUpHeart {
-		0% {
-			opacity: 1;
-			transform: translateY(0) scale(0.5) rotate(0deg);
-		}
-		20% {
-			opacity: 1;
-			transform: translateY(-100px) scale(1) rotate(10deg);
-		}
-		40% {
-			opacity: 0.9;
-			transform: translateY(-200px) scale(1.2) rotate(-5deg);
-		}
-		60% {
-			opacity: 0.7;
-			transform: translateY(-300px) scale(1.1) rotate(8deg);
-		}
-		80% {
-			opacity: 0.4;
-			transform: translateY(-400px) scale(1) rotate(-3deg);
-		}
-		100% {
-			opacity: 0;
-			transform: translateY(-500px) scale(0.8) rotate(0deg);
 		}
 	}
 	
@@ -8031,16 +7226,17 @@
 
 	/* 预设观点显示 - 紧凑版本 */
 	.preset-section {
-		background-color: #FFFFFF !important;
-		background: #FFFFFF !important;
-		border: 3rpx solid #000;
-		border-radius: 12rpx;
-		padding: 10rpx 12rpx;
-		margin-bottom: 8rpx;
-		box-shadow: 0 3rpx 10rpx rgba(0, 0, 0, 0.1);
+		background: linear-gradient(135deg, #FFEB3B 0%, #FFD700 100%);
+		border: 6rpx solid #000;
+		border-radius: 0;
+		padding: 20rpx;
+		margin-bottom: 12rpx;
+		box-shadow: 10rpx 10rpx 0 #000;
 		opacity: 1 !important;
 		position: relative;
 		z-index: 10;
+		display: flex;
+		flex-direction: column;
 	}
 
 	.preset-header {
@@ -8052,12 +7248,13 @@
 	}
 
 	.preset-title {
-		font-size: 22rpx;
-		font-weight: bold;
-		color: #333;
+		font-size: 28rpx;
+		font-weight: 900;
+		color: #000;
 		display: flex;
 		align-items: center;
 		gap: 4rpx;
+		letter-spacing: 2rpx;
 	}
 
 	.preset-subtitle {
@@ -8119,9 +7316,17 @@
 		width: 100%;
 	}
 
+	.preset-info-container {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-top: 8rpx;
+		gap: 12rpx;
+	}
+
 	.preset-info {
 		text-align: center;
-		margin-top: 6rpx;
+		flex: 1;
 	}
 
 	.preset-info-row {
@@ -8132,16 +7337,18 @@
 	}
 
 	.preset-percentage {
-		font-size: 26rpx;
-		font-weight: bold;
-		color: #FF1493;
+		font-size: 32rpx;
+		font-weight: 900;
+		color: #FF0000;
 		display: inline-block;
+		text-shadow: 2rpx 2rpx 0 #000;
 	}
 
 	.preset-desc {
-		font-size: 18rpx;
-		color: #666;
+		font-size: 20rpx;
+		color: #000;
 		display: inline-block;
+		font-weight: 700;
 	}
 	
 	/* 预设观点面板关闭按钮样式 */
@@ -8194,37 +7401,37 @@
 		line-height: 1.3;
 	}
 	
-	/* 预设观点确定按钮容器 - 圆形按钮版本 */
+	/* 预设观点确定按钮容器 - 与文字并列 */
 	.preset-confirm-btn-wrapper {
 		display: flex;
 		justify-content: center;
 		align-items: center;
-		margin: 8rpx 0;
+		flex-shrink: 0;
 	}
 	
-	.preset-confirm-btn-circle {
-		width: 56rpx;
-		height: 56rpx;
-		background: linear-gradient(135deg, #FF1493 0%, #FF8C00 100%);
+	.preset-confirm-btn {
+		background: linear-gradient(135deg, #FF4444 0%, #FF0000 100%);
 		border: 3rpx solid #000;
-		border-radius: 50%;
+		width: 48rpx;
+		height: 48rpx;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		box-shadow: 0 4rpx 0 rgba(0, 0, 0, 0.2);
+		box-shadow: 4rpx 4rpx 0 #000;
 		transition: all 0.3s ease;
+		border-radius: 0;
 	}
 	
-	.preset-confirm-btn-circle:active {
+	.preset-confirm-btn:active {
 		transform: translateY(2rpx) scale(0.95);
-		box-shadow: 0 2rpx 0 rgba(0, 0, 0, 0.2);
+		box-shadow: 2rpx 2rpx 0 #000;
 	}
 	
 	.confirm-btn-text {
-		font-size: 32rpx;
+		font-size: 28rpx;
 		font-weight: 900;
 		color: #FFFFFF;
-		text-shadow: 1rpx 1rpx 0 rgba(0, 0, 0, 0.3);
+		text-shadow: 1rpx 1rpx 0 rgba(0, 0, 0, 0.5);
 		line-height: 1;
 	}
 	
@@ -8234,7 +7441,7 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 1rpx 2rpx;
-		margin: 1rpx 0;
+		margin: 0;
 	}
 
 	/* 激励标语样式 */
@@ -8260,7 +7467,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		margin-bottom: 20rpx;
+		margin-bottom: 8rpx;
 		box-shadow: 0 6rpx 16rpx rgba(255, 20, 147, 0.4), 
 		            0 3rpx 6rpx rgba(255, 20, 147, 0.2),
 		            inset 0 1rpx 3rpx rgba(255, 255, 255, 0.3);
@@ -8448,24 +7655,19 @@
 
 	/* 对抗条百分数样式 */
 	.battle-percentage {
-		font-size: 26rpx;
+		display: block;
+		font-size: 28rpx;
 		font-weight: 900;
 		color: #FFFFFF;
-		text-shadow: 2rpx 2rpx 0 #000,
-		             -2rpx -2rpx 0 #000,
-		             2rpx -2rpx 0 #000,
-		             -2rpx 2rpx 0 #000;
-		margin: 0 8rpx;
-		background: linear-gradient(135deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.2));
-		padding: 4rpx 10rpx;
-		border-radius: 15rpx;
-		border: 2rpx solid rgba(255, 255, 255, 0.5);
-		animation: percentageFlash 1.5s ease-in-out infinite;
+		text-shadow: 2rpx 2rpx 4rpx rgba(0, 0, 0, 0.8);
 	}
 
-	@keyframes percentageFlash {
-		0%, 100% { transform: scale(1); }
-		50% { transform: scale(1.1); }
+	.battle-info {
+		display: block;
+		font-size: 20rpx;
+		font-weight: bold;
+		color: #FFFFFF;
+		text-shadow: 1rpx 1rpx 2rpx rgba(0, 0, 0, 0.8);
 	}
 
 	/* 评论弹窗样式 */

@@ -2197,19 +2197,29 @@ app.post('/api/wechat-login', async (req, res) => {
 });
 
 // 用户投票（支持100票分配制）
-app.post('/api/user-vote', (req, res) => {
+// 统一的投票处理函数
+function handleUserVote(req, res) {
     console.log('═══════════════════════════════════════');
-    console.log('✅ /api/user-vote 路由被调用');
+    console.log('✅ 用户投票接口被调用');
     console.log('📥 请求来源:', req.headers.origin || req.headers.referer || '未知');
     console.log('📥 请求方法:', req.method);
-    console.log('📥 请求参数:', req.body);
+    console.log('📥 原始请求体:', req.body);
     console.log('📥 请求头:', {
         'content-type': req.headers['content-type'],
         'user-agent': (req.headers['user-agent'] && req.headers['user-agent'].substring(0, 50)) + '...'
     });
     console.log('═══════════════════════════════════════');
     
-    const { side, votes, leftVotes, rightVotes, userId } = req.body;
+    // 兼容两种请求格式：
+    // 格式1（直接）: { side, votes, leftVotes, rightVotes, userId }
+    // 格式2（包装）: { request: { side, votes, leftVotes, rightVotes, userId, streamId, stream_id } }
+    let requestData = req.body;
+    if (req.body.request) {
+        // 如果使用了 request 包装格式，解包数据
+        requestData = req.body.request;
+    }
+    
+    const { side, votes, leftVotes, rightVotes, userId, streamId, stream_id } = requestData;
 
     // 支持两种格式：
     // 格式1（增量投票）: { side: "left"|"right", votes: number }
@@ -2333,7 +2343,11 @@ app.post('/api/user-vote', (req, res) => {
     });
 
     res.json(responseData);
-});
+}
+
+// 路由定义：支持 /api/user-vote 和 /api/v1/user-vote 两种路径
+app.post('/api/user-vote', handleUserVote);
+app.post('/api/v1/user-vote', handleUserVote);
 
 // ==================== 后台管理系统控制接口 ====================
 
