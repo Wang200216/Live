@@ -4199,11 +4199,11 @@
 </script>
 <style>
 	.home-container {
-		min-height: 100vh;
+		height: 100vh;
 		background: #FFEB3B;
 		padding: 20rpx;
 		padding-top: 120rpx;
-		padding-bottom: 40rpx;
+		padding-bottom: 20rpx;
 		box-sizing: border-box;
 		display: flex;
 		flex-direction: column;
@@ -4230,12 +4230,13 @@
 	.vote-progress-container {
 		background: #FFF;
 		border: 6rpx solid #000;
-		padding: 20rpx;
-		margin-bottom: 20rpx;
+		padding: 16rpx;
+		margin-bottom: 8rpx;
 		box-shadow: 8rpx 8rpx 0 #000;
 		position: relative;
 		z-index: 1;
 		transition: all 0.3s ease;
+		flex-shrink: 0;
 	}
 
 	.vote-progress-container:hover {
@@ -4257,7 +4258,8 @@
 	.live-section {
 		background: #FFF;
 		border: 6rpx solid #000;
-		margin-bottom: 20rpx;
+		margin-bottom: 12rpx;
+		flex-shrink: 0;
 		overflow: hidden;
 		transition: all 0.3s ease;
 		box-shadow: 8rpx 8rpx 0 #000;
@@ -5343,7 +5345,7 @@
 		border: 2rpx solid #000;
 		border-radius: 15rpx;
 		padding: 8rpx 20rpx;
-		margin: 15rpx auto 20rpx auto;
+		margin: 4rpx auto 8rpx auto;
 		width: fit-content;
 		display: flex;
 		align-items: center;
@@ -5351,6 +5353,7 @@
 		gap: 6rpx;
 		box-shadow: 0 2rpx 8rpx rgba(0, 255, 255, 0.3);
 		transition: all 0.3s ease;
+		flex-shrink: 0;
 	}
 
 	.expand-btn:active {
@@ -5378,7 +5381,7 @@
 		flex-direction: column;
 		transition: all 0.3s ease;
 		min-height: 0; /* 让 flex 子元素能正确计算高度 */
-		overflow-y: auto;
+		overflow: hidden;
 	}
 
 	.main-content.expanded {
@@ -5391,22 +5394,17 @@
 		background: #FFFFFF;
 		border: 6rpx solid #000;
 		border-radius: 12rpx;
-		margin-bottom: 12rpx;
+		margin-bottom: 8rpx;
 		overflow: hidden;
 		box-shadow: 12rpx 12rpx 0 #000;
-		height: 600rpx;
+		flex: 1;
+		min-height: 200rpx;
 		display: flex;
 		flex-direction: column;
 		transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		box-sizing: border-box;
 		width: 100%;
 		position: relative;
-		flex-shrink: 0;
-	}
-	
-	/* 预设观点收起时，AI对话框往下扩大 */
-	.main-content.preset-collapsed .ai-chat-container {
-		height: 820rpx; /* 预设观点收起时，AI对话框适度扩大 */
 	}
 	
 	.ai-chat-container::before {
@@ -5418,11 +5416,6 @@
 		bottom: 0;
 		background: linear-gradient(135deg, rgba(255, 179, 209, 0.15) 0%, rgba(255, 107, 157, 0.1) 100%);
 		pointer-events: none;
-	}
-
-	/* AI对话区域展开状态 - 适度增加高度 */
-	.main-content.expanded .ai-chat-container {
-		height: 750rpx; /* 适度增加高度，避免挤压投票区域 */
 	}
 
 	.chat-header {
@@ -5527,7 +5520,7 @@
 	}
 
 	.message-item {
-		margin-bottom: 12rpx;
+		margin-bottom: 8rpx;
 		display: flex;
 		flex-direction: column;
 		width: 100%;
@@ -5729,18 +5722,18 @@
 	.placeholder-message {
 		text-align: center;
 		color: #6c757d;
-		padding: 80rpx 24rpx;
+		padding: 40rpx 24rpx;
 		background: linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(248, 249, 250, 0.8));
 		border-radius: 24rpx;
-		margin: 20rpx;
+		margin: 8rpx 12rpx;
 		backdrop-filter: blur(8rpx);
 		border: 2rpx solid rgba(0, 0, 0, 0.04);
 	}
 
 	.placeholder-icon {
-		font-size: 72rpx;
+		font-size: 60rpx;
 		display: block;
-		margin-bottom: 24rpx;
+		margin-bottom: 12rpx;
 		animation: bounce 2s infinite;
 		filter: drop-shadow(0 4rpx 8rpx rgba(0, 0, 0, 0.1));
 	}
@@ -5795,7 +5788,7 @@
 		display: flex;
 		animation: none;
 		box-shadow: none;
-		margin-bottom: 12rpx;
+		margin-bottom: 8rpx;
 	}
 
 	.battle-fill {
@@ -6135,7 +6128,7 @@
 	/* 投票按钮 */
 	/* 固定大小的投票区域容器 */
 	.battle-section-fixed {
-		padding: 8rpx 20rpx 20rpx 20rpx;
+		padding: 4rpx 20rpx 20rpx 20rpx;
 		background: transparent;
 		flex-shrink: 0;
 	}
@@ -6145,7 +6138,7 @@
 		gap: 20rpx;
 		justify-content: center;
 		align-items: center;
-		margin-top: 12rpx;
+		margin-top: 8rpx;
 	}
 
 	/* 投票按钮 */
@@ -6158,7 +6151,7 @@
 		transition: all 0.3s ease;
 		position: relative;
 		width: 100%;
-		padding: 20rpx 16rpx;
+		padding: 18rpx 14rpx;
 		border: 4rpx solid #000;
 		box-shadow: 8rpx 8rpx 0 #000;
 		font-weight: 900;
@@ -7230,7 +7223,7 @@
 		border: 6rpx solid #000;
 		border-radius: 0;
 		padding: 20rpx;
-		margin-bottom: 12rpx;
+		margin-bottom: 8rpx;
 		box-shadow: 10rpx 10rpx 0 #000;
 		opacity: 1 !important;
 		position: relative;
@@ -7441,7 +7434,7 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 1rpx 2rpx;
-		margin: 0;
+		margin: 0 0 4rpx 0;
 	}
 
 	/* 激励标语样式 */

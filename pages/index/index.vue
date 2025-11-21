@@ -12,7 +12,6 @@
 	<view class="irregular-icons">
 		<image src="/static/home/guangbo-bangong.png" class="icon-1"></image>
 		<image src="/static/home/kidaha-.png" class="icon-2"></image>
-		<image src="/static/home/quweichahuaqueshengye.png" class="icon-3"></image>
 	</view>
 
 	<!-- 主内容区域 -->
@@ -796,17 +795,17 @@
 		position: absolute;
 		width: 100%;
 		height: 100%;
-		z-index: 5;
+		z-index: 20;
 		pointer-events: none;
 	}
 
 	.icon-1 {
 		position: absolute;
-		width: 160rpx;
-		height: 160rpx;
-		top: 15%;
-		left: 8%;
-		opacity: 0.7;
+		width: 200rpx;
+		height: 200rpx;
+		top: 10%;
+		left: 5%;
+		opacity: 0.85;
 		transform: rotate(-25deg) scaleX(-1);
 		filter: drop-shadow(0 4rpx 8rpx rgba(255, 0, 0, 0.3));
 		animation: floatIcon1 4s ease-in-out infinite;
@@ -814,11 +813,11 @@
 
 	.icon-2 {
 		position: absolute;
-		width: 180rpx;
-		height: 180rpx;
-		bottom: 20%;
-		right: 5%;
-		opacity: 0.65;
+		width: 220rpx;
+		height: 220rpx;
+		bottom: 15%;
+		right: 2%;
+		opacity: 0.8;
 		transform: rotate(35deg) scaleY(-1);
 		filter: drop-shadow(0 6rpx 12rpx rgba(0, 102, 255, 0.3));
 		animation: floatIcon2 5s ease-in-out infinite;
