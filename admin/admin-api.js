@@ -846,6 +846,98 @@ if (window.ws) {
 	};
 }
 
+// ==================== 辩论流程管理API ====================
+
+/**
+ * 获取指定流的辩论流程配置
+ * @param {string} streamId - 直播流ID
+ * @returns {Promise<Object>}
+ */
+async function getDebateFlowConfig(streamId) {
+	try {
+		console.log(`📡 获取流 ${streamId} 的辩论流程配置...`);
+		
+		const result = await apiRequest(`/api/admin/debate-flow?stream_id=${streamId}`, {
+			method: 'GET'
+		});
+		
+		console.log(`✅ 获取成功:`, result);
+		return result || { segments: [] };
+	} catch (error) {
+		console.error('❌ 获取辩论流程配置失败:', error);
+		// 返回默认流程配置
+		return {
+			segments: [
+				{ name: '正方发言', duration: 180, side: 'left' },
+				{ name: '反方质问', duration: 120, side: 'right' },
+				{ name: '反方发言', duration: 180, side: 'right' },
+				{ name: '正方质问', duration: 120, side: 'left' },
+				{ name: '自由辩论', duration: 300, side: 'both' },
+				{ name: '正方总结', duration: 120, side: 'left' },
+				{ name: '反方总结', duration: 120, side: 'right' }
+			]
+		};
+	}
+}
+
+/**
+ * 保存辩论流程配置
+ * @param {string} streamId - 直播流ID
+ * @param {Array} segments - 环节数组
+ * @returns {Promise<Object>}
+ */
+async function saveDebateFlowConfigAPI(streamId, segments) {
+	try {
+		console.log(`📡 保存流 ${streamId} 的辩论流程配置...`);
+		
+		const result = await apiRequest(`/api/admin/debate-flow`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({
+				stream_id: streamId,
+				segments: segments
+			})
+		});
+		
+		console.log(`✅ 保存成功:`, result);
+		return result;
+	} catch (error) {
+		console.error('❌ 保存辩论流程配置失败:', error);
+		throw error;
+	}
+}
+
+/**
+ * 发送辩论流程控制命令
+ * @param {string} streamId - 直播流ID
+ * @param {string} action - 命令 (start/pause/resume/reset/next/prev)
+ * @returns {Promise<Object>}
+ */
+async function sendDebateFlowControl(streamId, action) {
+	try {
+		console.log(`📡 发送流 ${streamId} 的流程控制命令: ${action}...`);
+		
+		const result = await apiRequest(`/api/admin/debate-flow/control`, {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({
+				stream_id: streamId,
+				action: action
+			})
+		});
+		
+		console.log(`✅ 命令发送成功:`, result);
+		return result;
+	} catch (error) {
+		console.error('❌ 发送流程控制命令失败:', error);
+		throw error;
+	}
+}
+
 console.log('✅ 后台管理系统API模块加载完成');
 console.log('📡 当前API服务器:', getAPIBase());
 

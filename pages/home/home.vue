@@ -679,9 +679,7 @@
 			// 接收 streamId 参数（从直播选择页传递）
 			if (options && options.streamId) {
 				this.streamId = options.streamId;
-				console.log('📺 当前直播间 ID:', this.streamId);
 			} else {
-				console.warn('⚠️ 未指定直播间 ID，将使用默认直播流');
 			}
 			
 			// 初始化API服务
@@ -712,7 +710,6 @@
 						if (service) {
 							// 如果指定了 streamId，获取该直播流的信息
 							if (this.streamId) {
-								console.log('🔍 获取指定直播流信息:', this.streamId);
 								try {
 									// 通过 streams 接口获取指定直播流
 									const streams = await service.getStreamsList();
@@ -723,18 +720,12 @@
 									const streamUrl = targetStream.playUrls?.hls || targetStream.url;
 									// 使用智能转换方法设置HLS流地址
 									await this.setLiveStreamUrlWithHls(streamUrl, targetStream.name);
-									console.log('🎬 从streams接口初始化直播流地址:', this.liveStreamUrl);
-									console.log('📺 直播间名称:', targetStream.name);
 									if (targetStream.playUrls?.hls) {
-										console.log('📺 使用 playUrls.hls 播放地址');
 									} else {
-										console.log('📺 使用 url 播放地址（兼容模式）');
 									}
 								} else {
-									console.warn('⚠️ 未找到指定的直播流:', this.streamId);
 								}
 								} catch (error) {
-									console.error('❌ 获取指定直播流失败:', error);
 								}
 							} else {
 								// 未指定 streamId，使用默认逻辑
@@ -748,32 +739,25 @@
 									if (streamUrl) {
 										// 使用智能转换方法设置HLS流地址
 										await this.setLiveStreamUrlWithHls(streamUrl, dashboardData.activeStreamName);
-										console.log('🎬 从dashboard初始化直播流地址:', this.liveStreamUrl);
 										if (dashboardData.activeStreamName) {
-											console.log('📺 流名称:', dashboardData.activeStreamName);
 										}
 									} else {
-										console.warn('⚠️ dashboard接口返回数据中未找到直播流地址');
 									}
 								}
 							} catch (dashboardError) {
-								console.warn('⚠️ dashboard接口获取失败，尝试streams接口:', dashboardError.message);
 								// 最后尝试通过 streams 接口获取
 								try {
 									const streamUrl = await this.fetchActiveStreamFromServerAlternative();
 									if (streamUrl) {
 										// 使用智能转换方法设置HLS流地址
 										await this.setLiveStreamUrlWithHls(streamUrl);
-										console.log('🎬 从streams接口初始化直播流地址:', this.liveStreamUrl);
 									}
 								} catch (streamsError) {
-									console.warn('⚠️ 所有接口都获取失败，无法初始化直播流地址');
 								}
 							}
 							}
 						}
 					} catch (error) {
-						console.warn('⚠️ 获取数据库直播流失败:', error.message);
 						// 不再使用配置文件默认值，完全依赖接口数据
 					}
 				}, 500); // 延迟500ms，确保API服务已初始化
@@ -786,7 +770,6 @@
 				// 延迟一点时间，确保 Dashboard 的数据已经更新
 				setTimeout(() => {
 					if (this.streamId && (this.topLeftVotes === 0 && this.topRightVotes === 0)) {
-						console.log('📊 Dashboard未返回票数或票数为0，尝试从投票接口获取');
 						this.fetchTopBarVotes();
 					}
 				}, 200);
@@ -797,20 +780,16 @@
 			setTimeout(() => {
 				// 再次确认 streamId 存在
 				if (this.streamId) {
-					console.log('📊 页面加载后获取票数，streamId:', this.streamId);
 					this.fetchTopBarVotes();
 					// 启动顶部对抗条实时更新（包括定时轮询）
 					this.startTopBarRealTimeUpdate();
 				} else {
-					console.warn('⚠️ streamId 未设置，延迟获取票数');
 					// 如果 streamId 还没有设置，再延迟一点
 					setTimeout(() => {
 						if (this.streamId) {
-							console.log('📊 延迟获取票数，streamId:', this.streamId);
 							this.fetchTopBarVotes();
 							this.startTopBarRealTimeUpdate();
 						} else {
-							console.error('❌ streamId 仍未设置，无法获取票数');
 						}
 					}, 500);
 				}
@@ -897,13 +876,10 @@
 			getPlayerMode() {
 				if (this.liveStreamUrl) {
 					if (this.liveStreamUrl.includes('.flv')) {
-						console.log('🎬 [播放器模式] FLV 格式，使用 RTC 模式');
 						return 'RTC'; // FLV 需要使用 RTC 模式
 					} else if (this.liveStreamUrl.includes('rtmp://')) {
-						console.log('🎬 [播放器模式] RTMP 格式，使用 live 模式');
 						return 'live'; // RTMP 使用 live 模式
 					} else if (this.liveStreamUrl.includes('.m3u8')) {
-						console.log('🎬 [播放器模式] HLS 格式，使用 RTC 模式');
 						return 'RTC'; // HLS 使用 RTC 模式
 					}
 				}
@@ -953,19 +929,7 @@
 					// 确保 this.apiService 也使用正确的地址
 					this.apiService = apiService;
 					
-					console.log('✅ API服务初始化完成');
-					console.log('📡 当前服务器地址:', configUrl);
-					console.log('📡 apiService.baseURL:', apiService.baseURL);
-					
-					// 测试API连接
-					const isConnected = await apiService.testConnection();
-					if (isConnected) {
-						console.log('✅ API连接测试成功');
-					} else {
-						console.warn('⚠️ API连接测试失败，请检查服务器是否运行');
-					}
 				} catch (error) {
-					console.error('❌ API服务初始化失败:', error);
 				}
 			},
 			
@@ -979,7 +943,6 @@
 			 */
 			async setLiveStreamUrlWithHls(streamUrl, streamName = null) {
 				if (!streamUrl) {
-					console.warn('⚠️ 流地址为空，无法设置');
 					return false;
 				}
 				
@@ -999,10 +962,6 @@
 						
 						// 替换 localhost 为真实 IP
 						hlsUrl = hlsUrl.replace('localhost', serverIp);
-						console.log('🔄 已修正 HLS 地址中的 localhost:', {
-							原地址: streamUrl,
-							新地址: hlsUrl
-						});
 					}
 					
 					// 2. 修正房间名（如果提供了 streamName 且与 URL 中的房间名不匹配）
@@ -1015,12 +974,6 @@
 						if (currentFileName !== correctFileName) {
 							const oldUrl = hlsUrl;
 							hlsUrl = hlsUrl.replace(currentFileName, correctFileName);
-							console.log('🔄 已修正 HLS 地址中的房间名:', {
-								原地址: oldUrl,
-								原文件名: currentFileName,
-								新文件名: correctFileName,
-								新地址: hlsUrl
-							});
 							
 							uni.showToast({
 								title: `已自动修正为 ${streamName} 流`,
@@ -1036,21 +989,14 @@
 						const middlewareServerUrl = 'http://192.168.31.249:8081';
 						const originalUrl = hlsUrl;
 						hlsUrl = hlsUrl.replace('http://192.168.31.189:8086', middlewareServerUrl);
-						console.log('🔄 已改为通过中间层代理:', {
-							原地址: originalUrl,
-							代理地址: hlsUrl
-						});
 					}
 					
 					this.liveStreamUrl = hlsUrl;
-					console.log('✅ 流地址已设置为:', hlsUrl);
 					return true;
 				}
 					
 					// 如果是RTMP或FLV格式，需要转换为HLS
 					if (streamUrl.startsWith('rtmp://') || streamUrl.includes('.flv')) {
-						console.log('🔄 检测到非HLS格式流，正在转换为HLS...');
-						console.log('📺 原始流地址:', streamUrl);
 						
 						try {
 							// 使用API服务的智能转换方法
@@ -1058,27 +1004,18 @@
 							
 						if (hlsUrl) {
 							this.liveStreamUrl = hlsUrl;
-							console.log('✅ 成功转换为HLS格式:', hlsUrl);
-							console.log('🎬 [播放器状态检查]', {
-								isLiveStarted: this.isLiveStarted,
-								liveStreamUrl: this.liveStreamUrl,
-								播放器条件: this.isLiveStarted && this.liveStreamUrl ? '✅ 满足' : '❌ 不满足'
-							});
 							
 							// 如果直播未开始，但已有流地址，尝试开始播放
 							if (!this.isLiveStarted && this.liveStreamUrl) {
-								console.log('💡 流地址已设置，但直播未开始，尝试开始播放...');
 								// 这里不自动开始，等待服务器通知或用户操作
 							}
 
 							return true;
 							} else {
-								console.error('❌ HLS转换失败，使用原始地址');
 								this.liveStreamUrl = streamUrl;
 								return false;
 							}
 						} catch (conversionError) {
-							console.error('❌ HLS转换出错:', conversionError);
 							
 							uni.showToast({
 								title: 'HLS转换失败: ' + (conversionError.message || '未知错误'),
@@ -1094,11 +1031,9 @@
 					
 					// 其他格式，直接使用
 					this.liveStreamUrl = streamUrl;
-					console.log('📺 使用流地址:', streamUrl);
 					return true;
 					
 				} catch (error) {
-					console.error('❌ 设置流地址失败:', error);
 					return false;
 				}
 			},
@@ -1108,41 +1043,27 @@
 				try {
 					const service = this.apiService || apiService;
 					if (!service) {
-						console.warn('⚠️ API服务未初始化，无法获取直播状态');
 						return;
 					}
 					
-				console.log('📡 正在获取直播状态（dashboard接口）...');
 				// 🔧 如果指定了 streamId，获取该流的Dashboard状态
 				const dashboardData = await service.getDashboard(this.streamId);
 					
 					if (dashboardData) {
-						console.log('📊 Dashboard数据:', dashboardData);
 						
 						// 🔍 多直播支持：检查返回的数据是否属于当前直播间
 						const responseStreamId = dashboardData.streamId || dashboardData.liveId;
 						if (this.streamId && responseStreamId && responseStreamId !== this.streamId) {
-							console.log('⏩ Dashboard数据不属于当前直播间，忽略:', responseStreamId, '当前直播间:', this.streamId);
 							return;
 						}
 						
 						// 🔧 从Dashboard获取票数数据（如果包含，优先使用）
 						if (dashboardData.leftVotes !== undefined && dashboardData.rightVotes !== undefined) {
-							console.log('📊 Dashboard包含票数数据，更新票数:', {
-								left: dashboardData.leftVotes,
-								right: dashboardData.rightVotes,
-								streamId: responseStreamId
-							});
 							// 只有在streamId匹配时才更新（首次加载时总是更新）
 							if (!this.streamId || !responseStreamId || responseStreamId === this.streamId) {
 								// 🔧 修复：始终使用数据库返回的票数，这是真实数据
 								this.topLeftVotes = dashboardData.leftVotes || 0;
 								this.topRightVotes = dashboardData.rightVotes || 0;
-								console.log('✅ 从Dashboard更新票数成功:', {
-									left: this.topLeftVotes,
-									right: this.topRightVotes,
-									streamId: responseStreamId
-								});
 							}
 						}
 						
@@ -1156,13 +1077,11 @@
 					if (streamUrl) {
 						// 使用智能转换方法设置HLS流地址
 						await this.setLiveStreamUrlWithHls(streamUrl, dashboardData.activeStreamName);
-						console.log('📺 更新直播流地址（从dashboard）:', this.liveStreamUrl);
 					}
 						
 						// ⚠️ 重要：如果服务器显示直播已开始，但客户端状态未同步，强制同步
 						if (nowLive && !wasLive) {
 							// 直播从停止变为开始
-							console.log('✅ Dashboard显示直播已开始，更新UI');
 							
 							// 确保流地址存在
 							if (!this.liveStreamUrl && dashboardData.liveStreamUrl) {
@@ -1178,8 +1097,6 @@
 							this.$nextTick(async () => {
 								// ⚠️ 检查流地址格式：小程序 live-player 只支持 HLS，不支持 RTMP
 								if (this.liveStreamUrl && this.liveStreamUrl.startsWith('rtmp://')) {
-									console.warn('⚠️ 检测到 RTMP 流地址，小程序 live-player 不支持 RTMP，需要转换为 HLS 格式');
-									console.warn('⚠️ 当前流地址:', this.liveStreamUrl);
 									// 尝试查找对应的 HLS 流（如果数据库中有）
 									// 或者提示用户需要配置 HLS 流
 									uni.showToast({
@@ -1192,10 +1109,6 @@
 								} else if (this.liveStreamUrl) {
 									// HLS 或其他支持的格式
 									this.isLiveStarted = true;
-									console.log('✅ 直播状态已更新为"直播已开始"');
-									console.log('📺 使用的流地址:', this.liveStreamUrl);
-									console.log('🎬 isLiveStarted:', this.isLiveStarted);
-									console.log('🎬 liveStreamUrl:', this.liveStreamUrl);
 									
 									uni.showToast({
 										title: '直播已开始',
@@ -1208,26 +1121,21 @@
 										this.startAIContentAfterLiveStart();
 									}, 1000);
 								} else {
-									console.warn('⚠️ Dashboard显示直播已开始，但缺少流地址');
 									// 即使没有流地址，如果服务器明确说直播已开始，也更新状态
 									this.isLiveStarted = true;
 								}
 							});
 						} else if (nowLive && wasLive) {
 						// 直播已经在进行中，确保状态同步
-						console.log('🔄 直播进行中，确保状态同步');
 						if (!this.isLiveStarted) {
 							this.isLiveStarted = true;
-							console.log('✅ 同步直播状态为"已开始"');
 						}
 						// 确保流地址存在
 						if (!this.liveStreamUrl && streamUrl) {
 							await this.setLiveStreamUrlWithHls(streamUrl, dashboardData.activeStreamName);
-							console.log('📺 更新直播流地址:', this.liveStreamUrl);
 						}
 					} else if (!nowLive && wasLive) {
 						// 🔧 直播从开始变为停止 - 强制退出并返回直播选择页面
-						console.log('🛑 Dashboard显示直播已停止（轮询检测），当前直播间:', this.streamId);
 						this.isLiveStarted = false;
 						
 						uni.showToast({
@@ -1238,15 +1146,12 @@
 						
 						// 🔧 延迟1.5秒后自动返回直播选择页面
 						setTimeout(() => {
-							console.log('🔄 自动返回直播选择页面（轮询触发）');
 							// 使用 redirectTo 替换当前页面，避免用户通过返回按钮回到已停止的直播页面
 							uni.redirectTo({
 								url: '/pages/live-select/live-select',
 								success: () => {
-									console.log('✅ 已返回直播选择页面');
 								},
 								fail: (err) => {
-									console.error('❌ 返回直播选择页面失败:', err);
 									// 如果 redirectTo 失败，尝试使用 navigateBack
 									uni.navigateBack({
 										delta: 1,
@@ -1264,7 +1169,6 @@
 								// 状态没有变化，但确保状态同步
 								if (nowLive !== wasLive) {
 									this.isLiveStarted = nowLive;
-									console.log(`🔄 同步直播状态: ${nowLive ? '已开始' : '未开始'}`);
 									
 									// 如果直播已开始，但还未启动AI内容获取，则启动
 									if (nowLive && typeof this.startAIContentAfterLiveStart === 'function') {
@@ -1276,10 +1180,6 @@
 								
 								// 如果当前直播已开始，确保有流地址并启动AI内容获取
 								if (nowLive && this.isLiveStarted && this.liveStreamUrl) {
-									console.log('✅ 直播进行中，检查AI内容获取状态');
-									console.log('🎬 isLiveStarted:', this.isLiveStarted);
-									console.log('🎬 liveStreamUrl:', this.liveStreamUrl);
-									console.log('🤖 recognitionTimer:', this.recognitionTimer ? '已启动' : '未启动');
 									
 									if (!this.recognitionTimer && typeof this.startAIContentRealTimeUpdate === 'function') {
 										setTimeout(() => {
@@ -1291,7 +1191,6 @@
 						}
 					}
 				} catch (error) {
-					console.warn('⚠️ 获取直播状态失败:', error || '未知错误');
 					// 不抛出错误，避免影响页面加载
 				}
 			},
@@ -1308,7 +1207,6 @@
 					this.fetchLiveStatus();
 				}, 5000);
 				
-				console.log('🔄 已启动直播状态轮询（每5秒）');
 			},
 			
 			// 停止直播状态轮询
@@ -1316,7 +1214,6 @@
 				if (this.liveStatusPollingTimer) {
 					clearInterval(this.liveStatusPollingTimer);
 					this.liveStatusPollingTimer = null;
-					console.log('⏹️ 已停止直播状态轮询');
 				}
 			},
 
@@ -1325,7 +1222,6 @@
 				try {
 					const service = this.apiService || apiService;
 					if (!service) {
-						console.warn('⚠️ API服务未初始化，无法获取数据库直播流');
 						return null;
 					}
 					
@@ -1339,15 +1235,12 @@
 							if (streamUrl) {
 								// 使用智能转换方法设置HLS流地址
 								await this.setLiveStreamUrlWithHls(streamUrl, dashboardData.activeStreamName);
-								console.log('🎬 从dashboard获取到直播流:', this.liveStreamUrl);
 								if (dashboardData.activeStreamName) {
-									console.log('📺 流名称:', dashboardData.activeStreamName);
 								}
 								return this.liveStreamUrl;
 							}
 						}
 					} catch (dashboardError) {
-						console.warn('⚠️ dashboard接口获取失败，尝试status接口:', dashboardError.message);
 						// 如果 dashboard 接口失败，尝试使用 status 接口（兼容旧版本）
 						const statusResponse = await service.getLiveStatus();
 						if (statusResponse) {
@@ -1355,16 +1248,13 @@
 							if (streamUrl) {
 								// 使用智能转换方法设置HLS流地址
 								await this.setLiveStreamUrlWithHls(streamUrl, statusResponse.activeStreamName);
-								console.log('🎬 从status接口获取到启用直播流:', this.liveStreamUrl);
 								if (statusResponse.activeStreamName) {
-									console.log('📺 流名称:', statusResponse.activeStreamName);
 								}
 								return this.liveStreamUrl;
 							}
 						}
 					}
 				} catch (error) {
-					console.warn('⚠️ 获取数据库直播流失败:', error.message);
 					// 如果接口不存在，尝试备用方案
 					if (error.message && error.message.includes('404')) {
 						return await this.fetchActiveStreamFromServerAlternative();
@@ -1382,7 +1272,6 @@
 					}
 					
 					// 尝试通过直播流列表接口获取启用的流
-					console.log('💡 尝试通过直播流列表接口获取启用直播流...');
 					
 					const streamsResponse = await service.request({ 
 						url: '/api/admin/streams', 
@@ -1400,7 +1289,6 @@
 					} else if (Array.isArray(streamsResponse)) {
 						streams = streamsResponse;
 					} else {
-						console.warn('⚠️ 直播流列表接口返回格式不正确:', streamsResponse);
 						return null;
 					}
 					
@@ -1412,22 +1300,16 @@
 					if (streamUrl) {
 						// 使用智能转换方法设置HLS流地址
 						await this.setLiveStreamUrlWithHls(streamUrl, activeStream.name);
-						console.log('✅ 通过备用接口获取到启用直播流:', this.liveStreamUrl);
 						if (activeStream.playUrls?.hls) {
-							console.log('📺 使用 playUrls.hls 播放地址');
 						} else {
-							console.log('📺 使用 url 播放地址（兼容模式）');
 						}
-						console.log('📺 流名称:', activeStream.name || '未知');
 						return this.liveStreamUrl;
 					}
 				} else {
-					console.warn('⚠️ 没有找到启用的直播流');
 				}
 					
 					return null;
 				} catch (error) {
-					console.warn('⚠️ 备用方案也失败:', error.message);
 					return null;
 				}
 			},
@@ -1443,24 +1325,12 @@
 						// 重新获取服务器信息
 						this.apiServerInfo = apiService.getCurrentServerInfo();
 						
-						console.log(`API服务器已切换到: ${serverType} (${newUrl})`);
-						
-						// 测试新服务器连接
-						const isConnected = await apiService.testConnection();
-						if (isConnected) {
-							uni.showToast({
-								title: `已切换到${serverType}服务器`,
-								icon: 'success'
-							});
-						} else {
-							uni.showToast({
-								title: '服务器连接失败',
-								icon: 'error'
-							});
-						}
+					uni.showToast({
+						title: `已切换到${serverType}服务器`,
+						icon: 'success'
+					});
 					}
 				} catch (error) {
-					console.error('切换API服务器失败:', error);
 					uni.showToast({
 						title: '切换服务器失败',
 						icon: 'error'
@@ -1480,8 +1350,6 @@
 			const code = e.detail.code;
 			const message = e.detail.message || '';
 			
-			console.log(`📺 [HLS状态] Code: ${code}, Message: ${message}`);
-			console.log(`📺 [播放器状态] 当前流地址: ${this.liveStreamUrl}, 播放状态: ${this.isLiveStarted}`);
 			
 			// 微信小程序 live-player 状态码说明：
 			// 连接阶段
@@ -1534,7 +1402,6 @@
 					// 记录连接时间
 					const connectTime = Date.now() - (this.hlsStats.startTime || Date.now());
 					this.hlsStatus.connectTime = connectTime;
-					console.log(`✅ [HLS] 直播连接成功，耗时: ${connectTime}ms`);
 					break;
 					
 				case 2007:
@@ -1545,14 +1412,12 @@
 					
 				case 2008:
 					this.liveStatus = 'decoding';
-					console.log('🎬 [HLS] 解码器已启动');
 					break;
 					
 				case -2301:
 					// 网络断连
 					this.liveStatus = 'disconnected';
 					this.hlsStats.errorCount++;
-					console.error('❌ [HLS] 网络断连');
 					this.showHlsStatus('网络连接已断开', 'error', 3000);
 					this.tryHlsReconnect();
 					break;
@@ -1561,7 +1426,6 @@
 					// 获取拉流地址失败
 					this.liveStatus = 'error';
 					this.hlsStats.errorCount++;
-					console.error('❌ [HLS] 获取拉流地址失败');
 					this.showHlsStatus('无法获取直播地址', 'error', 3000);
 					this.tryHlsReconnect();
 					break;
@@ -1570,7 +1434,6 @@
 					// 播放地址无效
 					this.liveStatus = 'error';
 					this.hlsStats.errorCount++;
-					console.error('❌ [HLS] 播放地址无效:', this.liveStreamUrl);
 					this.showHlsStatus('直播地址无效，请检查配置', 'error', 5000);
 					break;
 					
@@ -1578,7 +1441,6 @@
 					// 播放格式不支持
 					this.liveStatus = 'error';
 					this.hlsStats.errorCount++;
-					console.error('❌ [HLS] 播放格式不支持');
 					this.showHlsStatus('不支持此直播格式', 'error', 5000);
 					break;
 					
@@ -1586,7 +1448,6 @@
 					// 播放器内部错误
 					this.liveStatus = 'error';
 					this.hlsStats.errorCount++;
-					console.error('❌ [HLS] 播放器内部错误');
 					this.showHlsStatus('播放器出错', 'error', 3000);
 					this.tryHlsReconnect();
 					break;
@@ -1595,13 +1456,11 @@
 					// 解码失败
 					this.liveStatus = 'error';
 					this.hlsStats.errorCount++;
-					console.error('❌ [HLS] 视频解码失败');
 					this.showHlsStatus('视频解码失败', 'error', 3000);
 					this.tryHlsReconnect();
 					break;
 					
 				default:
-					console.log(`📺 [HLS] 未处理的状态码: ${code}`);
 					this.hlsStatus.code = code;
 			}
 		},
@@ -1611,12 +1470,9 @@
 			const errCode = e.detail.errCode;
 			const errMsg = e.detail.errMsg || '';
 
-			console.error(`❌ [VIDEO错误] Code: ${errCode}, Message: ${errMsg}`);
 
 			// 检查FLV格式是否支持
 			if (this.liveStreamUrl && this.liveStreamUrl.includes('.flv')) {
-				console.error('⚠️ [FLV播放失败] 原生 video 组件可能不支持 FLV 格式');
-				console.error('✅ 建议改用 HLS 格式或使用第三方播放器组件');
 			}
 		},
 
@@ -1625,7 +1481,6 @@
 			const errCode = e.detail.errCode;
 			const errMsg = e.detail.errMsg || '';
 
-			console.error(`❌ [HLS错误] Code: ${errCode}, Message: ${errMsg}`);
 
 			this.liveStatus = 'error';
 			this.hlsStats.errorCount++;
@@ -1642,16 +1497,6 @@
 
 					if (isRealDevice) {
 						// 真机上的权限错误：需要配置微信公众平台
-						console.error('❌ [权限错误] live-player 组件在真机上仍然无法使用');
-						console.error('❌ 这是微信公众平台的权限配置问题！');
-						console.error('✅ 解决方法（配置微信公众平台）：');
-						console.error('   1. 登录微信公众平台 (https://mp.weixin.qq.com)');
-						console.error('   2. 进入"开发" -> "开发管理" -> "开发设置"');
-						console.error('   3. 在"服务器域名"中添加直播流域名：');
-						console.error('      - request合法域名: http://192.168.31.249:8081');
-						console.error('      - downloadFile合法域名: http://192.168.31.249:8081');
-						console.error('   4. 检查"服务类目"是否包含"视频"或"直播"类目');
-						console.error('   5. 确保小程序主体类型支持直播功能');
 						
 						uni.showModal({
 							title: '⚠️ 权限配置问题',
@@ -1661,13 +1506,6 @@
 						});
 					} else {
 						// 开发者工具中的权限错误：这是已知限制
-						console.error('❌ [权限错误] live-player 组件在开发者工具中无法正常工作');
-						console.error('❌ 这是微信开发者工具的已知限制，不是代码问题！');
-						console.error('✅ 解决方法（必须使用真机）：');
-						console.error('   1. 点击微信开发者工具的"预览"按钮');
-						console.error('   2. 用微信扫码在真机上测试');
-						console.error('   3. 真机上的 live-player 组件可以正常工作');
-						console.error('   注意：开发者工具中的 live-player 组件经常无法正常工作，这是正常现象');
 						
 						uni.showModal({
 							title: '⚠️ 开发者工具限制',
@@ -1678,8 +1516,6 @@
 					}
 				} catch (error) {
 					// 如果无法获取系统信息，默认认为是开发者工具
-					console.error('❌ [权限错误] live-player 组件权限问题');
-					console.error('❌ 无法确定运行环境，建议使用真机测试');
 					
 					uni.showModal({
 						title: '⚠️ 权限问题',
@@ -1692,7 +1528,6 @@
 				
 				// #ifndef MP-WEIXIN
 				// 非微信小程序环境
-				console.error('❌ [权限错误] live-player 组件权限问题');
 				uni.showModal({
 					title: '⚠️ 权限问题',
 					content: 'live-player 组件出现权限错误，请检查配置。',
@@ -1749,26 +1584,17 @@
 			
 			// 每10秒打印一次质量日志（降低日志频率）
 			if (Date.now() % 10000 < 1000) {
-				console.log('📊 [HLS质量]', {
-					'视频码率': `${info.videoBitrate || 0} kbps`,
-					'音频码率': `${info.audioBitrate || 0} kbps`,
-					'帧率': `${info.videoFPS || 0} fps`,
-					'分辨率': `${info.videoWidth || 0}x${info.videoHeight || 0}`,
-					'网络速度': `${info.netSpeed || 0} kbps`
-				});
 			}
 		},
 		
 		// 处理全屏变化
 		handleFullScreenChange(e) {
 			const fullScreen = e.detail.fullScreen;
-			console.log(`📺 [HLS] 全屏状态: ${fullScreen ? '全屏' : '退出全屏'}`);
 		},
 		
 		// 处理音量通知
 		handleAudioVolumeNotify(e) {
 			// 音频音量通知（WebRTC 模式下有效）
-			console.log('🔊 [HLS] 音量:', e.detail);
 		},
 		
 		// ==================== HLS 辅助方法 ====================
@@ -1798,12 +1624,10 @@
 		// HLS 自动重连
 		tryHlsReconnect() {
 			if (!this.hlsReconnect.enabled) {
-				console.log('⚠️ [HLS] 自动重连已禁用');
 				return;
 			}
 			
 			if (this.hlsReconnect.attempts >= this.hlsReconnect.maxAttempts) {
-				console.error('❌ [HLS] 重连次数已达上限，停止重连');
 				this.showHlsStatus(`重连失败，已尝试${this.hlsReconnect.maxAttempts}次`, 'error', 5000);
 				return;
 			}
@@ -1821,12 +1645,10 @@
 			
 			this.hlsReconnect.attempts++;
 			
-			console.log(`🔄 [HLS] 准备重连... (第${this.hlsReconnect.attempts}次，延迟${delay}ms)`);
 			this.showHlsStatus(`正在重连... (${this.hlsReconnect.attempts}/${this.hlsReconnect.maxAttempts})`, 'warning');
 			
 			// 延迟后重连
 			this.hlsReconnect.timer = setTimeout(() => {
-				console.log(`🔄 [HLS] 开始重连 (第${this.hlsReconnect.attempts}次)`);
 				
 				// 重新加载直播流（通过切换 isLiveStarted 触发重载）
 				this.isLiveStarted = false;
@@ -1843,17 +1665,14 @@
 			
 			// 检测码率异常（太低）
 			if (quality.videoBitrate > 0 && quality.videoBitrate < 100) {
-				console.warn('⚠️ [HLS] 视频码率过低:', quality.videoBitrate, 'kbps');
 			}
 			
 			// 检测帧率异常（太低）
 			if (quality.videoFPS > 0 && quality.videoFPS < 15) {
-				console.warn('⚠️ [HLS] 视频帧率过低:', quality.videoFPS, 'fps');
 			}
 			
 			// 检测网络抖动
 			if (quality.netJitter > 200) {
-				console.warn('⚠️ [HLS] 网络抖动较大:', quality.netJitter, 'ms');
 			}
 		},
 		
@@ -1868,7 +1687,6 @@
 				startTime: 0
 			};
 			this.hlsReconnect.attempts = 0;
-			console.log('🔄 [HLS] 统计数据已重置');
 		},
 		
 		// 获取 HLS 播放质量报告
@@ -1911,10 +1729,8 @@
 						this.debateDescription = response.description || '';
 						this.currentDebateTopic = response.title || '';
 					} else {
-						console.warn('⚠️ 获取辩题失败：响应格式不符合预期', response);
 					}
 				} catch (error) {
-					console.error('❌ 获取辩题失败:', error);
 					uni.showToast({
 						title: '获取辩题失败',
 						icon: 'error'
@@ -1928,22 +1744,17 @@
 					const service = this.apiService || apiService;
 					
 					// 🔍 调试日志：检查 streamId 和当前票数
-					console.log('📊 获取票数 - streamId:', this.streamId);
-					console.log('📊 获取票数 - 当前票数:', { left: this.topLeftVotes, right: this.topRightVotes });
 					
 					// 🔧 如果 streamId 不存在，记录警告但不继续（避免获取错误的全局数据）
 					if (!this.streamId) {
-						console.warn('⚠️ 无法获取票数：缺少 streamId，跳过本次更新');
 						return;
 					}
 					
 					// 调试日志：检查当前使用的服务器地址
-					console.log('📊 获取票数 - 使用服务器:', service.baseURL || service.getCurrentConfig?.()?.baseURL || '未设置');
 					
 					// 使用 /api/votes 获取票数（展示用）
                     const response = await service.getVote(this.streamId);
 					
-					console.log('📊 获取票数 - Dashboard API响应:', response);
 					
 					if (response) {
 						const data = response;
@@ -1957,24 +1768,14 @@
                             // 按展示规则：在后端返回的累计票数基础上，各自 +50 进行显示
                             this.topLeftVotes = Math.max(0, newLeftVotes + 50);
                             this.topRightVotes = Math.max(0, newRightVotes + 50);
-							console.log('✅ 票数更新成功（来自 Dashboard）:', { 
-								left: this.topLeftVotes, 
-								right: this.topRightVotes,
-								total: newTotal,
-								streamId: this.streamId
-							});
 						} else {
-							console.warn('⚠️ Dashboard API 未返回票数数据:', data);
 						}
 					} else {
-						console.warn('⚠️ 获取 Dashboard 失败');
 					}
 			} catch (error) {
-				console.error('❌ 获取票数失败:', error);
 				// 🔧 获取失败时不要显示错误提示，避免干扰用户
 				// 只在开发环境显示详细错误
 				if (process.env.NODE_ENV === 'development') {
-					console.error('❌ 获取票数错误详情:', error.message);
 				}
 			}
 		},
@@ -1984,7 +1785,6 @@
 			try {
 				// 确保 streamId 和 userId 都存在
 				if (!this.streamId) {
-					console.warn('⚠️ 无法获取用户投票记录：缺少 streamId');
 					return;
 				}
 				
@@ -1998,11 +1798,9 @@
 						}
 					}
 				} catch (e) {
-					console.warn('⚠️ 获取用户ID失败:', e);
 				}
 				
 				if (!userId) {
-					console.log('ℹ️ 用户未登录，跳过获取投票记录');
 					return;
 				}
 				
@@ -2025,35 +1823,19 @@
 							this.rightVotes = rightVotes;
 							// 标记已提交过投票
 							this.initialVotesSubmitted = true;
-							console.log('✅ 加载用户之前的投票记录:', {
-								leftVotes,
-								rightVotes,
-								presetOpinion: this.presetOpinion
-							});
 						}
 					} else {
 						// 如果用户之前没有投过票，根据默认的presetOpinion（50%）初始化票数
 						// 确保在50%位置时，leftVotes和rightVotes是50:50，而不是0:0
 						this.leftVotes = Math.round((this.presetOpinion / 100) * 100);
 						this.rightVotes = 100 - this.leftVotes;
-						console.log('ℹ️ 用户之前没有投票记录，根据默认滑块位置初始化:', {
-							presetOpinion: this.presetOpinion,
-							leftVotes: this.leftVotes,
-							rightVotes: this.rightVotes
-						});
 					}
 				} else {
 					// 如果获取失败，也根据默认的presetOpinion初始化
 					this.leftVotes = Math.round((this.presetOpinion / 100) * 100);
 					this.rightVotes = 100 - this.leftVotes;
-					console.log('ℹ️ 获取投票记录失败，根据默认滑块位置初始化:', {
-						presetOpinion: this.presetOpinion,
-						leftVotes: this.leftVotes,
-						rightVotes: this.rightVotes
-					});
 				}
 			} catch (error) {
-				console.error('❌ 获取用户投票记录失败:', error);
 				// 获取失败不影响页面正常使用
 			}
 		},
@@ -2064,30 +1846,25 @@
 					const service = this.apiService || apiService;
 					
 					if (!service) {
-						console.warn('⚠️ API服务未初始化，无法获取AI内容');
 						return;
 					}
 					
 					// 调试日志：检查当前使用的服务器地址
-					console.log('🤖 获取AI内容 - 使用服务器:', service.baseURL || service.getCurrentConfig?.()?.baseURL || '未设置');
 					
 					// 传递 streamId 参数（如果存在）
 					const response = await service.getAiContent(this.streamId);
 					
-					console.log('🤖 AI内容接口响应:', response);
 					
 					if (response && response.success) {
 						// 如果是初始加载，清空原有数据
 						if (isInitialLoad) {
 							this.aiMessages = [];
 							this.messageIdCounter = 0;
-							console.log('🤖 清空AI消息列表，准备加载新数据');
 						}
 						
 						// 检查是否有新内容
 						const serverMessages = response.data || [];
 						
-						console.log('🤖 服务器返回AI内容数量:', serverMessages.length);
 
 						// 添加新的服务器数据
 						let addedCount = 0;
@@ -2105,16 +1882,11 @@
 						});
 						
 						if (addedCount > 0) {
-							console.log(`✅ 新增 ${addedCount} 条AI内容`);
 						} else {
-							console.log('💡 没有新的AI内容');
 						}
 					} else {
-						console.warn('⚠️ AI内容接口返回失败:', response);
 					}
 				} catch (error) {
-					console.error('❌ 获取AI内容失败:', error.message);
-					console.error('❌ 错误详情:', error);
 				}
 			},
 			
@@ -2124,7 +1896,6 @@
 				try {
 					// 🔧 验证 streamId 是否存在（投票必须指定直播流）
 					if (!this.streamId) {
-						console.error('❌ 投票失败: 缺少直播流ID (streamId)');
 						uni.showToast({
 							title: '❌ 投票失败: 未指定直播间',
 							icon: 'error',
@@ -2143,11 +1914,8 @@
 							}
 						}
 					} catch (e) {
-						console.warn('⚠️ 获取用户ID失败:', e);
 					}
 					
-					console.log('📤 发送投票请求:', { side, votes, streamId: this.streamId, userId });
-					console.log('📡 API服务器地址:', this.apiService?.baseURL || '未设置');
 					
                     // 统一按分布提交：以当前滑块 presetOpinion 作为分布来源（总和100）
                     const leftDist = Math.max(0, Math.min(100, Math.round((this.presetOpinion / 100) * 100)));
@@ -2156,13 +1924,6 @@
                     const response = await service.userVoteDistribution(leftDist, rightDist, this.streamId, userId);
 					
 					// 详细记录响应信息
-					console.log('📥 投票接口响应:', {
-						response: response,
-						responseType: typeof response,
-						hasSuccess: 'success' in (response || {}),
-						successValue: response?.success,
-						responseString: JSON.stringify(response, null, 2)
-					});
 					
 					const responseTime = Date.now() - startTime;
 					
@@ -2177,7 +1938,6 @@
 					                 (response?.success === undefined && response !== undefined);
 					
 				if (isSuccess) {
-					console.log('✅ 投票成功:', response?.data || response);
 						// 立即用当前分布更新顶栏，再拉累计校正
                     this.topLeftVotes = leftDist;
                     this.topRightVotes = rightDist;
@@ -2188,19 +1948,11 @@
 					return { success: true, data: response?.data || response };
 				} else {
 						// 如果响应明确表示失败，抛出错误
-						console.warn('⚠️ 投票响应表示失败:', response);
 						const error = new Error(response?.message || '投票失败');
 						error.response = response;
 						throw error;
 					}
 				} catch (error) {
-					console.error('❌ 投票失败:', error);
-					console.error('❌ 错误详情:', {
-						statusCode: error.statusCode,
-						message: error.message,
-						url: error.url,
-						response: error.response
-					});
 					
 					// 根据错误类型显示不同的提示
 					let errorMessage = '投票失败';
@@ -2208,7 +1960,6 @@
 						// 400 错误可能是参数验证失败
 						const serverMessage = error.response?.message || error.message || '参数错误';
 						errorMessage = `请求参数错误：${serverMessage}`;
-						console.error('📋 服务器返回的详细错误信息:', error.response);
 					} else if (error.statusCode === 403) {
 						errorMessage = '服务器拒绝请求（403），请检查服务器CORS配置';
 					} else if (error.statusCode === 401) {
@@ -2317,17 +2068,9 @@
 			
 			async addCommentToServer(contentId, text, user = '匿名用户', avatar = '👤') {
 				try {
-					console.log('📤 调用 addComment API:', { contentId, text, user, avatar });
 					const response = await apiService.addComment(contentId, text, user, avatar);
 					
 					// 详细记录响应信息
-					console.log('📥 评论接口响应:', {
-						response: response,
-						responseType: typeof response,
-						hasSuccess: 'success' in (response || {}),
-						successValue: response?.success,
-						responseString: JSON.stringify(response, null, 2)
-					});
 					
 					// 判断请求是否成功：
 					// 1. 如果响应有 success 字段，检查其值
@@ -2336,22 +2079,14 @@
 					                 (response?.success === undefined && response !== undefined);
 					
 					if (isSuccess) {
-						console.log('✅ 评论成功:', response?.data || response);
 						return response?.data || response;
 					} else {
 						// 如果响应明确表示失败，抛出错误
-						console.warn('⚠️ 评论响应表示失败:', response);
 						const error = new Error(response?.message || '评论失败');
 						error.response = response;
 						throw error;
 					}
 				} catch (error) {
-					console.error('❌ 添加评论失败:', error);
-					console.error('❌ 错误详情:', {
-						statusCode: error.statusCode,
-						message: error.message,
-						response: error.response
-					});
 					
 					// 根据错误类型显示不同的提示
 					let errorMessage = '添加评论失败';
@@ -2383,17 +2118,9 @@
 			
 			async likeContent(contentId, commentId = null) {
 				try {
-					console.log('📤 调用 like API:', { contentId, commentId });
 					const response = await apiService.like(contentId, commentId);
 					
 					// 详细记录响应信息
-					console.log('📥 点赞接口响应:', {
-						response: response,
-						responseType: typeof response,
-						hasSuccess: 'success' in (response || {}),
-						successValue: response?.success,
-						responseString: JSON.stringify(response, null, 2)
-					});
 					
 					// 判断请求是否成功：
 					// 1. 如果响应有 success 字段，检查其值
@@ -2402,22 +2129,14 @@
 					                 (response?.success === undefined && response !== undefined);
 					
 					if (isSuccess) {
-						console.log('✅ 点赞成功:', response?.data || response);
 						return response?.data || response;
 					} else {
 						// 如果响应明确表示失败，抛出错误
-						console.warn('⚠️ 点赞响应表示失败:', response);
 						const error = new Error(response?.message || '点赞失败');
 						error.response = response;
 						throw error;
 					}
 				} catch (error) {
-					console.error('❌ 点赞失败:', error);
-					console.error('❌ 错误详情:', {
-						statusCode: error.statusCode,
-						message: error.message,
-						response: error.response
-					});
 					
 					// 根据错误类型显示不同的提示
 					let errorMessage = '点赞失败';
@@ -2463,7 +2182,6 @@
 					this.fetchTopBarVotes();
 				}, 5000);
 				
-				console.log('✅ 顶部对抗条实时更新已启动（每5秒更新一次）');
 			},
 			
 			// 启动AI内容实时更新
@@ -2479,85 +2197,60 @@
 					this.fetchAIContent();
 				}, 4000);
 				
-				console.log('🤖 AI内容实时更新已启动（每4秒刷新）');
 			},
 			
 			// 直播开始后自动启动AI内容获取
 			async startAIContentAfterLiveStart() {
 				try {
-					console.log('🤖 ========== 开始检查AI识别状态 ==========');
-					console.log('🤖 当前直播状态 - isLiveStarted:', this.isLiveStarted);
-					console.log('🤖 当前直播流地址 - liveStreamUrl:', this.liveStreamUrl);
 					
 					// 检查AI状态
 					const service = this.apiService || apiService;
 					if (!service) {
-						console.error('❌ API服务未初始化，无法检查AI状态');
 						return;
 					}
 					
-					console.log('🤖 正在获取Dashboard数据...');
 					// 🔧 修复：传递 streamId，确保获取该流的独立数据
 					const dashboardData = await service.getDashboard(this.streamId);
 					
 					if (dashboardData) {
-						console.log('🤖 Dashboard数据:', dashboardData);
 						
 						if (dashboardData.aiStatus !== undefined) {
-							console.log('🤖 AI识别状态:', dashboardData.aiStatus);
 							
 							if (dashboardData.aiStatus === 'running') {
 								// AI正在运行，启动内容获取
-								console.log('✅ AI识别正在运行，开始获取AI内容...');
 								
 								// 立即获取一次AI内容
 								if (typeof this.fetchAIContent === 'function') {
-									console.log('🤖 调用 fetchAIContent(true) 进行初始加载...');
 									await this.fetchAIContent(true); // 初始加载
 								} else {
-									console.error('❌ fetchAIContent 方法不存在');
 								}
 								
 								// 启动定时更新
 								if (typeof this.startAIContentRealTimeUpdate === 'function') {
-									console.log('🤖 调用 startAIContentRealTimeUpdate() 启动定时更新...');
 									this.startAIContentRealTimeUpdate();
 								} else {
-									console.error('❌ startAIContentRealTimeUpdate 方法不存在');
 								}
 								
-								console.log('✅ AI内容获取已启动');
 							} else {
-								console.warn('⚠️ AI识别未启动，当前状态:', dashboardData.aiStatus);
-								console.warn('💡 提示：如需AI识别功能，请在后台管理系统启动AI识别');
 								
 								// 即使AI未启动，也尝试获取一次内容（可能服务器刚启动，状态还未更新）
-								console.log('🤖 尝试获取AI内容（即使AI状态显示未运行）...');
 								if (typeof this.fetchAIContent === 'function') {
 									this.fetchAIContent(true);
 								}
 							}
 						} else {
-							console.warn('⚠️ Dashboard数据中未找到 aiStatus 字段');
-							console.log('🤖 Dashboard数据完整内容:', JSON.stringify(dashboardData, null, 2));
 							
 							// 即使没有aiStatus，也尝试获取AI内容
-							console.log('🤖 尝试获取AI内容（即使没有AI状态信息）...');
 							if (typeof this.fetchAIContent === 'function') {
 								this.fetchAIContent(true);
 							}
 						}
 					} else {
-						console.error('❌ Dashboard数据为空');
 					}
 					
-					console.log('🤖 ========== AI识别状态检查完成 ==========');
 				} catch (error) {
-					console.error('❌ 检查AI状态失败:', error);
-					console.error('❌ 错误堆栈:', error.stack);
 					
 					// 即使检查失败，也尝试获取AI内容
-					console.log('🤖 尝试直接获取AI内容（忽略状态检查）...');
 					try {
 						if (typeof this.fetchAIContent === 'function') {
 							await this.fetchAIContent(true);
@@ -2566,7 +2259,6 @@
 							this.startAIContentRealTimeUpdate();
 						}
 					} catch (fetchError) {
-						console.error('❌ 直接获取AI内容也失败:', fetchError);
 					}
 				}
 			},
@@ -2605,14 +2297,11 @@
 			
 			// 返回直播选择页面
 			goBackToSelect() {
-				console.log('🔄 返回直播选择页面');
 				uni.redirectTo({
 					url: '/pages/live-select/live-select',
 					success: () => {
-						console.log('✅ 已返回直播选择页面');
 					},
 					fail: (err) => {
-						console.error('❌ 返回直播选择页面失败:', err);
 						// 如果 redirectTo 失败，尝试使用 navigateBack
 						uni.navigateBack({
 							delta: 1,
@@ -3039,11 +2728,9 @@
 							}
 						}
 					} catch (e) {
-						console.warn('⚠️ 获取用户ID失败:', e);
 					}
 					
 					// 确保票数正确（即使滑块在50%位置，也应该发送50:50，而不是0:0）
-					console.log(`📊 [确认投票] 滑块位置: ${this.presetOpinion}%, 计算票数: 正方 ${leftVotes}, 反方 ${rightVotes}`, { userId, streamId: this.streamId });
 					
 					// 发送到数据库
 					// 服务器要求：leftVotes + rightVotes 必须等于 100
@@ -3093,10 +2780,8 @@
 							});
 						} else {
 							// 如果 sendUserVote 返回失败，错误提示已在 sendUserVote 中显示
-							console.warn('⚠️ 初始投票提交失败:', voteResult);
 						}
 					} catch (error) {
-						console.error('提交初始投票失败:', error);
 						uni.showToast({
 							title: '提交失败，请重试',
 							icon: 'error'
@@ -3119,14 +2804,12 @@
 							}
 						}
 					} catch (e) {
-						console.warn('⚠️ 获取用户ID失败:', e);
 					}
 					
 					if (currentTotal === 0) {
 						// 如果票数为0，根据滑块位置计算票数（默认50% = 50:50）
 						leftVotes = Math.round((this.presetOpinion / 100) * 100);
 						rightVotes = 100 - leftVotes;
-						console.log(`📊 [直播后确认投票] 票数为0，根据滑块位置计算: ${this.presetOpinion}% -> 正方 ${leftVotes}, 反方 ${rightVotes}`);
 					}
 					
 					// 服务器要求：leftVotes + rightVotes 必须等于 100
@@ -3165,10 +2848,8 @@
 						});
 					} else {
 						// 如果 sendUserVote 返回失败，错误提示已在 sendUserVote 中显示
-						console.warn('⚠️ 投票提交失败:', voteResult);
 					}
 					} catch (error) {
-						console.error('提交投票失败:', error);
 						uni.showToast({
 							title: '提交失败，请重试',
 							icon: 'error'
@@ -3273,7 +2954,6 @@
 					}
 				}
 				
-				console.log('🎬 开始获取直播流地址...');
 				
 				// ==================== 第一步：从服务器获取直播状态和流地址 ====================
 				let serverStreamUrl = null;
@@ -3288,7 +2968,6 @@
 						// 🔧 修复：传递 streamId，确保获取该流的独立数据
 						const dashboardData = await service.getDashboard(this.streamId);
 						
-						console.log('📡 Dashboard数据:', dashboardData);
 						
 						if (dashboardData && dashboardData.isLive) {
 							// 服务器端直播正在进行
@@ -3296,55 +2975,42 @@
 							
 							if (dashboardData.liveStreamUrl) {
 								serverStreamUrl = dashboardData.liveStreamUrl;
-								console.log('✅ 从dashboard获取到直播流地址（直播中）:', serverStreamUrl);
 							}
 						} else if (dashboardData && dashboardData.liveStreamUrl && !dashboardData.isLive) {
 							// 服务器有流地址但未开始，也可以使用
 							serverStreamUrl = dashboardData.liveStreamUrl;
-							console.log('⚠️ 服务器有流地址但未开始直播，使用该地址');
 						}
 						
 						// 获取数据库中启用的直播流（即使直播未开始）
 						if (dashboardData && dashboardData.activeStreamUrl) {
 							activeStreamUrl = dashboardData.activeStreamUrl;
-							console.log('✅ 从dashboard获取到启用直播流:', activeStreamUrl);
-							console.log('📺 流名称:', dashboardData.activeStreamName || '未知');
 						}
 					} catch (dashboardError) {
-						console.warn('⚠️ dashboard接口获取失败，尝试status接口:', dashboardError.message);
 						// 兼容旧版本：如果 dashboard 接口不存在，尝试使用 status 接口
 						const statusResponse = await service.getLiveStatus();
 						
-						console.log('📡 服务器直播状态（status接口）:', statusResponse);
 						
 						if (statusResponse && statusResponse.isLive) {
 							isServerLive = true;
 							
 							if (statusResponse.streamUrl) {
 								serverStreamUrl = statusResponse.streamUrl;
-								console.log('✅ 从status接口获取到直播流地址（直播中）:', serverStreamUrl);
 							}
 						} else if (statusResponse && statusResponse.streamUrl && !statusResponse.isLive) {
 							serverStreamUrl = statusResponse.streamUrl;
-							console.log('⚠️ 服务器有流地址但未开始直播，使用该地址');
 						}
 						
 						if (statusResponse && statusResponse.activeStreamUrl) {
 							activeStreamUrl = statusResponse.activeStreamUrl;
-							console.log('✅ 从status接口获取到启用直播流:', activeStreamUrl);
-							console.log('📺 流名称:', statusResponse.activeStreamName || '未知');
 						}
 					}
 				} catch (error) {
-					console.warn('⚠️ 获取服务器直播状态失败:', error.message);
 					// 如果接口不存在（404），尝试直接获取直播流列表
 					if (error.message && error.message.includes('404')) {
-						console.log('💡 接口不存在，尝试直接获取启用直播流列表...');
 						try {
 							// 尝试通过其他方式获取，或者使用备用方案
 							await this.fetchActiveStreamFromServerAlternative();
 						} catch (altError) {
-							console.warn('⚠️ 备用方案也失败，无法获取直播流地址');
 						}
 					}
 					// 继续使用备用地址
@@ -3357,32 +3023,24 @@
 				// 完全使用接口数据，不再使用配置文件默认值
 				if (serverStreamUrl) {
 					finalStreamUrl = serverStreamUrl;
-					console.log('✅ 使用服务器返回的直播流地址（直播中）');
 				} else if (activeStreamUrl) {
 					finalStreamUrl = activeStreamUrl;
-					console.log('✅ 使用数据库中启用的直播流地址');
 				} else if (this.liveStreamUrl) {
 					finalStreamUrl = this.liveStreamUrl;
-					console.log('✅ 使用已有的直播流地址');
 				} else {
 					// 如果所有接口都无法获取流地址，尝试通过 streams 接口获取
-					console.warn('⚠️ 无法从接口获取直播流地址，尝试通过streams接口获取...');
 					try {
 						const streamUrl = await this.fetchActiveStreamFromServerAlternative();
 						if (streamUrl) {
 							finalStreamUrl = streamUrl;
-							console.log('✅ 通过streams接口获取到直播流地址');
 						} else {
-							console.warn('⚠️ streams接口也无法获取到启用的直播流');
 						}
 					} catch (streamsError) {
-						console.warn('⚠️ streams接口获取失败:', streamsError.message);
 					}
 				}
 				
 				// 确保流地址有效（在设置状态之前）
 				if (!finalStreamUrl) {
-					console.error('❌ 无法从接口获取直播流地址，请先在后台管理系统配置直播流');
 					uni.showToast({
 						title: '未找到可用的直播流，请先配置',
 						icon: 'none',
@@ -3394,9 +3052,6 @@
 				// 先设置直播流地址
 				this.liveStreamUrl = finalStreamUrl;
 				
-				console.log('✅ 准备开始播放');
-				console.log('📺 使用的直播流地址:', this.liveStreamUrl);
-				console.log('🌐 服务器端直播状态:', isServerLive ? '进行中' : '未开始');
 				
 				// 使用 $nextTick 确保 DOM 更新后再设置播放状态
 				await this.$nextTick();
@@ -3404,7 +3059,6 @@
 				// 开始播放
 				this.isLiveStarted = true;
 				
-				console.log('✅ 直播已开始，播放器应该开始渲染');
 				
 				uni.showToast({ 
 					title: isServerLive ? '已连接到服务器直播' : '开始播放直播流', 
@@ -3439,7 +3093,6 @@
 				}, 500);
 				
 			} catch (error) {
-				console.error('❌ 启动直播失败:', error);
 				uni.showToast({ 
 					title: '启动直播失败: ' + (error.message || '请稍后重试'), 
 					icon: 'none',
@@ -3559,12 +3212,6 @@
 				// 发送到服务器
 				// 使用 serverId（服务器的 UUID），如果没有则使用本地 id
 				const contentId = this.currentCommentMessage.serverId || this.currentCommentMessage.id;
-				console.log('📤 提交评论:', {
-					contentId: contentId,
-					text: this.commentText.trim(),
-					localId: this.currentCommentMessage.id,
-					serverId: this.currentCommentMessage.serverId
-				});
 				
 				const serverComment = await this.addCommentToServer(
 					contentId,
@@ -3667,17 +3314,9 @@
 				if (comment.id) {
 					// 使用 serverId（服务器的 UUID），如果没有则使用本地 id
 					const contentId = message.serverId || message.id;
-					console.log('📤 删除评论:', { contentId, commentId: comment.id });
 					const response = await apiService.deleteComment(contentId, comment.id);
 					
 					// 详细记录响应信息
-					console.log('📥 删除评论接口响应:', {
-						response: response,
-						responseType: typeof response,
-						hasSuccess: 'success' in (response || {}),
-						successValue: response?.success,
-						responseString: JSON.stringify(response, null, 2)
-					});
 					
 					// 判断请求是否成功：
 					// 1. 如果响应有 success 字段，检查其值
@@ -3687,11 +3326,9 @@
 					
 					if (!isSuccess) {
 						const errorMessage = response?.message || '删除失败';
-						console.warn('⚠️ 删除评论响应表示失败:', response);
 						throw new Error(errorMessage);
 					}
 					
-					console.log('✅ 删除评论成功:', response?.data || response);
 				}
 				
 				// 从本地删除评论
@@ -3734,11 +3371,6 @@
 				} else {
 					// 使用 serverId（服务器的 UUID），如果没有则使用本地 id
 					const contentId = message.serverId || message.id;
-					console.log('📝 点赞内容 ID:', { 
-						localId: message.id, 
-						serverId: message.serverId,
-						useId: contentId 
-					});
 					
 					// 发送到服务器
 					const result = await this.likeContent(contentId);
@@ -3765,23 +3397,19 @@
 				// 将 http/https 替换为 ws/wss，并添加 /ws 路径
 				const wsUrl = serverUrl.replace(/^http/, 'ws') + '/ws';
 				
-				console.log('🔌 正在连接WebSocket:', wsUrl);
 					
 					// 创建WebSocket连接
 					this.socketTask = uni.connectSocket({
 						url: wsUrl,
 						success: () => {
-							console.log('✅ WebSocket连接请求已发送');
 						},
 						fail: (err) => {
-							console.error('❌ WebSocket连接请求失败:', err);
 							this.scheduleWSReconnect();
 						}
 					});
 					
 					// 监听连接打开
 					this.socketTask.onOpen(() => {
-						console.log('✅ WebSocket连接已建立');
 						this.wsReconnectAttempts = 0;
 						
 						// 启动心跳
@@ -3801,37 +3429,31 @@
 							const data = JSON.parse(res.data);
 							this.handleWSMessage(data);
 						} catch (error) {
-							console.error('❌ WebSocket消息解析失败:', error);
 						}
 					});
 					
 					// 监听连接关闭
 					this.socketTask.onClose(() => {
-						console.warn('⚠️ WebSocket连接已关闭');
 						this.stopWSHeartbeat();
 						this.scheduleWSReconnect();
 					});
 					
 					// 监听连接错误
 					this.socketTask.onError((err) => {
-						console.error('❌ WebSocket连接错误:', err);
 						this.stopWSHeartbeat();
 						this.scheduleWSReconnect();
 					});
 					
 				} catch (error) {
-					console.error('❌ WebSocket连接失败:', error);
 					this.scheduleWSReconnect();
 				}
 			},
 			
 		// 处理WebSocket消息
 		handleWSMessage(data) {
-			console.log('📩 收到WebSocket消息:', data);
 			
 			// 🔍 多直播支持：过滤消息，只处理当前直播间的消息
 			if (this.streamId && data.streamId && data.streamId !== this.streamId) {
-				console.log('⏩ 消息不属于当前直播间，忽略:', data.streamId, '当前直播间:', this.streamId);
 				return;
 			}
 			
@@ -3878,22 +3500,18 @@
 						
 					case 'pong':
 						// 心跳响应
-						console.log('💓 WebSocket心跳响应');
 						break;
 						
 					default:
-						console.log('📩 未知消息类型:', data.type);
 				}
 			},
 			
 		// 处理直播状态更新（WebSocket推送）
 		async handleLiveStatusUpdate(data) {
-			console.log('🎬 直播状态更新（WebSocket）:', data);
 			
 			// 🔍 多直播支持：检查消息是否属于当前直播间
 			const messageStreamId = data.streamId || data.liveId;
 			if (this.streamId && messageStreamId && messageStreamId !== this.streamId) {
-				console.log('⏩ 消息不属于当前直播间，忽略:', messageStreamId, '当前直播间:', this.streamId);
 				return;
 			}
 			
@@ -3901,7 +3519,6 @@
 			if (data.streamUrl) {
 				// 使用智能转换方法设置HLS流地址
 				await this.setLiveStreamUrlWithHls(data.streamUrl, data.streamName);
-				console.log('📺 更新直播流地址（从WebSocket）:', this.liveStreamUrl);
 			} else if (!this.liveStreamUrl) {
 				// 如果没有流地址，尝试从服务器获取启用的直播流
 				await this.fetchActiveStreamFromServer();
@@ -3913,12 +3530,10 @@
 				
 				if (data.isLive && !wasLive) {
 					// 直播从停止变为开始
-					console.log('✅ 服务器开始直播，自动开始播放');
 					
 					// 确保流地址存在
 					if (!this.liveStreamUrl) {
 						// 如果还没有流地址，尝试从dashboard获取
-						console.log('💡 没有流地址，尝试从dashboard获取...');
 						await this.fetchLiveStatus();
 						// 如果仍然没有流地址，尝试通过其他接口获取
 						if (!this.liveStreamUrl) {
@@ -3926,7 +3541,6 @@
 						}
 						// 如果还是没有流地址，提示用户
 						if (!this.liveStreamUrl) {
-							console.error('❌ 无法从接口获取直播流地址');
 							uni.showToast({
 								title: '未找到可用的直播流，请先配置',
 								icon: 'none',
@@ -3943,10 +3557,6 @@
 							// 更新播放状态
 							this.isLiveStarted = true;
 							
-							console.log('✅ 直播已开始，播放器应该自动播放');
-							console.log('📺 使用的流地址:', this.liveStreamUrl);
-							console.log('🎬 isLiveStarted:', this.isLiveStarted);
-							console.log('🎬 liveStreamUrl:', this.liveStreamUrl);
 							
 							// 显示成功提示
 							uni.showToast({
@@ -3961,7 +3571,6 @@
 							}, 1000);
 						} else {
 							// 没有流地址，提示用户
-							console.warn('⚠️ 收到直播开始信号，但缺少流地址');
 							uni.showToast({
 								title: '收到直播开始信号，但缺少流地址',
 								icon: 'none',
@@ -3971,7 +3580,6 @@
 					});
 				} else if (!data.isLive && wasLive) {
 					// 🔧 直播从开始变为停止 - 强制退出并返回直播选择页面
-					console.log('🛑 服务器停止直播，当前直播间:', this.streamId);
 					this.isLiveStarted = false;
 					
 					// 显示提示
@@ -3983,15 +3591,12 @@
 					
 					// 🔧 延迟1.5秒后自动返回直播选择页面
 					setTimeout(() => {
-						console.log('🔄 自动返回直播选择页面');
 						// 使用 redirectTo 替换当前页面，避免用户通过返回按钮回到已停止的直播页面
 						uni.redirectTo({
 							url: '/pages/live-select/live-select',
 							success: () => {
-								console.log('✅ 已返回直播选择页面');
 							},
 							fail: (err) => {
-								console.error('❌ 返回直播选择页面失败:', err);
 								// 如果 redirectTo 失败，尝试使用 navigateBack
 								uni.navigateBack({
 									delta: 1,
@@ -4014,20 +3619,14 @@
 			} else {
 				// 如果没有 isLive 字段，但有流地址，可能只是更新流地址
 				if (data.streamUrl) {
-					console.log('📺 更新直播流地址:', data.streamUrl);
 					// 使用智能转换方法设置HLS流地址
 					await this.setLiveStreamUrlWithHls(data.streamUrl, data.streamName);
-					// 如果当前没有开始直播，但收到了流地址，可以考虑自动开始（用于测试）
-					if (!this.isLiveStarted) {
-						console.log('💡 收到流地址但直播未开始');
-					}
 				}
 			}
 		},
 			
 			// 处理AI状态更新
 			handleAIStatusUpdate(data) {
-				console.log('🤖 AI状态更新:', data);
 				if (data.status) {
 					this.isListening = (data.status === 'running');
 					
@@ -4052,29 +3651,21 @@
 			
 			// 处理票数更新（支持多直播流）- 完全符合文档要求
 			handleVotesUpdate(data) {
-				console.log('📊 WebSocket票数更新:', data);
 				
 				// 🔍 多直播流支持：根据文档要求，检查 streamId
 				const streamId = data.streamId || null;
 				const currentStreamId = this.streamId || null;
 				
-				console.log('📊 WebSocket票数更新 - streamId匹配:', {
-					消息streamId: streamId,
-					当前streamId: currentStreamId,
-					当前票数: { left: this.topLeftVotes, right: this.topRightVotes }
-				});
 				
 				// 📋 文档要求的逻辑：streamId === currentStreamId || streamId === null
 				// 如果消息的 streamId 与当前直播间匹配，或者是全局辩题（streamId === null），则更新
 				if (streamId === currentStreamId || streamId === null) {
-					console.log('✅ 应用WebSocket票数更新到当前直播间');
 					
 						// 更新顶部对抗条：仅在票数为累计值时应用；若为增量（出现负数），改为刷新累计接口
 						if (data.leftVotes !== undefined && data.rightVotes !== undefined) {
 							const leftVal = Number(data.leftVotes) || 0;
 							const rightVal = Number(data.rightVotes) || 0;
                             if (leftVal < 0 || rightVal < 0) {
-                                console.warn('⚠️ 收到增量票数（含负数），先本地加和夹取，再拉取累计票数');
                                 this.topLeftVotes = Math.max(0, this.topLeftVotes + leftVal);
                                 this.topRightVotes = Math.max(0, this.topRightVotes + rightVal);
                                 this.debouncedFetchVoteData();
@@ -4082,11 +3673,6 @@
                                 // 按展示规则：在后端返回的累计票数基础上，各自 +50 进行显示
                                 this.topLeftVotes = Math.max(0, leftVal + 50);
                                 this.topRightVotes = Math.max(0, rightVal + 50);
-                                console.log('✅ WebSocket票数更新成功:', { 
-                                    left: this.topLeftVotes, 
-                                    right: this.topRightVotes,
-                                    streamId: streamId
-                                });
                             }
                         }
 					
@@ -4099,13 +3685,11 @@
 					}
 				} else {
 					// 其他直播流的投票更新，忽略
-					console.log(`⏩ 收到其他直播流的投票更新: ${streamId}，当前直播间: ${currentStreamId}，忽略`);
 				}
 			},
 			
 			// 处理新增AI内容
 			handleNewAIContent(data) {
-				console.log('➕ 新增AI内容:', data);
 				// 检查是否已存在
 				const exists = this.aiMessages.some(msg => msg.serverId === data.id);
 				if (!exists) {
@@ -4115,7 +3699,6 @@
 			
 			// 处理AI内容删除
 			handleAIContentDeleted(data) {
-				console.log('🗑️ AI内容删除:', data);
 				const contentId = data.contentId;
 				// 从列表中移除
 				this.aiMessages = this.aiMessages.filter(msg => msg.serverId !== contentId);
@@ -4127,10 +3710,8 @@
 					this.socketTask.send({
 						data: JSON.stringify(data),
 						success: () => {
-							console.log('✅ WebSocket消息已发送:', data);
 						},
 						fail: (err) => {
-							console.error('❌ WebSocket消息发送失败:', err);
 						}
 					});
 				}
@@ -4162,14 +3743,12 @@
 				
 				// 检查是否达到最大重连次数
 				if (this.wsReconnectAttempts >= this.wsMaxReconnectAttempts) {
-					console.warn('⚠️ WebSocket已达到最大重连次数，停止重连');
 					return;
 				}
 				
 				this.wsReconnectAttempts++;
 				const delay = Math.min(1000 * Math.pow(2, this.wsReconnectAttempts), 30000); // 指数退避，最大30秒
 				
-				console.log(`🔄 将在 ${delay}ms 后尝试重连WebSocket (第${this.wsReconnectAttempts}次)`);
 				
 				this.wsReconnectTimer = setTimeout(() => {
 					this.connectWebSocket();
@@ -4181,7 +3760,6 @@
 				if (this.socketTask) {
 					this.socketTask.close({
 						success: () => {
-							console.log('✅ WebSocket连接已断开');
 						}
 					});
 					this.socketTask = null;

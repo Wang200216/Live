@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	initVotesEvents();
 	initAIEvents();
 	initLiveControlEvents();
+	initDebateFlowEvents();
 });
 
 // ==================== 票数管理事件 ====================
@@ -1487,6 +1488,438 @@ async function initViewersCount(streamId = null) {
 	} catch (error) {
 		console.error('❌ 初始化观看人数失败:', error);
 	}
+}
+
+// ==================== 辩论流程管理事件 ====================
+
+/**
+ * 初始化辩论流程管理事件
+ */
+function initDebateFlowEvents() {
+	console.log('🎯 初始化辩论流程事件处理器...');
+	
+	// 加载流列表
+	loadDebateFlowStreamsList();
+	
+	// 刷新流列表按钮
+	const refreshStreamsBtn = document.getElementById('debate-flow-refresh-streams-btn');
+	if (refreshStreamsBtn) {
+		refreshStreamsBtn.addEventListener('click', () => {
+			loadDebateFlowStreamsList();
+		});
+	}
+	
+	// 流选择变化时，加载对应流的流程配置
+	const streamSelect = document.getElementById('debate-flow-stream-select');
+	if (streamSelect) {
+		streamSelect.addEventListener('change', async (e) => {
+			const streamId = e.target.value;
+			if (streamId) {
+				await loadDebateFlowByStream(streamId);
+			} else {
+				clearDebateFlowDisplay();
+			}
+		});
+	}
+	
+	// 添加环节按钮
+	const addSegmentBtn = document.getElementById('add-segment-btn');
+	if (addSegmentBtn) {
+		addSegmentBtn.addEventListener('click', addDebateSegment);
+	}
+	
+	// 保存流程配置按钮
+	const saveFlowBtn = document.getElementById('save-debate-flow-btn');
+	if (saveFlowBtn) {
+		saveFlowBtn.addEventListener('click', async () => {
+			const streamId = document.getElementById('debate-flow-stream-select')?.value;
+			if (!streamId) {
+				alert('请先选择要管理的直播流');
+				return;
+			}
+			await saveDebateFlowConfig(streamId);
+		});
+	}
+}
+
+/**
+ * 加载流列表到辩论流程选择器
+ */
+async function loadDebateFlowStreamsList() {
+	try {
+		const streamSelect = document.getElementById('debate-flow-stream-select');
+		if (!streamSelect) return;
+		
+		const streamsResult = await getStreamsList();
+		if (!streamsResult || !streamsResult.streams) {
+			console.warn('⚠️ 无法获取流列表');
+			return;
+		}
+		
+		const currentValue = streamSelect.value;
+		streamSelect.innerHTML = '<option value="">请选择要管理的直播流</option>';
+		
+		streamsResult.streams.forEach(stream => {
+			const option = document.createElement('option');
+			option.value = stream.id;
+			option.textContent = `${stream.name} (${stream.type || 'HLS'})`;
+			streamSelect.appendChild(option);
+		});
+		
+		// 恢复之前的选择
+		if (currentValue) {
+			streamSelect.value = currentValue;
+			const event = new Event('change', { bubbles: true });
+			streamSelect.dispatchEvent(event);
+		}
+	} catch (error) {
+		console.error('❌ 加载流列表失败:', error);
+	}
+}
+
+/**
+ * 加载指定流的辩论流程配置
+ */
+async function loadDebateFlowByStream(streamId) {
+	try {
+		const container = document.getElementById('debate-segments-container');
+		if (!container) return;
+		
+		container.innerHTML = '<div style="text-align: center; padding: 20px;"><span style="color: #999;">加载中...</span></div>';
+		
+		// 从 API 获取流程配置
+		const result = await getDebateFlowConfig(streamId);
+		
+		if (!result || !result.segments) {
+			console.warn('⚠️ 无法获取流程配置');
+			container.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">暂无流程配置，可点击"添加环节"创建新环节</div>';
+			return;
+		}
+		
+		// 显示当前流名称
+		const streamSelect = document.getElementById('debate-flow-stream-select');
+		const currentStream = streamSelect.options[streamSelect.selectedIndex];
+		if (currentStream) {
+			const streamInfo = document.getElementById('debate-flow-current-stream-info');
+			const streamName = document.getElementById('debate-flow-current-stream-name');
+			streamName.textContent = currentStream.textContent;
+			streamInfo.style.display = 'block';
+		}
+		
+		// 渲染环节
+		renderDebateSegments(result.segments);
+	} catch (error) {
+		console.error('❌ 加载流程配置失败:', error);
+		const container = document.getElementById('debate-segments-container');
+		if (container) {
+			container.innerHTML = '<div style="text-align: center; padding: 20px; color: #e74c3c;">加载流程配置失败</div>';
+		}
+	}
+}
+
+/**
+ * 渲染辩论环节列表
+ */
+function renderDebateSegments(segments) {
+	const container = document.getElementById('debate-segments-container');
+	if (!container) return;
+	
+	if (!segments || segments.length === 0) {
+		container.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">暂无环节，可点击"添加环节"创建新环节</div>';
+		return;
+	}
+	
+	container.innerHTML = '';
+	
+	segments.forEach((segment, index) => {
+		const segmentEl = document.createElement('div');
+		segmentEl.className = 'debate-segment-item';
+		segmentEl.dataset.segmentIndex = index;
+		segmentEl.style.cssText = `
+			background: #f8f9fa;
+			padding: 20px;
+			border-radius: 8px;
+			border: 1px solid #e9ecef;
+			display: flex;
+			gap: 15px;
+			align-items: flex-start;
+		`;
+		
+		segmentEl.innerHTML = `
+			<div style="flex: 1; min-width: 0;">
+				<div style="display: flex; align-items: center; margin-bottom: 10px;">
+					<span style="display: inline-block; width: 30px; height: 30px; background: #3498db; color: white; border-radius: 50%; text-align: center; line-height: 30px; font-weight: bold; margin-right: 10px; flex-shrink: 0;">${index + 1}</span>
+					<input type="text" class="segment-name-input form-input" placeholder="环节名称（如：正方发言）" value="${segment.name || ''}" style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+				</div>
+				<div style="display: flex; gap: 10px; align-items: center;">
+					<label style="display: flex; align-items: center; gap: 5px; font-size: 14px; color: #666;">
+						时长（秒）:
+						<input type="number" class="segment-duration-input form-input" placeholder="时长（秒）" value="${segment.duration || 180}" min="10" step="10" style="width: 80px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+					</label>
+					<label style="display: flex; align-items: center; gap: 5px; font-size: 14px; color: #666;">
+						方向:
+						<select class="segment-side-input form-select" style="padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+							<option value="left" ${segment.side === 'left' ? 'selected' : ''}>正方</option>
+							<option value="right" ${segment.side === 'right' ? 'selected' : ''}>反方</option>
+							<option value="both" ${segment.side === 'both' ? 'selected' : ''}>双方</option>
+						</select>
+					</label>
+				</div>
+			</div>
+			<button class="btn btn-danger btn-sm delete-segment-btn" style="padding: 8px 12px; display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+				<span style="font-size: 16px;">🗑️</span>
+				删除
+			</button>
+		`;
+		
+		// 删除按钮事件
+		const deleteBtn = segmentEl.querySelector('.delete-segment-btn');
+		if (deleteBtn) {
+			deleteBtn.addEventListener('click', () => {
+				if (confirm('确定要删除这个环节吗？')) {
+					segmentEl.remove();
+				}
+			});
+		}
+		
+		container.appendChild(segmentEl);
+	});
+}
+
+/**
+ * 添加新的辩论环节
+ */
+function addDebateSegment() {
+	const container = document.getElementById('debate-segments-container');
+	if (!container) return;
+	
+	// 如果容器是空提示，先清空
+	if (container.innerHTML.includes('暂无环节')) {
+		container.innerHTML = '';
+	}
+	
+	const items = container.querySelectorAll('.debate-segment-item');
+	const index = items.length;
+	
+	const segmentEl = document.createElement('div');
+	segmentEl.className = 'debate-segment-item';
+	segmentEl.dataset.segmentIndex = index;
+	segmentEl.style.cssText = `
+		background: #f8f9fa;
+		padding: 20px;
+		border-radius: 8px;
+		border: 1px solid #e9ecef;
+		display: flex;
+		gap: 15px;
+		align-items: flex-start;
+	`;
+	
+	segmentEl.innerHTML = `
+		<div style="flex: 1; min-width: 0;">
+			<div style="display: flex; align-items: center; margin-bottom: 10px;">
+				<span style="display: inline-block; width: 30px; height: 30px; background: #3498db; color: white; border-radius: 50%; text-align: center; line-height: 30px; font-weight: bold; margin-right: 10px; flex-shrink: 0;">${index + 1}</span>
+				<input type="text" class="segment-name-input form-input" placeholder="环节名称（如：正方发言）" style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+			</div>
+			<div style="display: flex; gap: 10px; align-items: center;">
+				<label style="display: flex; align-items: center; gap: 5px; font-size: 14px; color: #666;">
+					时长（秒）:
+					<input type="number" class="segment-duration-input form-input" placeholder="时长（秒）" value="180" min="10" step="10" style="width: 80px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+				</label>
+				<label style="display: flex; align-items: center; gap: 5px; font-size: 14px; color: #666;">
+					方向:
+					<select class="segment-side-input form-select" style="padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+						<option value="left">正方</option>
+						<option value="right">反方</option>
+						<option value="both" selected>双方</option>
+					</select>
+				</label>
+			</div>
+		</div>
+		<button class="btn btn-danger btn-sm delete-segment-btn" style="padding: 8px 12px; display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+			<span style="font-size: 16px;">🗑️</span>
+			删除
+		</button>
+	`;
+	
+	// 删除按钮事件
+	const deleteBtn = segmentEl.querySelector('.delete-segment-btn');
+	if (deleteBtn) {
+		deleteBtn.addEventListener('click', () => {
+			if (confirm('确定要删除这个环节吗？')) {
+				segmentEl.remove();
+			}
+		});
+	}
+	
+	container.appendChild(segmentEl);
+}
+
+/**
+ * 保存辩论流程配置
+ */
+async function saveDebateFlowConfig(streamId) {
+	try {
+		const container = document.getElementById('debate-segments-container');
+		const items = container.querySelectorAll('.debate-segment-item');
+		
+		if (items.length === 0) {
+			alert('请至少添加一个环节');
+			return;
+		}
+		
+		// 收集所有环节数据
+		const segments = [];
+		items.forEach((item, index) => {
+			const name = item.querySelector('.segment-name-input')?.value || `环节 ${index + 1}`;
+			const duration = parseInt(item.querySelector('.segment-duration-input')?.value) || 180;
+			const side = item.querySelector('.segment-side-input')?.value || 'both';
+			
+			if (duration < 10) {
+				alert('时长不能少于10秒');
+				return;
+			}
+			
+			segments.push({
+				name,
+				duration,
+				side
+			});
+		});
+		
+		if (segments.length === 0) return;
+		
+		// 调用 API 保存
+		const result = await saveDebateFlowConfigAPI(streamId, segments);
+		
+		if (result) {
+			alert('✅ 流程配置保存成功！\n\n配置已同步到大屏幕。');
+			// 刷新显示
+			await loadDebateFlowByStream(streamId);
+		}
+	} catch (error) {
+		console.error('❌ 保存流程配置失败:', error);
+		alert('❌ 保存流程配置失败：' + error.message);
+	}
+}
+
+/**
+ * 清空流程显示
+ */
+function clearDebateFlowDisplay() {
+	const container = document.getElementById('debate-segments-container');
+	if (container) {
+		container.innerHTML = '<div style="text-align: center; padding: 40px; color: #999;">选择直播流后，将显示该流的辩论流程</div>';
+	}
+	
+	const streamInfo = document.getElementById('debate-flow-current-stream-info');
+	if (streamInfo) {
+		streamInfo.style.display = 'none';
+	}
+}
+
+/**
+ * 快速套用模板
+ */
+function applyTemplate(templateType) {
+	const streamId = document.getElementById('debate-flow-stream-select')?.value;
+	if (!streamId) {
+		alert('请先选择要管理的直播流');
+		return;
+	}
+	
+	const templates = {
+		standard: [
+			{ name: '正方发言', duration: 180, side: 'left' },
+			{ name: '反方质问', duration: 120, side: 'right' },
+			{ name: '反方发言', duration: 180, side: 'right' },
+			{ name: '正方质问', duration: 120, side: 'left' },
+			{ name: '自由辩论', duration: 300, side: 'both' },
+			{ name: '正方总结', duration: 120, side: 'left' },
+			{ name: '反方总结', duration: 120, side: 'right' }
+		],
+		quick: [
+			{ name: '正方发言', duration: 120, side: 'left' },
+			{ name: '反方发言', duration: 120, side: 'right' },
+			{ name: '自由辩论', duration: 180, side: 'both' },
+			{ name: '正方总结', duration: 60, side: 'left' },
+			{ name: '反方总结', duration: 60, side: 'right' }
+		],
+		extended: [
+			{ name: '开场陈述', duration: 300, side: 'both' },
+			{ name: '正方发言', duration: 240, side: 'left' },
+			{ name: '反方质问', duration: 180, side: 'right' },
+			{ name: '反方发言', duration: 240, side: 'right' },
+			{ name: '正方质问', duration: 180, side: 'left' },
+			{ name: '自由辩论', duration: 600, side: 'both' },
+			{ name: '正方总结', duration: 180, side: 'left' },
+			{ name: '反方总结', duration: 180, side: 'right' },
+			{ name: '评委评议', duration: 300, side: 'both' }
+		]
+	};
+	
+	const template = templates[templateType];
+	if (!template) return;
+	
+	if (!confirm('确定要套用此模板吗？这会覆盖当前的流程配置。')) {
+		return;
+	}
+	
+	const container = document.getElementById('debate-segments-container');
+	container.innerHTML = '';
+	
+	template.forEach((segment, index) => {
+		const segmentEl = document.createElement('div');
+		segmentEl.className = 'debate-segment-item';
+		segmentEl.dataset.segmentIndex = index;
+		segmentEl.style.cssText = `
+			background: #f8f9fa;
+			padding: 20px;
+			border-radius: 8px;
+			border: 1px solid #e9ecef;
+			display: flex;
+			gap: 15px;
+			align-items: flex-start;
+		`;
+		
+		segmentEl.innerHTML = `
+			<div style="flex: 1; min-width: 0;">
+				<div style="display: flex; align-items: center; margin-bottom: 10px;">
+					<span style="display: inline-block; width: 30px; height: 30px; background: #3498db; color: white; border-radius: 50%; text-align: center; line-height: 30px; font-weight: bold; margin-right: 10px; flex-shrink: 0;">${index + 1}</span>
+					<input type="text" class="segment-name-input form-input" placeholder="环节名称" value="${segment.name}" style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+				</div>
+				<div style="display: flex; gap: 10px; align-items: center;">
+					<label style="display: flex; align-items: center; gap: 5px; font-size: 14px; color: #666;">
+						时长（秒）:
+						<input type="number" class="segment-duration-input form-input" placeholder="时长（秒）" value="${segment.duration}" min="10" step="10" style="width: 80px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+					</label>
+					<label style="display: flex; align-items: center; gap: 5px; font-size: 14px; color: #666;">
+						方向:
+						<select class="segment-side-input form-select" style="padding: 6px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+							<option value="left" ${segment.side === 'left' ? 'selected' : ''}>正方</option>
+							<option value="right" ${segment.side === 'right' ? 'selected' : ''}>反方</option>
+							<option value="both" ${segment.side === 'both' ? 'selected' : ''}>双方</option>
+						</select>
+					</label>
+				</div>
+			</div>
+			<button class="btn btn-danger btn-sm delete-segment-btn" style="padding: 8px 12px; display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+				<span style="font-size: 16px;">🗑️</span>
+				删除
+			</button>
+		`;
+		
+		// 删除按钮事件
+		const deleteBtn = segmentEl.querySelector('.delete-segment-btn');
+		if (deleteBtn) {
+			deleteBtn.addEventListener('click', () => {
+				if (confirm('确定要删除这个环节吗？')) {
+					segmentEl.remove();
+				}
+			});
+		}
+		
+		container.appendChild(segmentEl);
+	});
 }
 
 console.log('✅ 后台管理系统事件处理器加载完成');

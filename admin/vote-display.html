@@ -864,8 +864,8 @@
 		let debateStartTime = null;
 		let chartShown = false;
 
-		// 辩论流程配置
-		const DEBATE_SEGMENTS = [
+		// 辩论流程配置（可动态更新）
+		let DEBATE_SEGMENTS = [
 			{ name: '正方发言', duration: 180, side: 'left' },      // 3分钟
 			{ name: '反方质问', duration: 120, side: 'right' },     // 2分钟
 			{ name: '反方发言', duration: 180, side: 'right' },      // 3分钟
@@ -1349,8 +1349,32 @@
 				const rightPercentage = data.rightPercentage || (totalVotes > 0 ? Math.round((rightVotes / totalVotes) * 100) : 50);
 
 				updateVotesDisplay(leftVotes, rightVotes, totalVotes, leftPercentage, rightPercentage);
+				
+				// 🔧 新增：加载该流的辩论流程配置
+				await loadDebateFlowConfig(streamId);
 			} catch (error) {
 				console.error('加载票数失败:', error);
+			}
+		}
+		
+		/**
+		 * 从API加载辩论流程配置
+		 */
+		async function loadDebateFlowConfig(streamId) {
+			try {
+				const response = await fetch(`${getAPIBase()}/api/admin/debate-flow?stream_id=${streamId}`);
+				const result = await response.json();
+				
+				if (result && result.segments && Array.isArray(result.segments) && result.segments.length > 0) {
+					// 更新全局 DEBATE_SEGMENTS
+					DEBATE_SEGMENTS = result.segments;
+					console.log('✅ 已加载自定义辩论流程配置:', DEBATE_SEGMENTS);
+				} else {
+					console.warn('⚠️ 使用默认辩论流程配置');
+				}
+			} catch (error) {
+				console.warn('⚠️ 加载辩论流程配置失败，使用默认配置:', error);
+				// 如果加载失败，继续使用默认配置
 			}
 		}
 
@@ -1447,6 +1471,25 @@
 					const rightPercentage = votes.rightPercentage || (totalVotes > 0 ? Math.round((votes.rightVotes / totalVotes) * 100) : 50);
 
 					updateVotesDisplay(votes.leftVotes, votes.rightVotes, totalVotes, leftPercentage, rightPercentage);
+				}
+			}
+			// 🔧 新增：处理辩论流程更新事件
+			else if (message.type === 'debate-flow-updated') {
+				const flowData = message.data || message;
+				// 检查是否是当前流的更新
+				if (flowData.streamId === currentStreamId && flowData.segments) {
+					console.log('📢 接收到辩论流程更新:', flowData);
+					DEBATE_SEGMENTS = flowData.segments;
+					alert('✅ 辩论流程已更新！');
+				}
+			}
+			// 🔧 新增：处理辩论流程控制命令事件
+			else if (message.type === 'debate-flow-control') {
+				const controlData = message.data || message;
+				// 检查是否是当前流的控制
+				if (controlData.streamId === currentStreamId) {
+					console.log('📢 接收到流程控制命令:', controlData.action);
+					// 可在此处处理控制命令，如自动开始计时等
 				}
 			}
 		}

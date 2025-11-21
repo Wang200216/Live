@@ -63,11 +63,15 @@
 					<img src="/static/iconfont/toupiao.png" class="nav-icon-img" alt="">
 					<span class="nav-text">票数管理</span>
 				</a>
-				<a href="#judges" class="nav-item" data-page="judges">
-					<img src="/static/iconfont/blue-user.png" class="nav-icon-img" alt="">
-					<span class="nav-text">评委管理</span>
-				</a>
-				<a href="#ai-content" class="nav-item" data-page="ai-content">
+			<a href="#judges" class="nav-item" data-page="judges">
+				<img src="/static/iconfont/blue-user.png" class="nav-icon-img" alt="">
+				<span class="nav-text">评委管理</span>
+			</a>
+			<a href="#debate-flow" class="nav-item" data-page="debate-flow">
+				<img src="/static/iconfont/gongjigongju.png" class="nav-icon-img" alt="">
+				<span class="nav-text">辩论流程</span>
+			</a>
+			<a href="#ai-content" class="nav-item" data-page="ai-content">
 					<img src="/static/iconfont/gongjigongju.png" class="nav-icon-img" alt="">
 					<span class="nav-text">AI 内容管理</span>
 				</a>
@@ -689,6 +693,114 @@
 								<li>评委票数可以手动设置，也会实时同步观众投票</li>
 								<li>保存后将同步更新到大屏幕显示页面</li>
 								<li>每个直播流可以设置不同的评委信息</li>
+							</ul>
+						</div>
+					</div>
+				</div>
+
+				<!-- 辩论流程管理页 -->
+				<div id="debate-flow" class="page">
+					<div class="page-header">
+						<h2>
+							<img src="/static/iconfont/gongjigongju.png" class="icon-img" alt="">
+							辩论流程管理
+						</h2>
+						<a href="/admin/vote-display.html" target="_blank" class="btn btn-primary" style="display: flex; align-items: center; gap: 6px; text-decoration: none;">
+							<img src="/static/iconfont/zhibo.png" class="icon-img-sm" style="filter: brightness(0) invert(1);" alt="">
+							查看大屏幕
+						</a>
+					</div>
+
+					<!-- 直播流选择器 -->
+					<div style="background: #d1ecf1; padding: 20px; border-radius: 8px; margin-bottom: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 4px solid #3498db; border: 1px solid #bee5eb;">
+						<div class="form-group" style="margin: 0;">
+							<label style="display: block; margin-bottom: 10px; color: #0c5460; font-weight: 600; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+								<img src="/static/iconfont/live.png" class="icon-img" alt="">
+								选择直播流
+								<span style="color: #e74c3c; margin-left: 5px;">*</span>
+							</label>
+							<div style="display: flex; gap: 10px; align-items: center;">
+								<select id="debate-flow-stream-select" class="form-select" style="flex: 1; padding: 12px; font-size: 14px;">
+									<option value="">请选择要管理的直播流</option>
+								</select>
+								<button class="btn btn-secondary btn-sm" id="debate-flow-refresh-streams-btn" style="padding: 12px 20px; display: flex; align-items: center; gap: 6px;">
+									<img src="/static/iconfont/shuaxin.png" class="icon-img-sm" alt="">
+									刷新列表
+								</button>
+							</div>
+							<div id="debate-flow-current-stream-info" style="margin-top: 12px; padding: 10px; background: rgba(52, 152, 219, 0.1); border-radius: 6px; font-size: 13px; color: #0c5460; display: none;">
+								<span style="font-weight: 600;">当前管理：</span>
+								<span id="debate-flow-current-stream-name">-</span>
+							</div>
+							<div style="margin-top: 8px; font-size: 13px; color: #6c757d; display: flex; align-items: center; gap: 6px;">
+								<span class="iconfont icon-tip" style="font-size: 16px;"></span>
+								提示：每个直播流可以设置独立的辩论流程和时间
+							</div>
+						</div>
+					</div>
+
+					<!-- 流程配置 -->
+					<div style="background: white; padding: 25px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e9ecef;">
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+							<h3 style="margin: 0; color: #2c3e50; display: flex; align-items: center; gap: 8px;">
+								<img src="/static/iconfont/gongjigongju.png" class="icon-img" alt="">
+								当前流程设置
+							</h3>
+							<button class="btn btn-info btn-sm" id="add-segment-btn" style="display: flex; align-items: center; gap: 6px;">
+								<span class="iconfont icon-plus" style="font-size: 16px;">➕</span>
+								添加环节
+							</button>
+						</div>
+
+						<div id="debate-segments-container" style="display: flex; flex-direction: column; gap: 15px;">
+							<!-- 环节项会动态添加到这里 -->
+							<div style="text-align: center; padding: 40px; color: #999;">
+								选择直播流后，将显示该流的辩论流程
+							</div>
+						</div>
+
+						<!-- 保存按钮 -->
+						<div style="margin-top: 30px; text-align: center; border-top: 1px solid #e9ecef; padding-top: 20px;">
+							<button class="btn btn-success" id="save-debate-flow-btn" style="padding: 12px 40px; font-size: 16px; display: inline-flex; align-items: center; gap: 8px;">
+								<span class="iconfont icon-check" style="font-size: 18px;">✓</span>
+								保存流程配置
+							</button>
+						</div>
+					</div>
+
+					<!-- 预设模板 -->
+					<div style="background: #f0f8ff; padding: 20px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #3498db;">
+						<h4 style="margin: 0 0 15px 0; color: #0c5460; display: flex; align-items: center; gap: 8px;">
+							<span class="iconfont icon-template" style="font-size: 18px;">📋</span>
+							快速套用模板
+						</h4>
+						<div style="display: flex; gap: 10px; flex-wrap: wrap;">
+							<button class="btn btn-secondary btn-sm" onclick="applyTemplate('standard')" style="padding: 8px 16px;">
+								📊 标准辩论
+							</button>
+							<button class="btn btn-secondary btn-sm" onclick="applyTemplate('quick')" style="padding: 8px 16px;">
+								⚡ 快速轮辩
+							</button>
+							<button class="btn btn-secondary btn-sm" onclick="applyTemplate('extended')" style="padding: 8px 16px;">
+								🕐 extended辩论
+							</button>
+						</div>
+					</div>
+
+					<!-- 使用说明 -->
+					<div style="background: #fff3cd; padding: 20px; border-radius: 8px; border-left: 4px solid #ffc107;">
+						<h4 style="margin: 0 0 10px 0; color: #856404; display: flex; align-items: center; gap: 8px;">
+							<span class="iconfont icon-help" style="font-size: 18px;">❓</span>
+							使用说明
+						</h4>
+						<div style="color: #856404; font-size: 14px; line-height: 1.8;">
+							<ul style="margin: 10px 0; padding-left: 20px;">
+								<li>为每个环节设置名称和时长（秒数）</li>
+								<li>可以添加或删除环节，调整辩论流程</li>
+								<li>时长单位为秒，例如 180 秒 = 3 分钟</li>
+								<li>保存后将立即同步到大屏幕</li>
+								<li>快速模板可快速填充常用流程</li>
+								<li>每个直播流可以设置不同的辩论流程</li>
 							</ul>
 						</div>
 					</div>
